@@ -512,7 +512,16 @@ impl Parser {
         } else if self.at(&TokenKind::Match) {
             Ok(Endpoint::Match(self.match_expr()?))
         } else {
-            let name = self.ident()?;
+            // Accept 'in' and 'out' keywords as identifiers for port references
+            let name = if self.at(&TokenKind::In) {
+                self.advance();
+                "in".to_string()
+            } else if self.at(&TokenKind::Out) {
+                self.advance();
+                "out".to_string()
+            } else {
+                self.ident()?
+            };
 
             // Check for port access: name.port
             let name = if self.at(&TokenKind::Dot) {
@@ -660,6 +669,17 @@ impl Parser {
     }
 
     fn atom(&mut self) -> Result<Value, ParseError> {
+        // Handle unary minus for negative numbers
+        if self.at(&TokenKind::Minus) {
+            self.advance();
+            let inner = self.atom()?;
+            return Ok(Value::BinOp {
+                op: BinOp::Sub,
+                left: Box::new(Value::Int(0)),
+                right: Box::new(inner),
+            });
+        }
+
         match self.peek_kind().clone() {
             TokenKind::Int(n) => {
                 self.advance();
