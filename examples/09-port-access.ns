@@ -1,6 +1,5 @@
 # Port access examples
-# Note: Direct port access with dots (e.g., fork.left) is not yet supported
-# Use tuple unpacking instead: Fork() -> (left, right)
+# Use tuple unpacking: Fork() -> (left, right)
 
 neuron Fork:
   in: [*shape]
