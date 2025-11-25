@@ -638,7 +638,43 @@ impl Parser {
 
     // Expression parsing
     fn expr(&mut self) -> Result<Value, ParseError> {
-        self.additive()
+        self.comparison()
+    }
+
+    fn comparison(&mut self) -> Result<Value, ParseError> {
+        let mut left = self.additive()?;
+        
+        while self.at_any(&[
+            TokenKind::Lt, TokenKind::Gt, TokenKind::Le, 
+            TokenKind::Ge, TokenKind::Eq, TokenKind::Ne
+        ]) {
+            let op = self.comparison_op()?;
+            let right = self.additive()?;
+            left = Value::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+        
+        Ok(left)
+    }
+
+    fn comparison_op(&mut self) -> Result<BinOp, ParseError> {
+        let op = match self.peek_kind() {
+            TokenKind::Lt => BinOp::Lt,
+            TokenKind::Gt => BinOp::Gt,
+            TokenKind::Le => BinOp::Le,
+            TokenKind::Ge => BinOp::Ge,
+            TokenKind::Eq => BinOp::Eq,
+            TokenKind::Ne => BinOp::Ne,
+            _ => return Err(ParseError::Unexpected {
+                found: format!("{:?}", self.peek_kind()),
+                span: self.peek().span.into(),
+            }),
+        };
+        self.advance();
+        Ok(op)
     }
 
     fn additive(&mut self) -> Result<Value, ParseError> {

@@ -1,8 +1,4 @@
 # Match expression examples
-#
-# NOTE: The current parser has a known issue with match expressions where
-# it fails to parse the final match arm correctly (consumes newline too early).
-# These examples are commented out until the parser is fixed.
 
 neuron Identity:
   in: [*shape]
@@ -11,7 +7,7 @@ neuron Identity:
 
 neuron Linear(in_dim, out_dim):
   in: [*, in_dim]
-  out: [*, out_dim]
+  out: _[*, out_dim]
   impl: core,nn/Linear
 
 # Simple pattern matching on shapes

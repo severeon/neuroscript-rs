@@ -30,10 +30,8 @@ pub struct DimExpr {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
+    Add, Sub, Mul, Div,
+    Lt, Gt, Le, Ge, Eq, Ne,
 }
 
 /// A tensor shape: [batch, seq, dim] or [*, 512] or []
@@ -235,6 +233,12 @@ impl std::fmt::Display for BinOp {
             BinOp::Sub => write!(f, "-"),
             BinOp::Mul => write!(f, "*"),
             BinOp::Div => write!(f, "/"),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Le => write!(f, "<="),
+            BinOp::Ge => write!(f, ">="),
+            BinOp::Eq => write!(f, "=="),
+            BinOp::Ne => write!(f, "!="),
         }
     }
 }

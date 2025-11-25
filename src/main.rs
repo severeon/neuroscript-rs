@@ -4,23 +4,21 @@ use neuroscript::{parse, NeuronBody};
 use std::env;
 use std::fs;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+use miette::{Context, IntoDiagnostic};
 
+fn main() -> miette::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    
     if args.len() < 2 {
         eprintln!("Usage: neuroscript <file.ns>");
         std::process::exit(1);
     }
-
+    
     let filename = &args[1];
-    let source = match fs::read_to_string(filename) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading {}: {}", filename, e);
-            std::process::exit(1);
-        }
-    };
-
+    let source = fs::read_to_string(filename)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to read {}", filename))?;
+    
     match parse(&source) {
         Ok(program) => {
             println!("Parsed {} imports and {} neurons:\n", program.uses.len(), program.neurons.len());
@@ -57,10 +55,15 @@ fn main() {
 
                 println!();
             }
+            Ok(())
         }
         Err(e) => {
-            eprintln!("Parse error: {}", e);
-            std::process::exit(1);
+            // Attach source for beautiful errors
+            Err(miette::miette! {
+                labels = vec![],
+                help = "Check your syntax".to_string(),
+                "{:?}", e
+            }.with_source_code(source))
         }
     }
 }
