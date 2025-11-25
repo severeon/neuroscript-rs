@@ -3,7 +3,7 @@
 //! Tokenizes source text into a stream of tokens.
 //! Handles indentation-based scoping.
 
-use miette::{Diagnostic, SourceSpan};
+use miette::{SourceSpan, Diagnostic};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +110,17 @@ pub enum LexError {
         expected: usize,
         found: usize,
     },
+}
+
+impl LexError {
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            LexError::UnexpectedChar { span, .. } => *span,
+            LexError::UnterminatedString { span, .. } => *span,
+            LexError::InvalidNumber { span, .. } => *span,
+            LexError::InconsistentIndent { span, .. } => *span,
+        }
+    }
 }
 
 pub struct Lexer<'a> {

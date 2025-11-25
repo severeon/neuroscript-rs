@@ -7,7 +7,7 @@ neuron Identity:
 
 neuron Linear(in_dim, out_dim):
   in: [*, in_dim]
-  out: _[*, out_dim]
+  out: [*, out_dim]
   impl: core,nn/Linear
 
 # Simple pattern matching on shapes

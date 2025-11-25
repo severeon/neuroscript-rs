@@ -3,22 +3,21 @@
 use neuroscript::{parse, NeuronBody};
 use std::env;
 use std::fs;
-
-use miette::{Context, IntoDiagnostic};
+use miette::{IntoDiagnostic, WrapErr, NamedSource};
 
 fn main() -> miette::Result<()> {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("Usage: neuroscript <file.ns>");
         std::process::exit(1);
     }
-    
+
     let filename = &args[1];
     let source = fs::read_to_string(filename)
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to read {}", filename))?;
-    
+
     match parse(&source) {
         Ok(program) => {
             println!("Parsed {} imports and {} neurons:\n", program.uses.len(), program.neurons.len());
@@ -50,7 +49,7 @@ fn main() -> miette::Result<()> {
                 println!("    out: {}", outputs.join(", "));
 
                 if let NeuronBody::Graph(conns) = &neuron.body {
-                    println!("    connections: {}", conns.len());
+                    println!("    connections: {:?}", conns);
                 }
 
                 println!();
@@ -58,12 +57,8 @@ fn main() -> miette::Result<()> {
             Ok(())
         }
         Err(e) => {
-            // Attach source for beautiful errors
-            Err(miette::miette! {
-                labels = vec![],
-                help = "Check your syntax".to_string(),
-                "{:?}", e
-            }.with_source_code(source))
+            let source = NamedSource::new(filename, source);
+            Err(miette::Report::from(e).with_source_code(source))
         }
     }
 }
