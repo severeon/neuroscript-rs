@@ -5,7 +5,7 @@ use core,nn/*
 use core,activations/*
 
 # === PRIMITIVES ===
-These wrap actual PyTorch implementations
+# These wrap actual PyTorch implementations
 
 neuron Linear(in_dim, out_dim):
   in: [*, in_dim]
@@ -38,7 +38,7 @@ neuron Softmax:
   impl: core,activations/Softmax
 
 # === TOPOLOGY PRIMITIVES ===
-These control data flow
+# These control data flow
 
 neuron Identity:
   in: [*shape]
@@ -71,7 +71,7 @@ neuron Fork3:
   impl: core,builtin/Fork3
 
 # === COMPOSITES ===
-Built purely from wiring other neurons
+# Built purely from wiring other neurons
 
 neuron MLP(dim, hidden_mult=4):
   in: [*, dim]
@@ -101,14 +101,14 @@ neuron Attention(dim, heads):
     q -> Linear(dim, dim) -> query
     k -> Linear(dim, dim) -> key
     v -> Linear(dim, dim) -> value
-    ... attention computation would happen here
+    # ... attention computation would happen here
     value -> Linear(dim, dim) -> out
 
 neuron TransformerBlock(dim, heads):
   in: [batch, seq, dim]
   out: [batch, seq, dim]
   graph:
-    Pre-norm attention with residual
+    # Pre-norm attention with residual
     in -> Fork() -> (attn_in, skip1)
     attn_in ->
       LayerNorm(dim)
@@ -116,7 +116,7 @@ neuron TransformerBlock(dim, heads):
       attn_out
     (attn_out, skip1) -> Add() -> post_attn
 
-    Pre-norm FFN with residual
+    # Pre-norm FFN with residual
     post_attn -> Fork() -> (ffn_in, skip2)
     ffn_in ->
       LayerNorm(dim)
@@ -144,7 +144,7 @@ neuron SmallTransformer(vocab=50000, dim=512, layers=6, heads=8):
   graph:
     in ->
       Embedding(vocab, dim)
-      Stack would be: repeat TransformerBlock layers times
+      # Stack would be: repeat TransformerBlock layers times
       TransformerBlock(dim, heads)
       TransformerBlock(dim, heads)
       TransformerBlock(dim, heads)
