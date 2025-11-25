@@ -1,0 +1,34 @@
+# Match expression examples
+#
+# NOTE: The current parser has a known issue with match expressions where
+# it fails to parse the final match arm correctly (consumes newline too early).
+# These examples are commented out until the parser is fixed.
+
+neuron Identity:
+  in: [*shape]
+  out: [*shape]
+  impl: core,builtin/Identity
+
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+# Simple pattern matching on shapes
+neuron SimpleMatch:
+  in: [*, dim]
+  out: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity() -> out
+      [*, 256]: Linear(256, 512) -> out
+      [*, 1024]: Linear(1024, 512) -> out
+
+# Match with wildcard
+neuron MatchWithWildcard:
+  in: [*, dim]
+  out: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity() -> out
+      [*, d]: Linear(d, 512) -> out

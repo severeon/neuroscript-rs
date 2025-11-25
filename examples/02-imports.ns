@@ -1,0 +1,16 @@
+# Import statement examples
+
+# Single wildcard import
+use core,nn/*
+
+# Multiple imports
+use core,activations/*
+use models,transformers/*
+
+# Specific path import
+use core,nn/Linear
+
+neuron ImportTest:
+  in: [*, 512]
+  out: [*, 512]
+  impl: core,nn/Identity

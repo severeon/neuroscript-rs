@@ -47,7 +47,7 @@ impl Parser {
 
     pub fn parse(source: &str) -> Result<Program, ParseError> {
         let tokens = Lexer::new(source).tokenize()?;
-        print!("{:?}", tokens);
+        // print!("{:?}", tokens);
         let mut parser = Parser::new(tokens);
         parser.program()
     }
@@ -82,6 +82,7 @@ impl Parser {
         if self.at(kind) {
             Ok(self.advance())
         } else {
+            println!("Expected {:?}, found {:?} as {:?}", kind, self.peek_kind(), self.peek());
             Err(ParseError::Expected {
                 expected: format!("{:?}", kind),
                 found: format!("{:?}", self.peek_kind()),
@@ -552,6 +553,7 @@ impl Parser {
     fn match_expr(&mut self) -> Result<MatchExpr, ParseError> {
         self.expect(&TokenKind::Match)?;
         self.expect(&TokenKind::Colon)?;
+        self.expect(&TokenKind::Dedent)?;
         self.expect(&TokenKind::Newline)?;
         self.expect(&TokenKind::Indent)?;
 

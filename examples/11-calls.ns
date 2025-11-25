@@ -1,0 +1,85 @@
+# Function/neuron call examples
+
+neuron Linear(in_dim, out_dim, bias=true):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+neuron Dropout(p=0.1):
+  in: [*shape]
+  out: [*shape]
+  impl: core,nn/Dropout
+
+neuron CustomLayer(in_dim, out_dim, scale=1, offset=0, enabled=true):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,custom/Layer
+
+# No arguments
+neuron NoArgCall:
+  in: [*, 512]
+  out: [*, 512]
+  graph:
+    in -> Dropout() -> out
+
+# Positional arguments only
+neuron PositionalOnly:
+  in: [*, 512]
+  out: [*, 256]
+  graph:
+    in -> Linear(512, 256) -> out
+
+# Keyword arguments only
+neuron KeywordOnly:
+  in: [*, 512]
+  out: [*, 512]
+  graph:
+    in -> Dropout(p=0.5) -> out
+
+# Mixed positional and keyword
+neuron MixedArgs:
+  in: [*, 512]
+  out: [*, 256]
+  graph:
+    in -> Linear(512, 256, bias=false) -> out
+
+# Multiple keyword arguments
+neuron MultipleKeywords:
+  in: [*, 512]
+  out: [*, 256]
+  graph:
+    in -> CustomLayer(512, 256, scale=2, offset=10, enabled=false) -> out
+
+# Expressions as arguments
+neuron ExpressionArgs(dim):
+  in: [*, dim]
+  out: [*, dim * 4]
+  graph:
+    in -> Linear(dim, dim * 4) -> out
+
+# Negative number arguments
+neuron NegativeArgs:
+  in: [*, 512]
+  out: [*, 256]
+  graph:
+    in -> CustomLayer(512, 256, scale=-1, offset=-10) -> out
+
+# Float arguments
+neuron FloatArgs:
+  in: [*, 512]
+  out: [*, 512]
+  graph:
+    in -> Dropout(p=0.25) -> out
+
+# String arguments (backtick)
+neuron StringArgs:
+  in: [*, 512]
+  out: [*, 512]
+  impl: external(model=`gpt-4`, mode=`fast`)
+
+# Boolean arguments
+neuron BoolArgs:
+  in: [*, 512]
+  out: [*, 256]
+  graph:
+    in -> CustomLayer(512, 256, enabled=true) -> out

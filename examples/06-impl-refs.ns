@@ -1,0 +1,53 @@
+# Implementation reference examples
+
+# Standard source,path format
+neuron StandardImpl:
+  in: [*, 512]
+  out: [*, 512]
+  impl: core,nn/Linear
+
+# Different sources
+neuron CoreNN:
+  in: [*shape]
+  out: [*shape]
+  impl: core,nn/LayerNorm
+
+neuron CoreActivations:
+  in: [*shape]
+  out: [*shape]
+  impl: core,activations/GELU
+
+neuron CoreBuiltin:
+  in: [*shape]
+  out: [*shape]
+  impl: core,builtin/Identity
+
+# Custom sources
+neuron CustomSource:
+  in: [*, 512]
+  out: [*, 512]
+  impl: models,transformers/BertLayer
+
+# Nested paths
+neuron NestedPath:
+  in: [*, 512]
+  out: [*, 512]
+  impl: libs,vision/models/ResNet
+
+# External implementations with backtick strings
+neuron ExternalAPI:
+  in: [batch, seq, vocab]
+  out: [batch, seq, vocab]
+  impl: external(provider=`lmstudio`, model=`qwen3-vl-12b`)
+
+# External with multiple kwargs
+neuron ExternalMultiKwargs:
+  in: [*, 512]
+  out: [*, 512]
+  impl: external(provider=`openai`, model=`gpt-4`)
+
+# External with parameter references
+neuron ExternalWithParams(model_name):
+  in: [*, 512]
+  out: [*, 512]
+  impl: external(provider=`lmstudio`, model=model_name)

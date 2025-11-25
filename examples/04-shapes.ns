@@ -1,0 +1,61 @@
+# Shape specification examples
+
+# Empty shape (scalar)
+neuron Scalar:
+  in: []
+  out: []
+  impl: core,nn/Identity
+
+# Literal dimensions
+neuron Literals:
+  in: [512]
+  out: [256, 128]
+  impl: core,nn/Linear
+
+# Named dimensions
+neuron Named(batch, seq, dim):
+  in: [batch, seq, dim]
+  out: [batch, seq, dim]
+  impl: core,nn/Identity
+
+# Wildcard: matches any single dimension
+neuron Wildcard:
+  in: [*, 512]
+  out: [*, 256]
+  impl: core,nn/Linear
+
+# Variadic: captures zero or more dimensions
+neuron Variadic:
+  in: [*shape]
+  out: [*shape]
+  impl: core,nn/Identity
+
+# Variadic with named capture
+neuron VariadicNamed:
+  in: [*batch, seq, dim]
+  out: [*batch, seq, dim]
+  impl: core,nn/Identity
+
+# Dimension expressions: arithmetic
+neuron Expressions(dim):
+  in: [batch, dim]
+  out: [batch, dim * 4]
+  impl: core,nn/Linear
+
+# Addition expressions
+neuron AddExpressions(dim):
+  in: [batch, dim]
+  out: [batch, dim + 512]
+  impl: core,nn/Linear
+
+# Division expressions
+neuron DivExpressions(dim):
+  in: [batch, dim]
+  out: [batch, dim / 2]
+  impl: core,nn/Linear
+
+# Complex mixed shape
+neuron ComplexShape(batch, seq, dim):
+  in: [batch, seq, dim]
+  out: [batch, seq, dim * 4]
+  impl: core,nn/Linear
