@@ -6,8 +6,8 @@ NeuroScript is a domain-specific language for defining composable neural network
 
 ## Status
 
-**Current:** Parser + IR + Validation + Standard Library (Python runtime)  
-**Next:** Codegen → PyTorch modules
+**Current:** Parser + IR + Validation + Standard Library + Codegen (Phase 0)
+**Next:** Shape Inference & Optimizations
 
 ## Quick Start
 
@@ -78,6 +78,30 @@ in: [*shape]             # any shape at all
 in: [batch, dim]
 out: [batch, dim * 4]     # expansion
 out: [batch, dim / 2]     # reduction
+```
+
+**Full tensor shape operations with BigUint arithmetic to avoid overflow:**
+
+```rust
+use neuroscript::shape_algebra::*;
+
+// Pattern matching with wildcards
+let pattern = Pattern::from_tokens(vec![
+    PatToken::Any,      // matches any dimension
+    PatToken::Lit(1),   // must be exactly 1
+    PatToken::Any,
+]);
+assert!(pattern.matches(&Shape::new(vec![32, 1, 256])));
+
+// Broadcasting checks
+let a = Shape::new(vec![32, 64, 56, 56]);
+let b = Shape::new(vec![1, 64, 1, 1]);
+assert!(broadcastable(&a, &b));
+
+// Refine/coarsen operations
+let shape = Shape::new(vec![64]);
+let refined = refine_axis(&shape, 0, &[8, 8]).unwrap();
+assert_eq!(refined, Shape::new(vec![8, 8]));
 ```
 
 ### Pipeline Syntax
@@ -203,32 +227,6 @@ The validator ensures:
 ./target/release/neuroscript --validate examples/transformer_from_stdlib.ns
 ```
 
-### Shape Algebra
-
-Full tensor shape operations with BigUint arithmetic to avoid overflow:
-
-```rust
-use neuroscript::shape_algebra::*;
-
-// Pattern matching with wildcards
-let pattern = Pattern::from_tokens(vec![
-    PatToken::Any,      // matches any dimension
-    PatToken::Lit(1),   // must be exactly 1
-    PatToken::Any,
-]);
-assert!(pattern.matches(&Shape::new(vec![32, 1, 256])));
-
-// Broadcasting checks
-let a = Shape::new(vec![32, 64, 56, 56]);
-let b = Shape::new(vec![1, 64, 1, 1]);
-assert!(broadcastable(&a, &b));
-
-// Refine/coarsen operations
-let shape = Shape::new(vec![64]);
-let refined = refine_axis(&shape, 0, &[8, 8]).unwrap();
-assert_eq!(refined, Shape::new(vec![8, 8]));
-```
-
 ## Example: Building GPT-2 Small
 
 ```neuroscript
@@ -334,13 +332,13 @@ All 26 files (20 examples + 6 stdlib) parse successfully with zero errors.
 - [x] Standard library registry
 - [x] Comprehensive test suite
 
-### Phase 2: Codegen (Next)
+### Phase 2: Codegen (In Progress)
 
-- [ ] IR → PyTorch nn.Module
-- [ ] Import generation from stdlib_registry
+- [x] IR → PyTorch nn.Module
+- [x] Import generation from stdlib_registry
 - [ ] Shape inference integration
-- [ ] Forward pass generation
-- [ ] Parameter initialization
+- [x] Forward pass generation
+- [x] Parameter initialization
 
 ### Phase 3: Advanced Features
 

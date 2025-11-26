@@ -52,6 +52,9 @@ struct CodeGenerator<'a> {
     
     /// Mapping from Call endpoint keys to module instance names
     call_to_module: HashMap<String, String>,
+    
+    /// Parameters of the current neuron being generated
+    current_neuron_params: HashSet<String>,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -63,6 +66,7 @@ impl<'a> CodeGenerator<'a> {
             used_primitives: HashSet::new(),
             var_names: HashMap::new(),
             call_to_module: HashMap::new(),
+            current_neuron_params: HashSet::new(),
         }
     }
     
@@ -75,6 +79,7 @@ impl<'a> CodeGenerator<'a> {
     
     /// Generate Python code for a neuron
     fn generate_neuron(&mut self, neuron: &NeuronDef) -> Result<String, CodegenError> {
+        self.current_neuron_params = neuron.params.iter().map(|p| p.name.clone()).collect();
         let mut output = String::new();
         
         // Generate class definition
@@ -128,19 +133,18 @@ impl<'a> CodeGenerator<'a> {
     fn generate_module_instantiations(&mut self, output: &mut String, connections: &[Connection]) -> Result<(), CodegenError> {
         // Collect all unique Call endpoints and assign them IDs
         let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<(String, Value)>)> = HashMap::new();
+        let mut all_endpoints = Vec::new();
+        self.collect_calls(connections, &mut all_endpoints);
         
-        for conn in connections {
-            // Check both source and destination for Call endpoints
-            for endpoint in [&conn.source, &conn.destination] {
-                if let Endpoint::Call { name, args, kwargs } = endpoint {
-                    let key = self.endpoint_key(endpoint);
-                    if !seen_calls.contains_key(&key) {
-                        let id = self.next_node_id();
-                        let module_name = format!("{}_{}", self.snake_case(name), id);
-                        // Store the mapping for use in forward generation
-                        self.call_to_module.insert(key.clone(), module_name.clone());
-                        seen_calls.insert(key, (name.clone(), module_name, args.clone(), kwargs.clone()));
-                    }
+        for endpoint in &all_endpoints {
+            if let Endpoint::Call { name, args, kwargs } = endpoint {
+                let key = self.endpoint_key(&endpoint);
+                if !seen_calls.contains_key(&key) {
+                    let id = self.next_node_id();
+                    let module_name = format!("{}_{}", self.snake_case(&name), id);
+                    // Store the mapping for use in forward generation
+                    self.call_to_module.insert(key.clone(), module_name.clone());
+                    seen_calls.insert(key, (name.clone(), module_name, args.clone(), kwargs.clone()));
                 }
             }
         }
@@ -234,6 +238,7 @@ impl<'a> CodeGenerator<'a> {
         }
         
         let mut temp_var_counter = 0;
+        let indent = "        ";
         
         // Build a map from Call endpoints to their result variable names
         let mut call_to_result: HashMap<String, String> = HashMap::new();
@@ -253,7 +258,7 @@ impl<'a> CodeGenerator<'a> {
                         .collect();
                     format!("({})", vars.join(", "))
                 }
-                Endpoint::Call { name, args: _, kwargs: _ } => {
+                Endpoint::Call { name, .. } => {
                     // This Call should have been processed in a previous connection
                     // Look it up in our call_to_result map
                     let key = self.endpoint_key(&conn.source);
@@ -264,48 +269,17 @@ impl<'a> CodeGenerator<'a> {
                         ))?
                 }
                 Endpoint::Match(_) => {
-                    return Err(CodegenError::UnsupportedFeature("Match expressions".to_string()));
+                    return Err(CodegenError::UnsupportedFeature("Match expressions as source".to_string()));
                 }
             };
             
             // Process the destination
-            match &conn.destination {
-                Endpoint::Ref(port_ref) => {
-                    // Simple assignment - the source becomes this port's variable
-                    self.var_names.insert(port_ref.node.clone(), source_var);
-                }
-                Endpoint::Tuple(refs) => {
-                    // Tuple unpacking
-                   let var_names: Vec<String> = refs.iter().map(|r| {
-                        let v = format!("x{}", temp_var_counter);
-                        temp_var_counter += 1;
-                        self.var_names.insert(r.node.clone(), v.clone());
-                        v
-                    }).collect();
-                    
-                    writeln!(output, "        {} = {}", var_names.join(", "), source_var).unwrap();
-                }
-                Endpoint::Call { name, args: _, kwargs: _ } => {
-                    // Generate a call to the module
-                    let key = self.endpoint_key(&conn.destination);
-                    let module_name = self.call_to_module.get(&key)
-                        .cloned()
-                        .ok_or_else(|| CodegenError::InvalidConnection(
-                            format!("Module for call to {} not found", name)
-                        ))?;
-                    
-                    let result_var = format!("x{}", temp_var_counter);
-                    temp_var_counter += 1;
-                    
-                    // Generate the call
-                    writeln!(output, "        {} = self.{}({})", result_var, module_name, source_var).unwrap();
-                    
-                    // Store the result for later reference
-                    call_to_result.insert(key, result_var.clone());
-                }
-                Endpoint::Match(_) => {
-                    return Err(CodegenError::UnsupportedFeature("Match expressions".to_string()));
-                }
+            let result_var = self.process_destination(output, &conn.destination, source_var, indent, &mut temp_var_counter, &mut call_to_result)?;
+            
+            // If destination was a Call, store result in call_to_result
+            if let Endpoint::Call { .. } = &conn.destination {
+                 let key = self.endpoint_key(&conn.destination);
+                 call_to_result.insert(key, result_var);
             }
         }
         
@@ -316,6 +290,149 @@ impl<'a> CodeGenerator<'a> {
         writeln!(output, "        return {}", output_var).unwrap();
         
         Ok(())
+    }
+
+    /// Process a destination endpoint, generating code and returning the result variable name
+    fn process_destination(
+        &mut self, 
+        output: &mut String, 
+        endpoint: &Endpoint, 
+        source_var: String, 
+        indent: &str, 
+        temp_var_counter: &mut usize,
+        call_to_result: &mut HashMap<String, String>
+    ) -> Result<String, CodegenError> {
+        match endpoint {
+            Endpoint::Ref(port_ref) => {
+                // Simple assignment - the source becomes this port's variable
+                self.var_names.insert(port_ref.node.clone(), source_var.clone());
+                Ok(source_var)
+            }
+            Endpoint::Tuple(refs) => {
+                // Tuple unpacking
+                let var_names: Vec<String> = refs.iter().map(|r| {
+                    let v = format!("x{}", *temp_var_counter);
+                    *temp_var_counter += 1;
+                    self.var_names.insert(r.node.clone(), v.clone());
+                    v
+                }).collect();
+                
+                writeln!(output, "{}{} = {}", indent, var_names.join(", "), source_var).unwrap();
+                Ok(source_var) // Return tuple as result
+            }
+            Endpoint::Call { name, .. } => {
+                // Generate a call to the module
+                let key = self.endpoint_key(endpoint);
+                let module_name = self.call_to_module.get(&key)
+                    .cloned()
+                    .ok_or_else(|| CodegenError::InvalidConnection(
+                        format!("Module for call to {} not found", name)
+                    ))?;
+                
+                let result_var = format!("x{}", *temp_var_counter);
+                *temp_var_counter += 1;
+                
+                // Generate the call
+                writeln!(output, "{}{} = self.{}({})", indent, result_var, module_name, source_var).unwrap();
+                
+                Ok(result_var)
+            }
+            Endpoint::Match(match_expr) => {
+                let result_var = format!("x{}", *temp_var_counter);
+                *temp_var_counter += 1;
+                
+                // Initialize result_var to None for safety (though not strictly needed if all paths return)
+                writeln!(output, "{}{} = None", indent, result_var).unwrap();
+                
+                let mut first = true;
+                for arm in &match_expr.arms {
+                    let condition = self.generate_shape_check(&arm.pattern, &source_var);
+                    let prefix = if first { "if" } else { "elif" };
+                    first = false;
+                    
+                    writeln!(output, "{}{} {}:", indent, prefix, condition).unwrap();
+                    
+                    // Process pipeline
+                    let arm_indent = format!("{}    ", indent);
+                    let mut current_var = source_var.clone();
+                    
+                    for ep in &arm.pipeline {
+                         current_var = self.process_destination(output, ep, current_var, &arm_indent, temp_var_counter, call_to_result)?;
+                         
+                         // If endpoint was a Call, store result in call_to_result
+                        if let Endpoint::Call { .. } = ep {
+                             let key = self.endpoint_key(ep);
+                             call_to_result.insert(key, current_var.clone());
+                        }
+                    }
+                    
+                    writeln!(output, "{}{} = {}", arm_indent, result_var, current_var).unwrap();
+                }
+                
+                // Else clause
+                writeln!(output, "{}else:", indent).unwrap();
+                writeln!(output, "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')", indent, source_var).unwrap();
+
+                Ok(result_var)
+            }
+        }
+    }
+
+    /// Generate a runtime shape check condition
+    fn generate_shape_check(&self, pattern: &crate::ir::Shape, var_name: &str) -> String {
+        let mut checks = Vec::new();
+        
+        // Rank check (unless variadic)
+        let has_variadic = pattern.dims.iter().any(|d| matches!(d, crate::ir::Dim::Variadic(_)));
+        if !has_variadic {
+            checks.push(format!("{}.ndim == {}", var_name, pattern.dims.len()));
+        }
+        
+        for (i, dim) in pattern.dims.iter().enumerate() {
+            match dim {
+                crate::ir::Dim::Literal(n) => {
+                    checks.push(format!("{}.shape[{}] == {}", var_name, i, n));
+                }
+                crate::ir::Dim::Named(n) => {
+                    // Check if it's a parameter
+                    if self.current_neuron_params.contains(n) {
+                        checks.push(format!("{}.shape[{}] == self.{}", var_name, i, n));
+                    }
+                }
+                _ => {} // Skip Wildcard, Variadic, Expr for now
+            }
+        }
+        
+        if checks.is_empty() {
+            "True".to_string()
+        } else {
+            checks.join(" and ")
+        }
+    }
+
+    /// Collect all Call endpoints recursively, including from Match expressions
+    fn collect_calls(&self, connections: &[Connection], calls: &mut Vec<Endpoint>) {
+        for conn in connections {
+            self.collect_calls_from_endpoint(&conn.source, calls);
+            self.collect_calls_from_endpoint(&conn.destination, calls);
+        }
+    }
+
+    fn collect_calls_from_endpoint(&self, endpoint: &Endpoint, calls: &mut Vec<Endpoint>) {
+        match endpoint {
+            Endpoint::Call { .. } => calls.push(endpoint.clone()),
+            Endpoint::Match(match_expr) => {
+                for arm in &match_expr.arms {
+                    for ep in &arm.pipeline {
+                        self.collect_calls_from_endpoint(ep, calls);
+                    }
+                }
+            }
+            Endpoint::Tuple(refs) => {
+                // Tuple unpacking doesn't contain calls in current IR
+            }
+            Endpoint::Ref(_) => {}
+        }
     }
     
     /// Generate a unique key for an endpoint (for tracking Call results)
@@ -512,7 +629,8 @@ mod tests {
     
     #[test]
     fn test_snake_case() {
-        let gen = CodeGenerator::new(&Program::new());
+        let program = Program::new();
+        let gen = CodeGenerator::new(&program);
         assert_eq!(gen.snake_case("Linear"), "linear");
         assert_eq!(gen.snake_case("GELU"), "g_e_l_u");
         assert_eq!(gen.snake_case("LayerNorm"), "layer_norm");
@@ -521,12 +639,63 @@ mod tests {
     
     #[test]
     fn test_value_to_python() {
-        let gen = CodeGenerator::new(&Program::new());
+        let program = Program::new();
+        let gen = CodeGenerator::new(&program);
         assert_eq!(gen.value_to_python(&Value::Int(42)), "42");
         assert_eq!(gen.value_to_python(&Value::Float(3.14)), "3.14");
         assert_eq!(gen.value_to_python(&Value::String("hello".to_string())), "\"hello\"");
         assert_eq!(gen.value_to_python(&Value::Bool(true)), "True");
         assert_eq!(gen.value_to_python(&Value::Bool(false)), "False");
         assert_eq!(gen.value_to_python(&Value::Name("dim".to_string())), "dim");
+    }
+
+    #[test]
+    fn test_codegen_match() {
+        use crate::ir::*;
+        
+        // Construct a simple program with a match expression
+        let mut program = Program::new();
+        let neuron = NeuronDef {
+            name: "MatchTest".to_string(),
+            params: vec![],
+            inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]) }],
+            outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]) }],
+            body: NeuronBody::Graph(vec![
+                Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Match(MatchExpr {
+                        arms: vec![
+                            MatchArm {
+                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                                guard: None,
+                                pipeline: vec![
+                                    Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![] },
+                                    Endpoint::Ref(PortRef::new("out"))
+                                ]
+                            },
+                            MatchArm {
+                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
+                                guard: None,
+                                pipeline: vec![
+                                    Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![] },
+                                    Endpoint::Ref(PortRef::new("out"))
+                                ]
+                            }
+                        ]
+                    })
+                }
+            ])
+        };
+        
+        program.neurons.insert("MatchTest".to_string(), neuron);
+        
+        let code = generate_pytorch(&program, "MatchTest").unwrap();
+        println!("{}", code);
+        
+        assert!(code.contains("if x.ndim == 2 and x.shape[1] == 512:"));
+        assert!(code.contains("elif x.ndim == 2 and x.shape[1] == 256:"));
+        // Note: IDs might vary depending on counter, but names should be consistent
+        assert!(code.contains("self.identity_"));
+        assert!(code.contains("self.linear_"));
     }
 }

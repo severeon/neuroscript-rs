@@ -42,7 +42,7 @@ NeuroScript treats neural network components uniformly:
 
 ### Key Abstractions
 
-```
+```neuroscript
 Neuron = Primitive | Composite
 Port = (name: string, shape: Shape)
 Shape = [Dim, Dim, ...]
@@ -1118,7 +1118,7 @@ in: [batch, ?seq, dim]
 
 ## Changelog
 
-**v0.1 (Current)**
+### **v0.1 (Current)**
 
 - Core language: lexer, parser, IR, validator
 - Shape algebra with pattern matching
@@ -1126,7 +1126,7 @@ in: [batch, ?seq, dim]
 - Python runtime package
 - Comprehensive test suite
 
-**Upcoming**
+### **Upcoming**
 
 - v0.2: Codegen → PyTorch
 - v0.3: Shape inference
@@ -1145,6 +1145,6 @@ in: [batch, ?seq, dim]
 
 ---
 
-**End of Specification**
+## **End of Specification**
 
 This document describes NeuroScript as implemented in commit [current]. For the latest updates, see the repository README and source code.
