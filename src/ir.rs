@@ -112,6 +112,7 @@ pub enum Endpoint {
         name: String,
         args: Vec<Value>,
         kwargs: Vec<(String, Value)>,
+        id: usize,
     },
     /// Pattern match expression
     Match(MatchExpr),

@@ -34,6 +34,7 @@ pub enum ValidationError {
         node: String,
         context: String,
     },
+    Custom(String),
 }
 
 impl std::fmt::Display for ValidationError {
@@ -55,6 +56,9 @@ impl std::fmt::Display for ValidationError {
             }
             ValidationError::UnknownNode { node, context } => {
                 write!(f, "Unknown node '{}' (in {})", node, context)
+            }
+            ValidationError::Custom(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
@@ -780,6 +784,7 @@ mod tests {
                     name: "MissingNeuron".to_string(),
                     args: vec![],
                     kwargs: vec![],
+                    id: 0
                 },
             }]),
         };
@@ -813,6 +818,7 @@ mod tests {
                                 name: "MissingInMatch".to_string(),
                                 args: vec![],
                                 kwargs: vec![],
+                                id: 0
                             }
                         ],
                     }],
@@ -855,8 +861,8 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![Connection {
-                source: Endpoint::Call { name: "TwoOut".to_string(), args: vec![], kwargs: vec![] },
-                destination: Endpoint::Call { name: "OneIn".to_string(), args: vec![], kwargs: vec![] },
+                source: Endpoint::Call { name: "TwoOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                destination: Endpoint::Call { name: "OneIn".to_string(), args: vec![], kwargs: vec![], id: 0 },
             }]),
         };
         program.neurons.insert("Composite".to_string(), composite);
@@ -883,7 +889,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![Connection {
-                source: Endpoint::Call { name: "OneOut".to_string(), args: vec![], kwargs: vec![] },
+                source: Endpoint::Call { name: "OneOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Tuple(vec![
                     PortRef::new("a"),
                     PortRef::new("b"),
@@ -934,16 +940,16 @@ mod tests {
                 // Fork creates (a, b)
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
-                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Tuple(vec![PortRef::new("a"), PortRef::new("b")]),
                 },
                 // Only send (a) to TwoIn - arity mismatch
                 Connection {
                     source: Endpoint::Tuple(vec![PortRef::new("a")]),
-                    destination: Endpoint::Call { name: "TwoIn".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "TwoIn".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
             ]),
         };
@@ -972,8 +978,8 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![Connection {
-                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![] },
-                destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![] },
+                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![], id: 0 },
             }]),
         };
         program.neurons.insert("Composite".to_string(), composite);
@@ -996,8 +1002,8 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![Connection {
-                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![] },
-                destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![] },
+                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![], id: 0 },
             }]),
         };
         program.neurons.insert("Composite".to_string(), composite);
@@ -1020,8 +1026,8 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![Connection {
-                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![] },
-                destination: Endpoint::Call { name: "In512".to_string(), args: vec![], kwargs: vec![] },
+                source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                destination: Endpoint::Call { name: "In512".to_string(), args: vec![], kwargs: vec![], id: 0 },
             }]),
         };
         program.neurons.insert("Composite".to_string(), composite);
@@ -1045,12 +1051,12 @@ mod tests {
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![
                 Connection {
-                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
-                    destination: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                    destination: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![] },
-                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
             ]),
         };
@@ -1082,17 +1088,17 @@ mod tests {
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph(vec![
                 Connection {
-                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
-                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Tuple(vec![PortRef::new("main"), PortRef::new("skip")]),
                 },
                 // main -> A creates cycle: A -> Fork -> main -> A
                 Connection {
                     source: Endpoint::Ref(PortRef::new("main")),
-                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
             ]),
         };
@@ -1139,26 +1145,26 @@ mod tests {
             body: NeuronBody::Graph(vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
-                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Tuple(vec![PortRef::new("main"), PortRef::new("skip")]),
                 },
                 Connection {
                     source: Endpoint::Ref(PortRef::new("main")),
-                    destination: Endpoint::Call { name: "Process".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "Process".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "Process".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "Process".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Ref(PortRef::new("processed")),
                 },
                 Connection {
                     source: Endpoint::Tuple(vec![PortRef::new("processed"), PortRef::new("skip")]),
-                    destination: Endpoint::Call { name: "Add".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "Add".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "Add".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "Add".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Ref(PortRef::new("out")),
                 },
             ]),
@@ -1220,14 +1226,14 @@ mod tests {
             body: NeuronBody::Graph(vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
-                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
+                    destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![] },
-                    destination: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                    destination: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
                 Connection {
-                    source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![] },
+                    source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Ref(PortRef::new("out")),
                 },
             ]),

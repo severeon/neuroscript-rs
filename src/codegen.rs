@@ -4,7 +4,7 @@
 //! to PyTorch Python code without shape inference or optimizations.
 //!
 //! Translation pipeline:
-//! ```
+//! ```text
 //! NeuroScript IR
 //!     ↓ Lowering
 //! PyTorch nn.Module skeleton
@@ -137,7 +137,7 @@ impl<'a> CodeGenerator<'a> {
         self.collect_calls(connections, &mut all_endpoints);
         
         for endpoint in &all_endpoints {
-            if let Endpoint::Call { name, args, kwargs } = endpoint {
+            if let Endpoint::Call { name, args, kwargs, .. } = endpoint {
                 let key = self.endpoint_key(&endpoint);
                 if !seen_calls.contains_key(&key) {
                     let id = self.next_node_id();
@@ -438,7 +438,7 @@ impl<'a> CodeGenerator<'a> {
     /// Generate a unique key for an endpoint (for tracking Call results)
     fn endpoint_key(&self, endpoint: &Endpoint) -> String {
         match endpoint {
-            Endpoint::Call { name, args, kwargs } => {
+            Endpoint::Call { name, args, kwargs, .. } => {
                 // Create a unique key based on the call signature
                 let args_str = args.iter()
                     .map(|v| format!("{:?}", v))
@@ -501,7 +501,7 @@ impl<'a> CodeGenerator<'a> {
                 writeln!(output, "        {} = {}", var_names.join(", "), source_var).unwrap();
                 Ok(result_var)
             }
-            Endpoint::Call { name, args: _, kwargs: _ } => {
+            Endpoint::Call { name, args: _, kwargs: _, .. } => {
                 // Generate a call to the module
                 let id = self.next_node_id();
                 let module_name = format!("{}_{}", self.snake_case(name), id);
@@ -669,7 +669,7 @@ mod tests {
                                 pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
                                 guard: None,
                                 pipeline: vec![
-                                    Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![] },
+                                    Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![], id: 0 },
                                     Endpoint::Ref(PortRef::new("out"))
                                 ]
                             },
@@ -677,7 +677,7 @@ mod tests {
                                 pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
                                 guard: None,
                                 pipeline: vec![
-                                    Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![] },
+                                    Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![], id: 1 },
                                     Endpoint::Ref(PortRef::new("out"))
                                 ]
                             }

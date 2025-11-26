@@ -67,11 +67,18 @@ impl ParseError {
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    next_node_id: usize,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
+        Parser { tokens, pos: 0, next_node_id: 0 }
+    }
+
+    fn next_id(&mut self) -> usize {
+        let id = self.next_node_id;
+        self.next_node_id += 1;
+        id
     }
 
     pub fn parse(source: &str) -> Result<Program, ParseError> {
@@ -573,7 +580,7 @@ impl Parser {
                     self.call_args()?
                 };
                 self.expect(&TokenKind::RParen)?;
-                Ok(Endpoint::Call { name, args, kwargs })
+                Ok(Endpoint::Call { name, args, kwargs, id: self.next_id() })
             } else {
                 Ok(Endpoint::Ref(PortRef::new(name)))
             }
@@ -1535,14 +1542,16 @@ neuron Test:
         assert_eq!(residual_connections[0].destination, Endpoint::Call {
             name: "Fork".to_string(),
             args: vec![],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 3
         });
 
         // 2. Call { name: "Fork", args: [], kwargs: [] } -> Tuple([PortRef { node: "main", port: "default" }, PortRef { node: "skip", port: "default" }])
         assert_eq!(residual_connections[1].source, Endpoint::Call {
             name: "Fork".to_string(),
             args: vec![],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 3
         });
         assert_eq!(residual_connections[1].destination, Endpoint::Tuple(vec![
             PortRef::new("main"),
@@ -1554,14 +1563,16 @@ neuron Test:
         assert_eq!(residual_connections[2].destination, Endpoint::Call {
             name: "MLP".to_string(),
             args: vec![Value::Name("dim".to_string())],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 4
         });
 
         // 4. Call { name: "MLP", args: [Name("dim")], kwargs: [] } -> Ref(PortRef { node: "processed", port: "default" })
         assert_eq!(residual_connections[3].source, Endpoint::Call {
             name: "MLP".to_string(),
             args: vec![Value::Name("dim".to_string())],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 4
         });
         assert_eq!(residual_connections[3].destination, Endpoint::Ref(PortRef::new("processed")));
 
@@ -1573,14 +1584,16 @@ neuron Test:
         assert_eq!(residual_connections[4].destination, Endpoint::Call {
             name: "Add".to_string(),
             args: vec![],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 5
         });
 
         // 6. Call { name: "Add", args: [], kwargs: [] } -> Ref(PortRef { node: "out", port: "default" })
         assert_eq!(residual_connections[5].source, Endpoint::Call {
             name: "Add".to_string(),
             args: vec![],
-            kwargs: vec![]
+            kwargs: vec![],
+            id: 5
         });
         assert_eq!(residual_connections[5].destination, Endpoint::Ref(PortRef::new("out")));
     }
