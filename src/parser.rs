@@ -35,6 +35,35 @@ pub enum ParseError {
     Lex(#[from] crate::lexer::LexError),
 }
 
+impl ParseError {
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            ParseError::Expected { span, .. } => *span,
+            ParseError::Unexpected { span, .. } => *span,
+            ParseError::DuplicateNeuron { span, .. } => *span,
+            ParseError::Lex(e) => e.span(),
+        }
+    }
+
+    pub fn expected(&self) -> &str {
+        match self {
+            ParseError::Expected { expected, .. } => expected,
+            ParseError::Unexpected { .. } => "",
+            ParseError::DuplicateNeuron { .. } => "",
+            ParseError::Lex(_) => "",
+        }
+    }
+
+    pub fn found(&self) -> String {
+        match self {
+            ParseError::Expected { found, .. } => found.clone(),
+            ParseError::Unexpected { found, .. } => found.clone(),
+            ParseError::DuplicateNeuron { name, .. } => format!("neuron '{}'", name),
+            ParseError::Lex(e) => e.to_string(),
+        }
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -82,7 +111,6 @@ impl Parser {
         if self.at(kind) {
             Ok(self.advance())
         } else {
-            println!("Expected {:?}, found {:?} as {:?}", kind, self.peek_kind(), self.peek());
             Err(ParseError::Expected {
                 expected: format!("{:?}", kind),
                 found: format!("{:?}", self.peek_kind()),
@@ -866,7 +894,7 @@ neuron MatchWithWildcard:
       [*, 512]: Identity() -> out
       [*, d]: Linear(d, 512) -> out
 "#;
-        let program = Parser::parse(source).unwrap();
+        let _program = Parser::parse(source).unwrap();
     }
 
     #[test]
@@ -876,5 +904,91 @@ neuron MatchWithWildcard:
         assert_eq!(program.uses.len(), 1);
         assert_eq!(program.uses[0].source, "core");
         assert_eq!(program.uses[0].path, vec!["nn", "*"]);
+    }
+    
+    #[test]
+    fn test_parser_output() {
+        let source = std::fs::read_to_string("examples/residual.ns").unwrap();
+        let program = Parser::parse(&source).unwrap();
+
+        assert_eq!(program.neurons.len(), 6);
+        assert_eq!(program.uses.len(), 1);
+
+        // Get the Residual and MLP neurons
+        let residual = &program.neurons["Residual"];
+        let mlp = &program.neurons["MLP"];
+
+        // Check that Residual and MLP are composite (have graphs)
+        assert!(residual.is_composite());
+        assert!(mlp.is_composite());
+
+        // Extract connections from the graphs
+        let NeuronBody::Graph(residual_connections) = &residual.body else {
+            panic!("Expected graph body for Residual");
+        };
+        let NeuronBody::Graph(mlp_connections) = &mlp.body else {
+            panic!("Expected graph body for MLP");
+        };
+
+        // Assert Residual has 6 connections
+        assert_eq!(residual_connections.len(), 6);
+
+        // Assert MLP has 4 connections
+        assert_eq!(mlp_connections.len(), 4);
+
+        // Assert the following 6 connections for Residual:
+        // 1. Ref(PortRef { node: "in", port: "default" }) -> Call { name: "Fork", args: [], kwargs: [] }
+        assert_eq!(residual_connections[0].source, Endpoint::Ref(PortRef::new("in")));
+        assert_eq!(residual_connections[0].destination, Endpoint::Call {
+            name: "Fork".to_string(),
+            args: vec![],
+            kwargs: vec![]
+        });
+
+        // 2. Call { name: "Fork", args: [], kwargs: [] } -> Tuple([PortRef { node: "main", port: "default" }, PortRef { node: "skip", port: "default" }])
+        assert_eq!(residual_connections[1].source, Endpoint::Call {
+            name: "Fork".to_string(),
+            args: vec![],
+            kwargs: vec![]
+        });
+        assert_eq!(residual_connections[1].destination, Endpoint::Tuple(vec![
+            PortRef::new("main"),
+            PortRef::new("skip")
+        ]));
+
+        // 3. Ref(PortRef { node: "main", port: "default" }) -> Call { name: "MLP", args: [Name("dim")], kwargs: [] }
+        assert_eq!(residual_connections[2].source, Endpoint::Ref(PortRef::new("main")));
+        assert_eq!(residual_connections[2].destination, Endpoint::Call {
+            name: "MLP".to_string(),
+            args: vec![Value::Name("dim".to_string())],
+            kwargs: vec![]
+        });
+
+        // 4. Call { name: "MLP", args: [Name("dim")], kwargs: [] } -> Ref(PortRef { node: "processed", port: "default" })
+        assert_eq!(residual_connections[3].source, Endpoint::Call {
+            name: "MLP".to_string(),
+            args: vec![Value::Name("dim".to_string())],
+            kwargs: vec![]
+        });
+        assert_eq!(residual_connections[3].destination, Endpoint::Ref(PortRef::new("processed")));
+
+        // 5. Tuple([PortRef { node: "processed", port: "default" }, PortRef { node: "skip", port: "default" }]) -> Call { name: "Add", args: [], kwargs: [] }
+        assert_eq!(residual_connections[4].source, Endpoint::Tuple(vec![
+            PortRef::new("processed"),
+            PortRef::new("skip")
+        ]));
+        assert_eq!(residual_connections[4].destination, Endpoint::Call {
+            name: "Add".to_string(),
+            args: vec![],
+            kwargs: vec![]
+        });
+
+        // 6. Call { name: "Add", args: [], kwargs: [] } -> Ref(PortRef { node: "out", port: "default" })
+        assert_eq!(residual_connections[5].source, Endpoint::Call {
+            name: "Add".to_string(),
+            args: vec![],
+            kwargs: vec![]
+        });
+        assert_eq!(residual_connections[5].destination, Endpoint::Ref(PortRef::new("out")));
     }
 }
