@@ -22,6 +22,7 @@ pub mod parser;
 pub mod shape_algebra;
 pub mod stdlib_registry;
 pub mod validator;
+pub mod shape_algebra;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
 pub use ir::{
