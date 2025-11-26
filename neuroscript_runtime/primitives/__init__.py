@@ -39,6 +39,19 @@ from neuroscript_runtime.primitives.embeddings import (
     LearnedPositionalEmbedding,
 )
 
+# Structural Operations
+from neuroscript_runtime.primitives.structural import (
+    Fork,
+    Fork3,
+    Add,
+    Concat,
+)
+
+# Attention
+from neuroscript_runtime.primitives.attention import (
+    ScaledDotProductAttention,
+)
+
 __all__ = [
     # Core Operations
     "Linear",
@@ -61,4 +74,11 @@ __all__ = [
     "Embedding",
     "PositionalEncoding",
     "LearnedPositionalEmbedding",
+    # Structural Operations
+    "Fork",
+    "Fork3",
+    "Add",
+    "Concat",
+    # Attention
+    "ScaledDotProductAttention",
 ]

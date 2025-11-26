@@ -30,6 +30,13 @@ from neuroscript_runtime.primitives import (
     Embedding,
     PositionalEncoding,
     LearnedPositionalEmbedding,
+    # Structural Operations
+    Fork,
+    Fork3,
+    Add,
+    Concat,
+    # Attention
+    ScaledDotProductAttention,
 )
 
 
@@ -332,6 +339,279 @@ class TestIntegration:
         x = pos_enc(x)
 
         assert x.shape == (batch_size, seq_len, d_model)
+
+
+class TestStructuralOperations:
+    """Test structural operation primitives (Fork, Add, Concat)."""
+
+    def test_fork_basic(self):
+        """Test basic Fork operation."""
+        fork = Fork()
+        x = torch.randn(32, 512)
+        a, b = fork(x)
+
+        assert a.shape == (32, 512)
+        assert b.shape == (32, 512)
+        # Should be same reference, not a copy
+        assert a is b
+        assert torch.equal(a, x)
+
+    def test_fork_multi_dim(self):
+        """Test Fork with multi-dimensional input."""
+        fork = Fork()
+        x = torch.randn(8, 16, 10, 64)
+        a, b = fork(x)
+
+        assert a.shape == (8, 16, 10, 64)
+        assert b.shape == (8, 16, 10, 64)
+        assert a is b
+
+    def test_fork3_basic(self):
+        """Test basic Fork3 operation."""
+        fork3 = Fork3()
+        x = torch.randn(32, 512)
+        a, b, c = fork3(x)
+
+        assert a.shape == (32, 512)
+        assert b.shape == (32, 512)
+        assert c.shape == (32, 512)
+        # All should be same reference
+        assert a is b is c
+        assert torch.equal(a, x)
+
+    def test_fork3_multi_dim(self):
+        """Test Fork3 with multi-dimensional input."""
+        fork3 = Fork3()
+        x = torch.randn(4, 8, 256)
+        a, b, c = fork3(x)
+
+        assert a.shape == (4, 8, 256)
+        assert b.shape == (4, 8, 256)
+        assert c.shape == (4, 8, 256)
+        assert a is b is c
+
+    def test_add_basic(self):
+        """Test basic Add operation."""
+        add = Add()
+        x = torch.randn(32, 512)
+        y = torch.randn(32, 512)
+        result = add((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, x + y)
+
+    def test_add_multi_dim(self):
+        """Test Add with multi-dimensional inputs."""
+        add = Add()
+        x = torch.randn(8, 16, 10, 64)
+        y = torch.randn(8, 16, 10, 64)
+        result = add((x, y))
+
+        assert result.shape == (8, 16, 10, 64)
+        assert torch.allclose(result, x + y)
+
+    def test_add_broadcasting(self):
+        """Test Add with broadcasting."""
+        add = Add()
+        x = torch.randn(32, 512)
+        y = torch.randn(512)  # Will broadcast
+        result = add((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, x + y)
+
+    def test_add_residual_connection(self):
+        """Test Add in typical residual connection pattern."""
+        add = Add()
+        fork = Fork()
+
+        # Simulate residual connection
+        x = torch.randn(32, 512)
+        main, skip = fork(x)
+
+        # Process main path (simulate with simple scaling)
+        processed = main * 2.0
+
+        # Add back the skip connection
+        result = add((processed, skip))
+
+        assert result.shape == (32, 512)
+        expected = x * 2.0 + x
+        assert torch.allclose(result, expected)
+
+    def test_add_incompatible_shapes(self):
+        """Test Add error on incompatible shapes."""
+        add = Add()
+        x = torch.randn(32, 512)
+        y = torch.randn(32, 256)  # Incompatible shape
+
+        with pytest.raises(ValueError, match="Cannot add tensors"):
+            add((x, y))
+
+    def test_concat_basic(self):
+        """Test basic Concat operation."""
+        concat = Concat(dim=-1)
+        x = torch.randn(32, 10, 512)
+        y = torch.randn(32, 10, 512)
+        result = concat((x, y))
+
+        assert result.shape == (32, 10, 1024)  # Concatenated along last dim
+        assert torch.equal(result[..., :512], x)
+        assert torch.equal(result[..., 512:], y)
+
+    def test_concat_three_tensors(self):
+        """Test Concat with three tensors."""
+        concat = Concat(dim=-1)
+        x = torch.randn(16, 256)
+        y = torch.randn(16, 128)
+        z = torch.randn(16, 64)
+        result = concat((x, y, z))
+
+        assert result.shape == (16, 448)  # 256 + 128 + 64
+        assert torch.equal(result[..., :256], x)
+        assert torch.equal(result[..., 256:384], y)
+        assert torch.equal(result[..., 384:], z)
+
+    def test_concat_dim_0(self):
+        """Test Concat along dimension 0."""
+        concat = Concat(dim=0)
+        x = torch.randn(32, 512)
+        y = torch.randn(16, 512)
+        result = concat((x, y))
+
+        assert result.shape == (48, 512)  # Concatenated along batch dim
+        assert torch.equal(result[:32], x)
+        assert torch.equal(result[32:], y)
+
+    def test_concat_multi_dim(self):
+        """Test Concat with multi-dimensional inputs."""
+        concat = Concat(dim=2)
+        x = torch.randn(8, 16, 10, 64)
+        y = torch.randn(8, 16, 20, 64)
+        result = concat((x, y))
+
+        assert result.shape == (8, 16, 30, 64)
+
+    def test_concat_too_few_inputs(self):
+        """Test Concat error with fewer than 2 tensors."""
+        concat = Concat(dim=-1)
+        x = torch.randn(32, 512)
+
+        with pytest.raises(ValueError, match="at least 2 tensors"):
+            concat((x,))
+
+    def test_concat_incompatible_shapes(self):
+        """Test Concat error on incompatible shapes."""
+        concat = Concat(dim=-1)
+        x = torch.randn(32, 512)
+        y = torch.randn(16, 512)  # Different batch size
+
+        with pytest.raises(ValueError, match="Cannot concatenate"):
+            concat((x, y))
+
+
+class TestAttention:
+    """Test attention mechanism primitives."""
+
+    def test_scaled_dot_product_basic(self):
+        """Test basic scaled dot-product attention."""
+        attn = ScaledDotProductAttention()
+        q = torch.randn(32, 10, 64)  # batch=32, seq_q=10, d_k=64
+        k = torch.randn(32, 20, 64)  # batch=32, seq_k=20, d_k=64
+        v = torch.randn(32, 20, 128) # batch=32, seq_k=20, d_v=128
+
+        output = attn((q, k, v))
+
+        assert output.shape == (32, 10, 128)  # [batch, seq_q, d_v]
+
+    def test_scaled_dot_product_self_attention(self):
+        """Test self-attention (Q=K=V)."""
+        attn = ScaledDotProductAttention()
+        x = torch.randn(16, 8, 64)  # batch=16, seq=8, dim=64
+
+        output = attn((x, x, x))
+
+        assert output.shape == (16, 8, 64)
+
+    def test_scaled_dot_product_multi_head(self):
+        """Test with multi-head attention dimensions."""
+        attn = ScaledDotProductAttention()
+        # [batch, num_heads, seq, d_k]
+        q = torch.randn(32, 8, 10, 64)  # 8 heads
+        k = torch.randn(32, 8, 20, 64)
+        v = torch.randn(32, 8, 20, 128)
+
+        output = attn((q, k, v))
+
+        assert output.shape == (32, 8, 10, 128)
+
+    def test_scaled_dot_product_with_dropout(self):
+        """Test attention with dropout."""
+        attn = ScaledDotProductAttention(dropout_p=0.1)
+        q = torch.randn(32, 10, 64)
+        k = torch.randn(32, 20, 64)
+        v = torch.randn(32, 20, 128)
+
+        # In training mode, dropout should be applied
+        attn.train()
+        output = attn((q, k, v))
+        assert output.shape == (32, 10, 128)
+
+        # In eval mode, dropout should not be applied
+        attn.eval()
+        output_eval = attn((q, k, v))
+        assert output_eval.shape == (32, 10, 128)
+
+    def test_scaled_dot_product_custom_scale(self):
+        """Test attention with custom scale factor."""
+        attn = ScaledDotProductAttention(scale=0.5)
+        q = torch.randn(16, 10, 64)
+        k = torch.randn(16, 10, 64)
+        v = torch.randn(16, 10, 64)
+
+        output = attn((q, k, v))
+
+        assert output.shape == (16, 10, 64)
+
+    def test_scaled_dot_product_dimension_mismatch(self):
+        """Test attention error on query/key dimension mismatch."""
+        attn = ScaledDotProductAttention()
+        q = torch.randn(32, 10, 64)
+        k = torch.randn(32, 20, 128)  # Different d_k
+        v = torch.randn(32, 20, 128)
+
+        with pytest.raises(ValueError, match="same last dimension"):
+            attn((q, k, v))
+
+    def test_scaled_dot_product_sequence_mismatch(self):
+        """Test attention error on key/value sequence mismatch."""
+        attn = ScaledDotProductAttention()
+        q = torch.randn(32, 10, 64)
+        k = torch.randn(32, 20, 64)
+        v = torch.randn(32, 15, 64)  # Different seq_k
+
+        with pytest.raises(ValueError, match="same sequence length"):
+            attn((q, k, v))
+
+    def test_scaled_dot_product_invalid_dropout(self):
+        """Test attention error on invalid dropout probability."""
+        with pytest.raises(ValueError, match="dropout_p must be in"):
+            ScaledDotProductAttention(dropout_p=1.5)
+
+    def test_scaled_dot_product_attention_properties(self):
+        """Test attention output properties."""
+        attn = ScaledDotProductAttention()
+        q = torch.randn(16, 10, 64)
+        k = torch.randn(16, 10, 64)
+        v = torch.randn(16, 10, 64)
+
+        attn.eval()  # Disable dropout for deterministic output
+        output = attn((q, k, v))
+
+        # Output should be a weighted sum of values
+        # So output magnitude should be bounded by value magnitudes
+        assert output.shape == (16, 10, 64)
+        assert torch.isfinite(output).all()
 
 
 if __name__ == "__main__":

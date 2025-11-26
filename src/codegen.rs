@@ -428,7 +428,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             }
-            Endpoint::Tuple(refs) => {
+            Endpoint::Tuple(_refs) => {
                 // Tuple unpacking doesn't contain calls in current IR
             }
             Endpoint::Ref(_) => {}

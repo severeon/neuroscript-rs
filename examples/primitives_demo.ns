@@ -1,9 +1,4 @@
 # NeuroScript Primitives Demo
-# Comprehensive demonstration of all Level 0 primitives
-
-# ============================================================================
-# UTILITY PRIMITIVES
-# ============================================================================
 
 neuron Add():
     # Element-wise addition of two tensors
@@ -19,10 +14,6 @@ neuron Fork():
     out b: [*shape]
     impl: core,nn/Fork
 
-# ============================================================================
-# CORE OPERATIONS
-# ============================================================================
-
 neuron Linear(in_features, out_features):
     # Fully-connected linear transformation
     # Operates on the last dimension of any input shape
@@ -30,49 +21,11 @@ neuron Linear(in_features, out_features):
     out: [*batch, out_features]
     impl: core,nn/Linear
 
-# ============================================================================
-# ACTIVATIONS
-# ============================================================================
-
 neuron GELU():
     # Gaussian Error Linear Unit activation
     in: [*shape]
     out: [*shape]
     impl: core,nn/GELU
-
-neuron ReLU():
-    # Rectified Linear Unit activation
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/ReLU
-
-neuron Tanh():
-    # Hyperbolic tangent activation.
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/Tanh
-
-neuron Sigmoid():
-    # Sigmoid activation function.
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/Sigmoid
-
-neuron SiLU():
-    # Sigmoid Linear Unit (Swish) activation.
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/SiLU
-
-neuron Softmax():
-    # Softmax activation function
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/Softmax
-
-# ============================================================================
-# NORMALIZATION
-# ============================================================================
 
 neuron LayerNorm(normalized_shape):
     # Layer normalization
@@ -81,158 +34,11 @@ neuron LayerNorm(normalized_shape):
     out: [*batch, normalized_shape]
     impl: core,nn/LayerNorm
 
-neuron RMSNorm(dim):
-    # Root Mean Square Layer Normalization
-    # Operates on the last dimension of any input shape
-    in: [*batch, dim]
-    out: [*batch, dim]
-    impl: core,nn/RMSNorm
-
-neuron GroupNorm(num_groups, channels):
-    # Group normalization
-    # Operates on channel dimension with arbitrary spatial dimensions
-    in: [batch, channels, *spatial]
-    out: [batch, channels, *spatial]
-    impl: core,nn/GroupNorm
-
-# ============================================================================
-# REGULARIZATION
-# ============================================================================
-
 neuron Dropout(p):
     # Randomly zero out elements during training
     in: [*shape]
     out: [*shape]
     impl: core,nn/Dropout
-
-neuron DropPath(drop_prob):
-    # Stochastic depth / drop path regularization
-    in: [batch, *shape]
-    out: [batch, *shape]
-    impl: core,nn/DropPath
-
-neuron DropConnect(p):
-    # Randomly drop connections (weights)
-    in: [*shape]
-    out: [*shape]
-    impl: core,nn/DropConnect
-
-# ============================================================================
-# EMBEDDINGS
-# ============================================================================
-
-neuron Embedding(vocab_size, embedding_dim):
-    # Token embedding layer
-    in: [*, seq_len]
-    out: [*, seq_len, embedding_dim]
-    impl: core,nn/Embedding
-
-neuron PositionalEncoding(d_model, max_len):
-    # Sinusoidal positional encoding
-    in: [*, seq_len, d_model]
-    out: [*, seq_len, d_model]
-    impl: core,nn/PositionalEncoding
-
-neuron LearnedPositionalEmbedding(max_len, d_model):
-    # Learned positional embeddings
-    in: [*, seq_len, d_model]
-    out: [*, seq_len, d_model]
-    impl: core,nn/LearnedPositionalEmbedding
-
-# ============================================================================
-# COMPOSITE EXAMPLES USING PRIMITIVES
-# ============================================================================
-
-neuron FeedForward(dim, hidden_dim, dropout_p):
-    # Standard feedforward network with GELU activation
-    # Demonstrates composing Linear, GELU, Dropout primitives
-    in: [*batch, dim]
-    out: [*batch, dim]
-
-    graph:
-        in ->
-            Linear(dim, hidden_dim)
-            GELU()
-            Dropout(dropout_p)
-            Linear(hidden_dim, dim)
-            Dropout(dropout_p)
-            out
-
-neuron NormalizedLinear(in_features, out_features):
-    # Linear layer with LayerNorm
-    # Demonstrates composing Linear and LayerNorm primitives
-    in: [*, in_features]
-    out: [*, out_features]
-
-    graph:
-        in ->
-            LayerNorm(in_features)
-            Linear(in_features, out_features)
-            out
-
-neuron ActivationComparison(dim):
-    # Demonstrates multiple activation functions in parallel
-    # Shows how different activations can be compared
-    in: [batch, dim]
-    out relu: [batch, dim]
-    out gelu: [batch, dim]
-    out silu: [batch, dim]
-    out tanh: [batch, dim]
-
-    graph:
-        in -> ReLU() -> relu
-        in -> GELU() -> gelu
-        in -> SiLU() -> silu
-        in -> Tanh() -> tanh
-
-neuron EmbeddingLayer(vocab_size, d_model, max_len):
-    # Complete embedding layer with positional encoding
-    # Demonstrates Embedding + PositionalEncoding composition
-    in: [batch, seq]
-    out: [batch, seq, d_model]
-
-    graph:
-        in -> Embedding(vocab_size, d_model) -> PositionalEncoding(d_model, max_len) -> out
-
-neuron ResidualFFN(dim, hidden_dim):
-    # Residual feedforward network with normalization
-    # Demonstrates residual connections with primitives
-    in: [*batch, dim]
-    out: [*batch, dim]
-
-    graph:
-        in -> Fork() -> (main, skip)
-        main ->
-            LayerNorm(dim)
-            Linear(dim, hidden_dim)
-            GELU()
-            Linear(hidden_dim, dim)
-            Dropout(0.1)
-            processed
-        (skip, processed) -> Add() -> out
-
-neuron NormalizationShowcase(channels):
-    # Demonstrates different normalization techniques
-    # Shows LayerNorm, RMSNorm, and GroupNorm
-    in data: [*batch, channels]
-    in spatial: [batch, channels, *spatial_dims]
-    out layer: [*batch, channels]
-    out rms: [*batch, channels]
-    out group: [batch, channels, *spatial_dims]
-
-    graph:
-        data -> LayerNorm(channels) -> layer
-        data -> RMSNorm(channels) -> rms
-        spatial -> GroupNorm(8, channels) -> group
-
-neuron RegularizationStack(dim):
-    # Demonstrates stacking multiple regularization techniques
-    # Shows Dropout, DropPath, and DropConnect
-    in: [batch, seq, dim]
-    out: [batch, seq, dim]
-
-    graph:
-        in -> Dropout(0.1) -> DropConnect(0.05) -> out
 
 neuron TransformerFFN(dim, hidden_dim):
     # Complete transformer feedforward block
@@ -251,16 +57,3 @@ neuron TransformerFFN(dim, hidden_dim):
             Dropout(0.1)
             processed
         (skip, processed) -> Add() -> out
-
-neuron FullEmbeddingPipeline(vocab_size, d_model, max_len):
-    # Complete embedding pipeline with dropout
-    # Production-ready embedding layer
-    in: [batch, seq]
-    out: [batch, seq, d_model]
-
-    graph:
-        in ->
-            Embedding(vocab_size, d_model)
-            PositionalEncoding(d_model, max_len)
-            Dropout(0.1)
-            out

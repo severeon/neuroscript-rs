@@ -232,6 +232,53 @@ impl StdlibRegistry {
                 "Learned positional embeddings (BERT/GPT style)",
             ),
         );
+
+        // Level 0: Structural Operations
+        self.register(
+            "Fork",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Fork",
+                "Split tensor into two references (multi-output for residual connections)",
+            ),
+        );
+
+        self.register(
+            "Fork3",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Fork3",
+                "Split tensor into three references (multi-output)",
+            ),
+        );
+
+        self.register(
+            "Add",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Add",
+                "Element-wise addition (multi-input for residual connections)",
+            ),
+        );
+
+        self.register(
+            "Concat",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Concat",
+                "Concatenate tensors along a dimension",
+            ),
+        );
+
+        // Level 0: Attention
+        self.register(
+            "ScaledDotProductAttention",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.attention",
+                "ScaledDotProductAttention",
+                "Scaled dot-product attention (transformer building block)",
+            ),
+        );
     }
 
     /// Register a primitive neuron implementation.
@@ -310,7 +357,7 @@ mod tests {
         assert!(!registry.contains("NonExistent"));
 
         // Check we have the expected number of primitives
-        assert_eq!(registry.len(), 16); // 16 primitives registered
+        assert_eq!(registry.len(), 21); // 21 primitives registered
 
         // Check lookup works
         let linear = registry.lookup("Linear").unwrap();
@@ -368,7 +415,7 @@ mod tests {
         let primitives = registry.primitives();
 
         // Should be sorted
-        assert_eq!(primitives[0], "DropConnect");
+        assert_eq!(primitives[0], "Add");
         assert!(primitives.contains(&"Linear".to_string()));
         assert!(primitives.contains(&"GELU".to_string()));
 
