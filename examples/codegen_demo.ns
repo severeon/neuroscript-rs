@@ -1,0 +1,167 @@
+# Codegen Demo - Showcasing Phase 0 Features
+#
+# This file demonstrates all implemented codegen features:
+# 1. Simple sequential pipelines
+# 2. Composite neurons with parameters
+# 3. Default parameter values
+# 4. Arithmetic expressions (dim * 4, dim // 2)
+# 5. Tuple unpacking (Fork -> multiple outputs)
+# 6. Multi-input operations (Add with left/right)
+# 7. Intermediate node naming
+# 8. Import generation
+
+# ============================================
+# Primitives (will be imported from runtime)
+# ============================================
+
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+neuron GELU:
+  in: [*shape]
+  out: [*shape]
+  impl: core,activations/GELU
+
+neuron LayerNorm(dim):
+  in: [*, dim]
+  out: [*, dim]
+  impl: core,nn/LayerNorm
+
+neuron Dropout(p=0.1):
+  in: [*shape]
+  out: [*shape]
+  impl: core,nn/Dropout
+
+neuron Fork:
+  in: [*shape]
+  out a: [*shape]
+  out b: [*shape]
+  impl: core,builtin/Fork
+
+neuron Add:
+  in left: [*shape]
+  in right: [*shape]
+  out: [*shape]
+  impl: core,builtin/Add
+
+# ============================================
+# Feature 1: Simple Sequential Pipeline
+# ============================================
+
+neuron SimplePipeline(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in ->
+      LayerNorm(dim)
+      GELU()
+      out
+
+# ============================================
+# Feature 2: Arithmetic Expressions in Parameters
+# ============================================
+
+neuron FFN(dim, expansion=4):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in ->
+      Linear(dim, dim * expansion)
+      GELU()
+      Linear(dim * expansion, dim)
+      out
+
+# ============================================
+# Feature 3: Tuple Unpacking (Multi-Output)
+# ============================================
+
+neuron BranchingNetwork(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork() -> (path_a, path_b)
+    path_a -> LayerNorm(dim) -> processed_a
+    path_b -> GELU() -> processed_b
+    (processed_a, processed_b) -> Add() -> out
+
+# ============================================
+# Feature 4: Residual Connection (Combines Many Features)
+# ============================================
+
+neuron ResidualFFN(dim, expansion=4, dropout_rate=0.1):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork() -> (main_path, skip_path)
+    main_path ->
+      LayerNorm(dim)
+      Linear(dim, dim * expansion)
+      GELU()
+      Dropout(p=dropout_rate)
+      Linear(dim * expansion, dim)
+      transformed
+    (transformed, skip_path) -> Add() -> out
+
+# ============================================
+# Feature 5: Intermediate Nodes with Named References
+# ============================================
+
+neuron MultiStageNetwork(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> LayerNorm(dim) -> normalized
+    normalized -> Linear(dim, dim * 2) -> expanded
+    expanded -> GELU() -> activated
+    activated -> Dropout() -> regularized
+    regularized -> Linear(dim * 2, dim) -> contracted
+    contracted -> LayerNorm(dim) -> out
+
+# ============================================
+# Feature 6: Complex Multi-Branch Graph
+# ============================================
+
+neuron DualPathProcessor(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    # Initial normalization
+    in -> LayerNorm(dim) -> normalized
+    
+    # Split into two paths
+    normalized -> Fork() -> (path1, path2)
+    
+    # Path 1: Expansion and compression
+    path1 ->
+      Linear(dim, dim * 4)
+      GELU()
+      Linear(dim * 4, dim)
+      result1
+    
+    # Path 2: Simple activation
+    path2 ->
+      GELU()
+      Dropout(p=0.05)
+      result2
+    
+    # Merge paths
+    (result1, result2) -> Add() -> merged
+    
+    # Final processing
+    merged -> LayerNorm(dim) -> out
+
+# ============================================
+# Feature 7: Nested Composites (using other composites)
+# ============================================
+
+neuron DeepResidualNetwork(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in ->
+      ResidualFFN(dim, expansion=4, dropout_rate=0.1)
+      ResidualFFN(dim, expansion=4, dropout_rate=0.1)
+      ResidualFFN(dim, expansion=4, dropout_rate=0.1)
+      out
