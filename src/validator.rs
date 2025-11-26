@@ -178,9 +178,37 @@ impl Validator {
     ) -> SymbolTable {
         let mut table = SymbolTable::new();
 
-        // Add special nodes: "in" and "out"
-        table.add_node("in".to_string(), neuron.inputs.clone());
-        table.add_node("out".to_string(), neuron.outputs.clone());
+        // Add input ports as nodes
+        // - If only one input and it's named "default", add as "in"
+        // - Otherwise, add each named input port as a separate node
+        if neuron.inputs.len() == 1 && neuron.inputs[0].name == "default" {
+            table.add_node("in".to_string(), neuron.inputs.clone());
+        } else {
+            // Add each named input port as a separate node
+            for input_port in &neuron.inputs {
+                table.add_node(input_port.name.clone(), vec![input_port.clone()]);
+            }
+            // Also add "in" for backward compatibility if there's a default port
+            if let Some(default_port) = neuron.inputs.iter().find(|p| p.name == "default") {
+                table.add_node("in".to_string(), vec![default_port.clone()]);
+            }
+        }
+
+        // Add output ports as nodes
+        // - If only one output and it's named "default", add as "out"
+        // - Otherwise, add each named output port as a separate node
+        if neuron.outputs.len() == 1 && neuron.outputs[0].name == "default" {
+            table.add_node("out".to_string(), neuron.outputs.clone());
+        } else {
+            // Add each named output port as a separate node
+            for output_port in &neuron.outputs {
+                table.add_node(output_port.name.clone(), vec![output_port.clone()]);
+            }
+            // Also add "out" for backward compatibility if there's a default port
+            if let Some(default_port) = neuron.outputs.iter().find(|p| p.name == "default") {
+                table.add_node("out".to_string(), vec![default_port.clone()]);
+            }
+        }
 
         // Scan connections for intermediate node creation
         for connection in connections {
@@ -486,10 +514,26 @@ impl Validator {
             graph.insert(node.clone(), HashSet::new());
         }
 
+        // Track Call destinations: each destination creates a new unique instance
+        // Track Call sources: sources map to their most recent destination instance
+        let mut call_last_instance: HashMap<String, String> = HashMap::new();
+        let mut call_instance_counter: HashMap<String, usize> = HashMap::new();
+
         // Build edges from connections
         for connection in connections {
-            let source_nodes = Self::extract_simple_node_names(&connection.source);
-            let dest_nodes = Self::extract_simple_node_names(&connection.destination);
+            // Extract source nodes - these reference existing instances
+            let source_nodes = Self::extract_node_names_from_sources(
+                &connection.source,
+                &mut call_last_instance,
+                &mut call_instance_counter,
+            );
+
+            // Extract destination nodes - these CREATE new instances
+            let dest_nodes = Self::extract_node_names_from_destinations(
+                &connection.destination,
+                &mut call_instance_counter,
+                &mut call_last_instance,
+            );
 
             // Add nodes
             for node in &source_nodes {
@@ -536,8 +580,80 @@ impl Validator {
         errors
     }
 
-    /// Extract node names for cycle detection
+    /// Extract node names from SOURCE endpoints - these reference existing instances
+    fn extract_node_names_from_sources(
+        endpoint: &Endpoint,
+        call_last_instance: &mut HashMap<String, String>,
+        call_counter: &mut HashMap<String, usize>,
+    ) -> Vec<String> {
+        match endpoint {
+            Endpoint::Call { name, args, .. } => {
+                // Create base signature for this call
+                let args_str = args.iter()
+                    .map(|v| format!("{:?}", v))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let base_sig = format!("{}({})", name, args_str);
+
+                // Look up or create an instance for this call
+                if let Some(existing) = call_last_instance.get(&base_sig) {
+                    // Reuse existing instance
+                    vec![existing.clone()]
+                } else {
+                    // First time seeing this call - create an instance
+                    let instance_id = call_counter.entry(base_sig.clone()).or_insert(0);
+                    let unique_name = format!("{}#{}", base_sig, instance_id);
+                    *instance_id += 1;
+                    call_last_instance.insert(base_sig, unique_name.clone());
+                    vec![unique_name]
+                }
+            }
+            Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
+            Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
+            Endpoint::Match(_) => vec![], // Skip Match for cycle detection
+        }
+    }
+
+    /// Extract node names from DESTINATION endpoints - these CREATE new instances
+    fn extract_node_names_from_destinations(
+        endpoint: &Endpoint,
+        call_counter: &mut HashMap<String, usize>,
+        call_last_instance: &mut HashMap<String, String>,
+    ) -> Vec<String> {
+        match endpoint {
+            Endpoint::Call { name, args, .. } => {
+                // Create base signature for this call
+                let args_str = args.iter()
+                    .map(|v| format!("{:?}", v))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let base_sig = format!("{}({})", name, args_str);
+
+                // Check if we already have an instance from a source
+                if let Some(existing) = call_last_instance.get(&base_sig) {
+                    // Reuse the existing instance (this creates a cycle if used again later)
+                    vec![existing.clone()]
+                } else {
+                    // Create a new unique instance
+                    let instance_id = call_counter.entry(base_sig.clone()).or_insert(0);
+                    let unique_name = format!("{}#{}", base_sig, instance_id);
+                    *instance_id += 1;
+
+                    // Record this as the instance for this call signature
+                    call_last_instance.insert(base_sig, unique_name.clone());
+
+                    vec![unique_name]
+                }
+            }
+            Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
+            Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
+            Endpoint::Match(_) => vec![], // Skip Match for cycle detection
+        }
+    }
+
+    /// Extract node names for cycle detection (legacy version for tests)
     /// Calls are identified by name + args to distinguish different instances
+    #[allow(dead_code)]
     fn extract_simple_node_names(endpoint: &Endpoint) -> Vec<String> {
         match endpoint {
             Endpoint::Call { name, args, .. } => {
