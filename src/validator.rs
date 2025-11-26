@@ -34,6 +34,7 @@ pub enum ValidationError {
         node: String,
         context: String,
     },
+    Custom(String),
 }
 
 impl std::fmt::Display for ValidationError {
@@ -55,6 +56,9 @@ impl std::fmt::Display for ValidationError {
             }
             ValidationError::UnknownNode { node, context } => {
                 write!(f, "Unknown node '{}' (in {})", node, context)
+            }
+            ValidationError::Custom(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
