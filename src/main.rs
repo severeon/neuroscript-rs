@@ -1,6 +1,6 @@
 //! NeuroScript CLI
 
-use neuroscript::{parse, validate, NeuronBody};
+use neuroscript::{parse, NeuronBody};
 use std::env;
 use std::fs;
 use miette::{IntoDiagnostic, WrapErr, NamedSource};

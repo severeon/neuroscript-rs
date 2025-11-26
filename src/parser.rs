@@ -5,7 +5,6 @@
 use crate::ir::*;
 use crate::lexer::{Lexer, Token, TokenKind};
 use miette::{Diagnostic, SourceSpan};
-use std::fs;
 use thiserror::Error;
 
 #[derive(Debug, Error, Diagnostic)]
@@ -909,7 +908,7 @@ neuron MatchWithWildcard:
     
     #[test]
     fn test_parser_output() {
-        let source = fs::read_to_string("examples/residual.ns").unwrap();
+        let source = std::fs::read_to_string("examples/residual.ns").unwrap();
         let program = Parser::parse(&source).unwrap();
 
         assert_eq!(program.neurons.len(), 6);
