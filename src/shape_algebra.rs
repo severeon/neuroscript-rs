@@ -8,7 +8,7 @@
 //!
 //! Example:
 //! ```rust
-//! use shape_algebra::*;
+//! use neuroscript::shape_algebra::*;
 //!
 //! // broadcastable middle axis example: pattern [*, 1, *]
 //! let p = Pattern::from_tokens(vec![PatToken::Any, PatToken::Lit(1), PatToken::Any]);
@@ -26,8 +26,7 @@
 
 use num_bigint::BigUint;
 use num_integer::Integer;
-use num_traits::{One, Zero};
-use std::cmp::Ordering;
+use num_traits::{One, ToPrimitive, Zero};
 
 /// A shape is just a vector of positive integers (dimensions). Zero is allowed
 /// if the user wants; semantics then follow arithmetic rules (0 product -> 0 size).

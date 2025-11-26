@@ -1,0 +1,119 @@
+# Multi-Head Attention
+#
+# Core mechanism of transformers. Computes attention over sequences
+# using multiple parallel attention heads.
+#
+# Pattern:
+# 1. Project Q, K, V through linear layers
+# 2. Split into num_heads parallel heads
+# 3. Compute scaled dot-product attention per head
+# 4. Concatenate heads
+# 5. Project output
+
+# Scaled dot-product attention (single head)
+# Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V
+neuron ScaledDotProductAttention(d_k):
+    in query: [batch, seq_q, d_k]
+    in key: [batch, seq_k, d_k]
+    in value: [batch, seq_k, d_v]
+    out: [batch, seq_q, d_v]
+    graph:
+        # TODO: Needs MatMul, Scale, Softmax primitives
+        # Placeholder implementation
+        query -> Linear(d_k, d_v) -> out
+
+
+# Multi-head attention (self-attention variant)
+# Input: [batch, seq, d_model]
+# Output: [batch, seq, d_model]
+neuron MultiHeadSelfAttention(d_model, num_heads):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        # Compute d_k (dimension per head)
+        # d_k = d_model / num_heads
+
+        # Project to Q, K, V
+        in -> (q_path, k_path, v_path)
+
+        q_path -> Linear(d_model, d_model) -> query
+        k_path -> Linear(d_model, d_model) -> key
+        v_path -> Linear(d_model, d_model) -> value
+
+        # Reshape to [batch, seq, num_heads, d_k]
+        # then transpose to [batch, num_heads, seq, d_k]
+        # query -> Reshape() -> q_heads
+        # key -> Reshape() -> k_heads
+        # value -> Reshape() -> v_heads
+
+        # Apply attention per head (in parallel)
+        # (q_heads, k_heads, v_heads) -> ScaledDotProductAttention(d_k) -> attended
+
+        # Reshape back to [batch, seq, d_model]
+        # attended -> Reshape() -> concatenated
+
+        # Output projection
+        concatenated -> Linear(d_model, d_model) -> out
+
+
+# Cross-attention from queries to different key-value source
+neuron MultiHeadCrossAttention(d_model, num_heads):
+    in query: [batch, seq_q, d_model]
+    in kv: [batch, seq_kv, d_model]
+    out: [batch, seq_q, d_model]
+    graph:
+        # Project queries
+        query -> Linear(d_model, d_model) -> q
+
+        # Project keys and values from different source
+        kv -> (k_path, v_path)
+        k_path -> Linear(d_model, d_model) -> k
+        v_path -> Linear(d_model, d_model) -> v
+
+        # Multi-head attention computation
+        # (q, k, v) -> MultiHeadAttentionCore(d_model, num_heads) -> attended
+
+        # Output projection
+        attended -> Linear(d_model, d_model) -> out
+
+
+# Grouped Query Attention (GQA)
+# Like MHA but with shared K/V heads for efficiency
+# Used in modern LLMs (LLaMA 2, etc.)
+neuron GroupedQueryAttention(d_model, num_query_heads, num_kv_heads):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        # num_kv_heads divides num_query_heads
+        # Each KV head is shared across num_query_heads / num_kv_heads query heads
+
+        in -> (q_path, k_path, v_path)
+
+        # Query projection (full heads)
+        q_path -> Linear(d_model, d_model) -> query
+
+        # K, V projection (reduced heads)
+        # d_kv = d_model * num_kv_heads / num_query_heads
+        k_path -> Linear(d_model, d_model * num_kv_heads / num_query_heads) -> key
+        v_path -> Linear(d_model, d_model * num_kv_heads / num_query_heads) -> value
+
+        # Expand KV to match query heads (repeat)
+        # key -> RepeatKVHeads() -> key_expanded
+        # value -> RepeatKVHeads() -> value_expanded
+
+        # Apply attention
+        # (query, key_expanded, value_expanded) -> Attention() -> attended
+
+        # Output projection
+        attended -> Linear(d_model, d_model) -> out
+
+
+# Multi-Query Attention (MQA)
+# Extreme version K/V head shared across all query heads
+# Maximum efficiency, used in some fast inference models
+neuron MultiQueryAttention(d_model, num_heads):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        # This is GroupedQueryAttention with num_kv_heads = 1
+        in -> GroupedQueryAttention(d_model, num_heads, 1) -> out

@@ -1,0 +1,56 @@
+# Feed-Forward Network (FFN) / Multi-Layer Perceptron (MLP)
+#
+# Standard two-layer feed-forward network with expansion and projection.
+# Commonly used in transformers and other architectures.
+#
+# Pattern: Linear (expand) → Activation → Linear (project back)
+# Typical expansion factor: 4x (e.g., 512 → 2048 → 512)
+
+neuron FFN(dim, expansion):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Linear(dim, expansion)
+            GELU()
+            Linear(expansion, dim)
+            out
+
+
+# Variant with explicit hidden dimension
+neuron FFNWithHidden(in_dim, hidden_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    graph:
+        in ->
+            Linear(in_dim, hidden_dim)
+            GELU()
+            Linear(hidden_dim, out_dim)
+            out
+
+
+# Gated FFN (GLU-style) - used in some modern architectures
+# Splits into gate and value paths, then element-wise multiply
+neuron GatedFFN(dim, expansion):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> (gate_path, value_path)
+
+        # Gate path with sigmoid
+        gate_path ->
+            Linear(dim, expansion)
+            Sigmoid()
+            gate_signal
+
+        # Value path with normal activation
+        value_path ->
+            Linear(dim, expansion)
+            GELU()
+            value_signal
+
+        # Element-wise multiply (to be implemented)
+        # (gate_signal, value_signal) -> Multiply() -> activated
+
+        # Project back down
+        # activated -> Linear(expansion, dim) -> out
