@@ -7,8 +7,8 @@ description = "Neural architecture composition language"
 [dependencies]
 thiserror = "1.0"      # Clean error types
 miette = { version = "7", features = ["fancy"] }  # Beautiful error reporting
-num-bigint = "0.4"     # Arbitrary precision integers for shape sizes
-num-integer = "0.1"    # Integer operations (gcd, lcm)
+num-bigint = "0.4"     # Arbitrary precision integers for shape algebra
+num-integer = "0.1"    # Integer traits (gcd, lcm)
 num-traits = "0.2"     # Numeric traits (Zero, One)
 
 [dev-dependencies]

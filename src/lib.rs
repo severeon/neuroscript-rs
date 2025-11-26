@@ -19,11 +19,18 @@
 pub mod ir;
 pub mod lexer;
 pub mod parser;
+pub mod shape_algebra;
+pub mod stdlib_registry;
 pub mod validator;
 pub mod shape_algebra;
 
-pub use ir::*;
+// Re-export main IR types (avoiding glob to prevent conflicts)
+pub use ir::{
+    BinOp, Connection, Dim, DimExpr, Endpoint, ImplRef as IrImplRef, MatchArm, MatchExpr,
+    NeuronBody, NeuronDef, Param, Port, PortRef, Program, Shape as IrShape, UseStmt, Value,
+};
 pub use parser::Parser;
+// Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
 
 /// Parse a NeuroScript source string into a Program.

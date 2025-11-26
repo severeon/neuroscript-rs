@@ -1,15 +1,15 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-echo "Testing all example files..."
+echo "Testing all example and stdlib files..."
 echo
 
 passed=0
 failed=0
 
-# run neuroscript on all ns files in examples/
+# run neuroscript on all ns files in examples/ and stdlib/
 
-find examples/ -name "*.ns" | while read file; do
+find examples/ stdlib/ -name "*.ns" 2>/dev/null | while read file; do
   if [ ! -f "$file" ]; then
     continue
   fi

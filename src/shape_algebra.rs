@@ -26,7 +26,7 @@
 
 use num_bigint::BigUint;
 use num_integer::Integer;
-use num_traits::{One, Zero, ToPrimitive};
+use num_traits::{One, ToPrimitive, Zero};
 
 /// A shape is just a vector of positive integers (dimensions). Zero is allowed
 /// if the user wants; semantics then follow arithmetic rules (0 product -> 0 size).
