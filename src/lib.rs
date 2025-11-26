@@ -16,13 +16,13 @@
 //!       out
 //! ```
 
+pub mod codegen;
 pub mod ir;
 pub mod lexer;
 pub mod parser;
 pub mod shape_algebra;
 pub mod stdlib_registry;
 pub mod validator;
-pub mod shape_algebra;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
 pub use ir::{
@@ -30,6 +30,7 @@ pub use ir::{
     NeuronBody, NeuronDef, Param, Port, PortRef, Program, Shape as IrShape, UseStmt, Value,
 };
 pub use parser::Parser;
+pub use codegen::generate_pytorch;
 // Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
 
