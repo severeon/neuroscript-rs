@@ -1,6 +1,6 @@
 //! NeuroScript CLI
 
-use neuroscript::{parse, NeuronBody};
+use neuroscript::{parse, validate, NeuronBody, PyTorchCodegen};
 use std::env;
 use std::fs;
 use miette::{IntoDiagnostic, WrapErr, NamedSource};
@@ -9,6 +9,7 @@ fn main() -> miette::Result<()> {
     let args: Vec<String> = env::args().collect();
     let mut filename = None;
     let mut validate_flag = false;
+    let mut codegen_flag = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -17,12 +18,16 @@ fn main() -> miette::Result<()> {
                 validate_flag = true;
                 i += 1;
             }
+            "--codegen" => {
+                codegen_flag = true;
+                i += 1;
+            }
             arg if !arg.starts_with('-') => {
                 filename = Some(arg.to_string());
                 i += 1;
             }
             _ => {
-                eprintln!("Usage: neuroscript [--validate] <file.ns>");
+                eprintln!("Usage: neuroscript [--validate] [--codegen] <file.ns>");
                 std::process::exit(1);
             }
         }
@@ -77,7 +82,7 @@ fn main() -> miette::Result<()> {
             // Run validation if requested
             if validate_flag {
                 println!("Validating program...");
-                match neuroscript::validate(&program) {
+                match validate(&program) {
                     Ok(()) => {
                         println!("✓ Program is valid!");
                     }
@@ -85,6 +90,32 @@ fn main() -> miette::Result<()> {
                         println!("✗ Validation failed with {} errors:", errors.len());
                         for error in errors {
                             println!("  {}", error);
+                        }
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            // Run codegen if requested
+            if codegen_flag {
+                // First validate
+                match validate(&program) {
+                    Ok(()) => {
+                        let codegen = PyTorchCodegen::new();
+                        match codegen.generate(&program) {
+                            Ok(python_code) => {
+                                println!("{}", python_code);
+                            }
+                            Err(e) => {
+                                eprintln!("Code generation failed: {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Err(errors) => {
+                        eprintln!("Cannot generate code: validation failed with {} errors:", errors.len());
+                        for error in errors {
+                            eprintln!("  {}", error);
                         }
                         std::process::exit(1);
                     }

@@ -20,10 +20,12 @@ pub mod ir;
 pub mod lexer;
 pub mod parser;
 pub mod validator;
+pub mod codegen;
 
 pub use ir::*;
 pub use parser::Parser;
 pub use validator::*;
+pub use codegen::*;
 
 /// Parse a NeuroScript source string into a Program.
 pub fn parse(source: &str) -> Result<Program, parser::ParseError> {
