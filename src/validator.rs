@@ -290,7 +290,7 @@ impl Validator {
         is_source: bool,
     ) -> Result<Vec<Port>, ValidationError> {
         match endpoint {
-            Endpoint::Call { name, .. } => {
+            Endpoint::Call { name, args, .. } => {
                 // Look up neuron definition
                 if let Some(called_neuron) = program.neurons.get(name) {
                     let ports = if is_source {
@@ -298,7 +298,10 @@ impl Validator {
                     } else {
                         &called_neuron.inputs
                     };
-                    Ok(ports.clone())
+
+                    // Substitute parameters in port shapes
+                    let substituted_ports = Self::substitute_params(ports, &called_neuron.params, args);
+                    Ok(substituted_ports)
                 } else {
                     Err(ValidationError::MissingNeuron {
                         name: name.clone(),
@@ -397,26 +400,153 @@ impl Validator {
 
     /// Check if two shapes are compatible
     fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
-        // Handle variadic wildcards: [*name] matches any shape
-        let source_is_variadic = source.dims.len() == 1 && matches!(source.dims[0], Dim::Variadic(_));
-        let dest_is_variadic = dest.dims.len() == 1 && matches!(dest.dims[0], Dim::Variadic(_));
+        // Find variadic dimensions in both shapes
+        let source_variadic_pos = source.dims.iter().position(|d| matches!(d, Dim::Variadic(_)));
+        let dest_variadic_pos = dest.dims.iter().position(|d| matches!(d, Dim::Variadic(_)));
 
-        if source_is_variadic || dest_is_variadic {
-            return true; // Variadic matches anything
+        match (source_variadic_pos, dest_variadic_pos) {
+            // Both have variadics - complex case, for now assume compatible
+            (Some(_), Some(_)) => {
+                // Would need sophisticated matching, for now allow it
+                true
+            }
+            // Source has variadic, dest does not
+            (Some(var_pos), None) => {
+                Self::match_variadic_shape(&source.dims, var_pos, &dest.dims)
+            }
+            // Dest has variadic, source does not
+            (None, Some(var_pos)) => {
+                Self::match_variadic_shape(&dest.dims, var_pos, &source.dims)
+            }
+            // Neither has variadic - must match exactly
+            (None, None) => {
+                if source.dims.len() != dest.dims.len() {
+                    return false;
+                }
+                // Check each dimension pair
+                for (src_dim, dst_dim) in source.dims.iter().zip(dest.dims.iter()) {
+                    if !Self::dims_compatible(src_dim, dst_dim) {
+                        return false;
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    /// Substitute parameter values in port shapes
+    /// For example: Linear(512, 256) binds in_dim=512, out_dim=256
+    /// Then [*, in_dim] becomes [*, 512]
+    fn substitute_params(ports: &[Port], params: &[Param], args: &[Value]) -> Vec<Port> {
+        // Build parameter binding map
+        let mut bindings: HashMap<String, i64> = HashMap::new();
+        for (param, arg) in params.iter().zip(args.iter()) {
+            if let Value::Int(val) = arg {
+                bindings.insert(param.name.clone(), *val);
+            } else if let Value::Name(name) = arg {
+                // Named arguments remain as named dimensions
+                // We could handle this better with a more sophisticated type system
+                // For now, we don't substitute named parameters
+                continue;
+            }
         }
 
-        // Must have same number of dimensions
-        if source.dims.len() != dest.dims.len() {
+        // Substitute in each port
+        ports.iter().map(|port| {
+            Port {
+                name: port.name.clone(),
+                shape: Self::substitute_shape(&port.shape, &bindings),
+            }
+        }).collect()
+    }
+
+    /// Substitute parameter values in a shape
+    fn substitute_shape(shape: &Shape, bindings: &HashMap<String, i64>) -> Shape {
+        Shape {
+            dims: shape.dims.iter().map(|dim| Self::substitute_dim(dim, bindings)).collect()
+        }
+    }
+
+    /// Substitute parameter values in a dimension
+    fn substitute_dim(dim: &Dim, bindings: &HashMap<String, i64>) -> Dim {
+        match dim {
+            Dim::Named(name) => {
+                if let Some(val) = bindings.get(name) {
+                    Dim::Literal(*val)
+                } else {
+                    dim.clone()
+                }
+            }
+            Dim::Expr(expr) => {
+                // Recursively substitute in expressions
+                let left = Self::substitute_dim(&expr.left, bindings);
+                let right = Self::substitute_dim(&expr.right, bindings);
+
+                // Try to evaluate if both sides are now literals
+                if let (Dim::Literal(l), Dim::Literal(r)) = (&left, &right) {
+                    let result = match expr.op {
+                        BinOp::Add => l + r,
+                        BinOp::Sub => l - r,
+                        BinOp::Mul => l * r,
+                        BinOp::Div => l / r,
+                        _ => {
+                            // Non-arithmetic operations, keep as expression
+                            return Dim::Expr(Box::new(DimExpr {
+                                op: expr.op,
+                                left,
+                                right,
+                            }));
+                        }
+                    };
+                    Dim::Literal(result)
+                } else {
+                    Dim::Expr(Box::new(DimExpr {
+                        op: expr.op,
+                        left,
+                        right,
+                    }))
+                }
+            }
+            _ => dim.clone(),
+        }
+    }
+
+    /// Match a shape with a variadic against a concrete shape
+    /// pattern_dims: the dims with a variadic at var_pos
+    /// concrete_dims: the dims without variadic
+    fn match_variadic_shape(pattern_dims: &[Dim], var_pos: usize, concrete_dims: &[Dim]) -> bool {
+        // Pattern: [prefix..., *variadic, suffix...]
+        // Concrete: [concrete_dims...]
+
+        // Count non-variadic dimensions in pattern
+        let pattern_fixed_count = pattern_dims.len() - 1; // Subtract 1 for the variadic
+
+        // The variadic must match at least 0 dimensions
+        // So concrete must have at least as many dims as pattern's fixed dims
+        if concrete_dims.len() < pattern_fixed_count {
             return false;
         }
 
-        // Check each dimension pair
-        for (src_dim, dst_dim) in source.dims.iter().zip(dest.dims.iter()) {
-            if !Self::dims_compatible(src_dim, dst_dim) {
+        // Match prefix (before variadic)
+        for i in 0..var_pos {
+            if !Self::dims_compatible(&pattern_dims[i], &concrete_dims[i]) {
                 return false;
             }
         }
 
+        // Match suffix (after variadic)
+        let suffix_count = pattern_dims.len() - var_pos - 1;
+        let concrete_suffix_start = concrete_dims.len() - suffix_count;
+
+        for i in 0..suffix_count {
+            let pattern_idx = var_pos + 1 + i;
+            let concrete_idx = concrete_suffix_start + i;
+            if !Self::dims_compatible(&pattern_dims[pattern_idx], &concrete_dims[concrete_idx]) {
+                return false;
+            }
+        }
+
+        // Everything matches - the variadic captures the middle portion
         true
     }
 
