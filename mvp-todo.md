@@ -38,11 +38,31 @@
   - [x] Run shape inference after parsing
   - [x] Validate all connections for shape compatibility
   - [x] Report shape errors with full context
-  - [ ] Display inferred shapes in validation output
-  - [ ] Test validation catches shape mismatches
+  - [x] Display inferred shapes in validation output
+  - [x] Test validation catches shape mismatches
   - [x] Create example showing caught shape errors (examples/shape_inference_demo.ns)
 
 **Deliverable**: Compile-time shape validation catches all mismatches
+
+## MVP Phase 2.5: Codegen Bug Fixes (Prerequisites for Pattern Matching)
+
+### 2.5.1 Fix Match Expression Codegen Issues ✅
+
+  - [x] Fix guard condition generation (where clauses not emitted)
+  - [x] Fix return variable tracking in match expressions
+  - [x] Fix parameter storage for guard evaluation
+  - [x] Test guard conditions work correctly
+  - [x] Verify examples/16-recursion.ns catches depth guard
+
+**Context**: Three bugs in current codegen prevent match expressions from working correctly:
+1. Guard conditions (`where depth > 0`) are parsed but not generated in Python
+2. Match expressions return wrong variable (last temp instead of result)
+3. Parameters not stored as instance variables, so guards can't reference them
+
+**Files to modify**:
+- `src/codegen.rs` - `generate_shape_check()`, `process_destination()`, `generate_init()`
+
+**Deliverable**: Match expressions with guards work correctly
 
 ## MVP Phase 3: Pattern Matching System ⭐ KILLER FEATURE
 
@@ -143,6 +163,112 @@
   - [ ] Test all examples produce expected results
 
 **Deliverable**: Fully functional GPT-2 generated from NeuroScript
+
+## MVP Phase 7: `let`/`set` Bindings & Structural Recursion ⭐ KILLER FEATURE
+
+### 7.1 Lexer & Parser Extensions
+
+  - [ ] Add `set` keyword to lexer (`let` already reserved)
+  - [ ] Implement `parse_set_block()` for eager bindings
+  - [ ] Implement `parse_let_block()` for lazy bindings
+  - [ ] Parse binding syntax: `name = NeuronCall(args)`
+  - [ ] Support `Freeze(neuron)` meta-neuron syntax
+  - [ ] Test parsing of let/set blocks
+
+### 7.2 IR Extensions for Bindings
+
+  - [ ] Add `set_bindings: Vec<SetBinding>` to `NeuronDef`
+  - [ ] Add `let_bindings: Vec<LetBinding>` to `NeuronDef`
+  - [ ] Define `SetBinding` struct with name + neuron call
+  - [ ] Define `LetBinding` struct with name + neuron call
+  - [ ] Update IR Display traits for bindings
+  - [ ] Test IR correctly represents bindings
+
+### 7.3 Validation Rules for Bindings
+
+  - [ ] Check no forward references in bindings
+  - [ ] Validate binding names don't conflict with parameters
+  - [ ] Validate binding names don't conflict with ports
+  - [ ] Check lazy bindings not used in eager (set) context
+  - [ ] Validate bound neuron names exist
+  - [ ] Test validation catches binding errors
+
+### 7.4 Basic Codegen (Weight Sharing, No Recursion)
+
+  - [ ] Generate `set:` bindings in `__init__` (eager instantiation)
+  - [ ] Track bound names → module instance mapping
+  - [ ] Reference bound names in graph connections
+  - [ ] Support weight sharing (same instance multiple uses)
+  - [ ] Test basic set bindings generate correctly
+  - [ ] Test weight sharing with repeated references
+  - [ ] Create examples/17-let-set-basics.ns
+
+### 7.5 Recursion Detection & Analysis
+
+  - [ ] Detect self-referential neurons in `let:` bindings
+  - [ ] Identify recursion control parameter (e.g., depth)
+  - [ ] Detect parameter decrease pattern (depth - 1, n - 2)
+  - [ ] Identify base case (match arm without recursive call)
+  - [ ] Test recursion detection on simple examples
+
+### 7.6 Compile-Time Guard Evaluator
+
+  - [ ] Implement expression evaluator for guard conditions
+  - [ ] Support arithmetic: +, -, *, /
+  - [ ] Support comparisons: <, >, <=, >=, ==, !=
+  - [ ] Support parameter substitution in expressions
+  - [ ] Test guard evaluation with various expressions
+  - [ ] Handle evaluation errors gracefully
+
+### 7.7 Recursive Expansion Algorithm
+
+  - [ ] Implement compile-time expansion for recursive neurons
+  - [ ] Evaluate guards with parameter substitution
+  - [ ] Instantiate lazy bindings only in active code paths
+  - [ ] Track expansion depth with configurable limit (default: 100)
+  - [ ] Generate detailed error on expansion limit
+  - [ ] Test expansion on countdown pattern
+
+### 7.8 Termination Checking
+
+  - [ ] Implement simple termination checker:
+    - Single parameter decreases by constant
+    - Guard is simple comparison (>, >=, etc.)
+    - Base case exists (non-recursive arm)
+  - [ ] Error on non-terminating patterns with helpful message
+  - [ ] Error on complex patterns (multiple params, non-linear)
+  - [ ] Test termination checker catches infinite recursion
+  - [ ] Test termination checker allows valid patterns
+
+### 7.9 Recursive Codegen
+
+  - [ ] Generate conditional instantiation for `let:` bindings
+  - [ ] Emit recursive module creation in `__init__`
+  - [ ] Add depth/parameter tracking for termination
+  - [ ] Generate proper forward pass routing
+  - [ ] Test generated recursive code works
+  - [ ] Verify examples/16-recursion.ns generates correctly
+
+### 7.10 Integration & Examples
+
+  - [ ] Integrate bindings with shape inference
+  - [ ] Test let/set with pattern matching (guards)
+  - [ ] Create examples/18-weight-sharing.ns (Universal Transformer)
+  - [ ] Create examples/19-recursive-stack.ns (GPT-2 style depth)
+  - [ ] Test full integration end-to-end
+  - [ ] Verify generated PyTorch code runs
+
+**Context**: Implements full `let`/`set` specification from `notes/neuroscript_let_set_spec.md`
+
+**Key Concepts**:
+- `set:` = eager instantiation (always created in __init__)
+- `let:` = lazy instantiation (only if referenced in active path)
+- Bound names enable weight sharing (same instance reused)
+- Inline calls create independent instances
+- Structural recursion via self-reference + guards
+- Compile-time expansion (no runtime recursion)
+
+**Deliverable**: Full support for weight sharing and recursive neuron definitions
 
 ## MVP Success Criteria
 

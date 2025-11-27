@@ -1,0 +1,14 @@
+use core,nn/Identity
+
+neuron Identity():
+  in: [*]
+  out: [*]
+  impl: core,nn/Identity
+  
+neuron Recurse(d_model, num_heads, d_ff, depth):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  graph:
+    in -> match:
+      [*, seq, d_model] where depth > 0: Recurse(d_model, num_heads, d_ff, depth - 1)
+      [*, seq, d_model]: Identity() -> out 

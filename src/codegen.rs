@@ -114,7 +114,12 @@ impl<'a> CodeGenerator<'a> {
         
         writeln!(output, "    def __init__({}):", params).unwrap();
         writeln!(output, "        super().__init__()").unwrap();
-        
+
+        // Store parameters as instance variables (needed for guards)
+        for param in &neuron.params {
+            writeln!(output, "        self.{} = {}", param.name, param.name).unwrap();
+        }
+
         match &neuron.body {
             NeuronBody::Primitive(_) => {
                 // Primitives don't instantiate sub-modules
@@ -239,10 +244,13 @@ impl<'a> CodeGenerator<'a> {
         
         let mut temp_var_counter = 0;
         let indent = "        ";
-        
+
         // Build a map from Call endpoints to their result variable names
         let mut call_to_result: HashMap<String, String> = HashMap::new();
-        
+
+        // Track the last result variable (for implicit output)
+        let mut last_result = None;
+
         // Process each connection
         for conn in connections {
             // Resolve the source to a variable name
@@ -275,17 +283,22 @@ impl<'a> CodeGenerator<'a> {
             
             // Process the destination
             let result_var = self.process_destination(output, &conn.destination, source_var, indent, &mut temp_var_counter, &mut call_to_result)?;
-            
+
+            // Track the last result for implicit output
+            last_result = Some(result_var.clone());
+
             // If destination was a Call, store result in call_to_result
             if let Endpoint::Call { .. } = &conn.destination {
                  let key = self.endpoint_key(&conn.destination);
                  call_to_result.insert(key, result_var);
             }
         }
-        
+
         // Return the output variable
+        // Priority: explicit "out" port > last result > last temp variable
         let output_var = self.var_names.get("out")
             .cloned()
+            .or(last_result)
             .unwrap_or_else(|| format!("x{}", temp_var_counter - 1));
         writeln!(output, "        return {}", output_var).unwrap();
         
@@ -340,35 +353,39 @@ impl<'a> CodeGenerator<'a> {
             Endpoint::Match(match_expr) => {
                 let result_var = format!("x{}", *temp_var_counter);
                 *temp_var_counter += 1;
-                
+
                 // Initialize result_var to None for safety (though not strictly needed if all paths return)
                 writeln!(output, "{}{} = None", indent, result_var).unwrap();
-                
+
                 let mut first = true;
                 for arm in &match_expr.arms {
-                    let condition = self.generate_shape_check(&arm.pattern, &source_var);
+                    let condition = self.generate_shape_check(&arm.pattern, arm.guard.as_ref(), &source_var);
                     let prefix = if first { "if" } else { "elif" };
                     first = false;
-                    
+
                     writeln!(output, "{}{} {}:", indent, prefix, condition).unwrap();
-                    
-                    // Process pipeline
+
+                    // Process pipeline - save var_names to avoid pollution from match arm scope
+                    let saved_var_names = self.var_names.clone();
                     let arm_indent = format!("{}    ", indent);
                     let mut current_var = source_var.clone();
-                    
+
                     for ep in &arm.pipeline {
                          current_var = self.process_destination(output, ep, current_var, &arm_indent, temp_var_counter, call_to_result)?;
-                         
+
                          // If endpoint was a Call, store result in call_to_result
                         if let Endpoint::Call { .. } = ep {
                              let key = self.endpoint_key(ep);
                              call_to_result.insert(key, current_var.clone());
                         }
                     }
-                    
+
                     writeln!(output, "{}{} = {}", arm_indent, result_var, current_var).unwrap();
+
+                    // Restore var_names to prevent match arm scope from leaking
+                    self.var_names = saved_var_names;
                 }
-                
+
                 // Else clause
                 writeln!(output, "{}else:", indent).unwrap();
                 writeln!(output, "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')", indent, source_var).unwrap();
@@ -378,16 +395,16 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    /// Generate a runtime shape check condition
-    fn generate_shape_check(&self, pattern: &crate::ir::Shape, var_name: &str) -> String {
+    /// Generate a runtime shape check condition, including optional guard
+    fn generate_shape_check(&self, pattern: &crate::ir::Shape, guard: Option<&Value>, var_name: &str) -> String {
         let mut checks = Vec::new();
-        
+
         // Rank check (unless variadic)
         let has_variadic = pattern.dims.iter().any(|d| matches!(d, crate::ir::Dim::Variadic(_)));
         if !has_variadic {
             checks.push(format!("{}.ndim == {}", var_name, pattern.dims.len()));
         }
-        
+
         for (i, dim) in pattern.dims.iter().enumerate() {
             match dim {
                 crate::ir::Dim::Literal(n) => {
@@ -402,11 +419,47 @@ impl<'a> CodeGenerator<'a> {
                 _ => {} // Skip Wildcard, Variadic, Expr for now
             }
         }
-        
+
+        // Add guard condition if present
+        if let Some(guard_expr) = guard {
+            let guard_str = self.value_to_python_with_self(guard_expr);
+            checks.push(format!("({})", guard_str));
+        }
+
         if checks.is_empty() {
             "True".to_string()
         } else {
             checks.join(" and ")
+        }
+    }
+
+    /// Convert a Value to Python, replacing parameter names with self.param
+    fn value_to_python_with_self(&self, value: &Value) -> String {
+        match value {
+            Value::Name(n) => {
+                // If it's a parameter, reference it as self.param
+                if self.current_neuron_params.contains(n) {
+                    format!("self.{}", n)
+                } else {
+                    n.clone()
+                }
+            }
+            Value::BinOp { op, left, right } => {
+                let op_str = match op {
+                    crate::ir::BinOp::Add => "+",
+                    crate::ir::BinOp::Sub => "-",
+                    crate::ir::BinOp::Mul => "*",
+                    crate::ir::BinOp::Div => "/",
+                    crate::ir::BinOp::Lt => "<",
+                    crate::ir::BinOp::Gt => ">",
+                    crate::ir::BinOp::Le => "<=",
+                    crate::ir::BinOp::Ge => ">=",
+                    crate::ir::BinOp::Eq => "==",
+                    crate::ir::BinOp::Ne => "!=",
+                };
+                format!("{} {} {}", self.value_to_python_with_self(left), op_str, self.value_to_python_with_self(right))
+            }
+            _ => self.value_to_python(value)
         }
     }
 
