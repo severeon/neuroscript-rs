@@ -6,45 +6,7 @@
 //! 3. No cycles in the dependency graph
 
 use std::collections::{HashMap, HashSet};
-use crate::ir::*;
-
-/// Validation errors
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValidationError {
-    MissingNeuron {
-        name: String,
-        context: String,
-    },
-    PortMismatch {
-        source_ports: String,
-        dest_ports: String,
-        context: String,
-        details: String,
-    },
-    CycleDetected {
-        cycle: Vec<String>,
-        context: String,
-    },
-    ArityMismatch {
-        expected: usize,
-        got: usize,
-        context: String,
-    },
-    UnknownNode {
-        node: String,
-        context: String,
-    },
-    NonExhaustiveMatch {
-        context: String,
-        suggestion: String,
-    },
-    UnreachableMatchArm {
-        arm_index: usize,
-        shadowed_by: usize,
-        context: String,
-    },
-    Custom(String),
-}
+use crate::interfaces::*;
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

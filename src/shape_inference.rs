@@ -1,52 +1,6 @@
-use crate::ir::*;
+use crate::interfaces::*;
 use std::collections::HashMap;
 use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum ShapeError {
-    #[error("Shape mismatch: expected {expected}, got {got}")]
-    Mismatch { expected: Shape, got: Shape, context: String },
-
-    #[error("Dimension mismatch: expected {expected}, got {got}")]
-    DimMismatch { expected: Dim, got: Dim, context: String },
-
-    #[error("Unknown dimension variable: {name}")]
-    UnknownDim { name: String, context: String },
-
-    #[error("Constraint violation: {message}")]
-    ConstraintViolation { message: String, context: String },
-
-    #[error("Inference failed for node {node}: {message}")]
-    NodeInferenceFailed { node: String, message: String },
-
-    #[error("Unknown node or port: {0}")]
-    UnknownNode(String),
-
-    #[error("Unsupported feature: {0}")]
-    UnsupportedFeature(String),
-}
-
-/// Tracks the state of dimension variables during inference
-#[derive(Debug, Clone, Default)]
-pub struct InferenceContext {
-    /// Map from dimension name to its resolved value (if known)
-    pub resolved_dims: HashMap<String, usize>,
-
-    /// Map from dimension name to other equivalent dimension names
-    pub equivalences: HashMap<String, String>,
-
-    /// Map from named nodes to their output shapes
-    /// e.g. "in" -> [Shape], "x" -> [Shape]
-    pub node_outputs: HashMap<String, Vec<Shape>>,
-
-    /// Map from anonymous call IDs to their output shapes
-    /// e.g. Linear(512, 256) (id=1) -> [[*, 256]]
-    pub call_outputs: HashMap<usize, Vec<Shape>>,
-
-    /// Pending expression constraints to be solved
-    /// Format: (result_dim, expression, context)
-    pub pending_constraints: Vec<(Dim, DimExpr, String)>,
-}
 
 impl InferenceContext {
     pub fn new() -> Self {
@@ -239,9 +193,7 @@ impl InferenceContext {
         )
     }
 }
-
-pub struct ShapeInferenceEngine {
-}
+pub struct ShapeInferenceEngine;
 
 impl ShapeInferenceEngine {
     pub fn new() -> Self {
@@ -335,8 +287,8 @@ impl ShapeInferenceEngine {
                 // Validate input arity
                 if source_shapes.len() != called_neuron.inputs.len() {
                      return Err(ShapeError::Mismatch {
-                         expected: Shape::new(vec![]),
-                         got: Shape::new(vec![]),
+                         expected: Shape { dims: vec![] },
+                         got: Shape { dims: vec![] },
                          context: format!(
                              "Arity mismatch calling {}: expected {} input(s), got {}. Connection: {} -> {}()",
                              name,
@@ -362,14 +314,14 @@ impl ShapeInferenceEngine {
                     )).map_err(|msg| {
                         ShapeError::ConstraintViolation {
                             message: format!("Input {} ({}) shape mismatch: {}", i, input_port.name, msg),
-                            context: format!(
-                                "Connection: {} -> {}()\n  Source shape: {}\n  Expected shape: {}\n  Resolved dimensions: {:?}",
-                                self.format_endpoint(&conn.source),
-                                name,
-                                src_shape,
-                                input_port.shape,
-                                ctx.resolved_dims
-                            ),
+                        context: format!(
+                            "Connection: {} -> {}()\n  Source shape: {}\n  Expected shape: {}\n  Resolved dimensions: {:?}",
+                            self.format_endpoint(&conn.source),
+                            name,
+                            src_shape,
+                            input_port.shape,
+                            ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
+                        ),
                         }
                     })?;
                 }

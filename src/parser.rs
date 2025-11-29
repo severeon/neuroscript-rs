@@ -2,38 +2,10 @@
 //!
 //! Recursive descent parser with good error messages.
 
-use crate::ir::*;
-use crate::lexer::{Lexer, Token, TokenKind};
+use crate::interfaces::*;
+use crate::interfaces::{Lexer, Token, TokenKind};
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
-
-#[derive(Debug, Error, Diagnostic)]
-pub enum ParseError {
-    #[error("Expected {expected}, found {found}")]
-    Expected {
-        expected: String,
-        found: String,
-        #[label("here")]
-        span: SourceSpan,
-    },
-
-    #[error("Unexpected token '{found}'")]
-    Unexpected {
-        found: String,
-        #[label("unexpected")]
-        span: SourceSpan,
-    },
-
-    #[error("Duplicate neuron definition '{name}'")]
-    DuplicateNeuron {
-        name: String,
-        #[label("redefined here")]
-        span: SourceSpan,
-    },
-
-    #[error("{0}")]
-    Lex(#[from] crate::lexer::LexError),
-}
 
 impl ParseError {
     pub fn span(&self) -> SourceSpan {
@@ -62,12 +34,6 @@ impl ParseError {
             ParseError::Lex(e) => e.to_string(),
         }
     }
-}
-
-pub struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-    next_node_id: usize,
 }
 
 impl Parser {

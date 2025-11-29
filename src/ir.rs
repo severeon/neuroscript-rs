@@ -4,41 +4,7 @@
 //! Every connection carries a shape contract.
 
 use std::collections::HashMap;
-
-/// A dimension in a tensor shape
-#[derive(Debug, Clone, PartialEq)]
-pub enum Dim {
-    /// Literal value: 512
-    Literal(i64),
-    /// Named dimension: batch, seq, dim
-    Named(String),
-    /// Wildcard: * (matches any single dimension)
-    Wildcard,
-    /// Variadic: *batch (captures zero or more dimensions)
-    Variadic(String),
-    /// Computed: dim * 4
-    Expr(Box<DimExpr>),
-}
-
-/// Binary operation on dimensions
-#[derive(Debug, Clone, PartialEq)]
-pub struct DimExpr {
-    pub op: BinOp,
-    pub left: Dim,
-    pub right: Dim,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinOp {
-    Add, Sub, Mul, Div,
-    Lt, Gt, Le, Ge, Eq, Ne,
-}
-
-/// A tensor shape: [batch, seq, dim] or [*, 512] or []
-#[derive(Debug, Clone, PartialEq)]
-pub struct Shape {
-    pub dims: Vec<Dim>,
-}
+use crate::interfaces::*;
 
 impl Shape {
     pub fn scalar() -> Self {
@@ -48,40 +14,6 @@ impl Shape {
     pub fn new(dims: Vec<Dim>) -> Self {
         Shape { dims }
     }
-}
-
-/// An input or output port of a neuron
-#[derive(Debug, Clone, PartialEq)]
-pub struct Port {
-    pub name: String, // "default" if unnamed
-    pub shape: Shape,
-}
-
-/// A value in the language
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Int(i64),
-    Float(f64),
-    String(String),
-    Bool(bool),
-    Name(String),
-    BinOp {
-        op: BinOp,
-        left: Box<Value>,
-        right: Box<Value>,
-    },
-    Call {
-        name: String,
-        args: Vec<Value>,
-        kwargs: Vec<(String, Value)>,
-    },
-}
-
-/// Reference to a port: in, out, fork.left
-#[derive(Debug, Clone, PartialEq)]
-pub struct PortRef {
-    pub node: String,
-    pub port: String, // "default" if not specified
 }
 
 impl PortRef {
@@ -100,80 +32,6 @@ impl PortRef {
     }
 }
 
-/// An endpoint in a connection
-#[derive(Debug, Clone, PartialEq)]
-pub enum Endpoint {
-    /// Simple reference: in, out, my_neuron
-    Ref(PortRef),
-    /// Tuple of references: (a, b)
-    Tuple(Vec<PortRef>),
-    /// Neuron instantiation: Linear(512, 256)
-    Call {
-        name: String,
-        args: Vec<Value>,
-        kwargs: Vec<(String, Value)>,
-        id: usize,
-    },
-    /// Pattern match expression
-    Match(MatchExpr),
-}
-
-/// A connection: source -> destination
-#[derive(Debug, Clone, PartialEq)]
-pub struct Connection {
-    pub source: Endpoint,
-    pub destination: Endpoint,
-}
-
-/// One arm of a match expression
-#[derive(Debug, Clone, PartialEq)]
-pub struct MatchArm {
-    pub pattern: Shape,
-    pub guard: Option<Value>, // where clause
-    pub pipeline: Vec<Endpoint>,
-}
-
-/// Pattern matching on shapes
-#[derive(Debug, Clone, PartialEq)]
-pub struct MatchExpr {
-    pub arms: Vec<MatchArm>,
-}
-
-/// Reference to an implementation
-#[derive(Debug, Clone, PartialEq)]
-pub enum ImplRef {
-    /// External source: core,nn/Linear
-    Source { source: String, path: String },
-    /// External API: external(`lmstudio`, model=`qwen`)
-    External { kwargs: Vec<(String, Value)> },
-}
-
-/// The body of a neuron definition
-#[derive(Debug, Clone, PartialEq)]
-pub enum NeuronBody {
-    /// Primitive: has implementation reference
-    Primitive(ImplRef),
-    /// Composite: defined by internal graph
-    Graph(Vec<Connection>),
-}
-
-/// A parameter in a neuron definition
-#[derive(Debug, Clone, PartialEq)]
-pub struct Param {
-    pub name: String,
-    pub default: Option<Value>,
-}
-
-/// A complete neuron definition
-#[derive(Debug, Clone, PartialEq)]
-pub struct NeuronDef {
-    pub name: String,
-    pub params: Vec<Param>,
-    pub inputs: Vec<Port>,
-    pub outputs: Vec<Port>,
-    pub body: NeuronBody,
-}
-
 impl NeuronDef {
     pub fn is_primitive(&self) -> bool {
         matches!(self.body, NeuronBody::Primitive(_))
@@ -182,20 +40,6 @@ impl NeuronDef {
     pub fn is_composite(&self) -> bool {
         matches!(self.body, NeuronBody::Graph(_))
     }
-}
-
-/// An import statement: use core,nn/*
-#[derive(Debug, Clone, PartialEq)]
-pub struct UseStmt {
-    pub source: String,
-    pub path: Vec<String>,
-}
-
-/// A complete NeuroScript program
-#[derive(Debug, Clone, PartialEq)]
-pub struct Program {
-    pub uses: Vec<UseStmt>,
-    pub neurons: HashMap<String, NeuronDef>,
 }
 
 impl Program {

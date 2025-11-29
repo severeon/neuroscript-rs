@@ -18,58 +18,47 @@
 //! Python class in `neuroscript_runtime/primitives/linear.py`.
 
 use std::collections::HashMap;
+use crate::interfaces::*;
 
-/// Implementation reference for a primitive neuron.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ImplRef {
-    /// Full Python module path (e.g., "neuroscript_runtime.primitives.linear")
-    pub module_path: String,
-
-    /// Class name (e.g., "Linear")
-    pub class_name: String,
-
-    /// Short description for documentation
-    pub description: String,
-}
 
 impl ImplRef {
-    /// Create a new implementation reference.
+    /// Create a new source-based implementation reference.
     pub fn new(module_path: impl Into<String>, class_name: impl Into<String>) -> Self {
-        Self {
-            module_path: module_path.into(),
-            class_name: class_name.into(),
-            description: String::new(),
+        Self::Source {
+            source: module_path.into(),
+            path: class_name.into(),
         }
     }
 
-    /// Create an implementation reference with description.
+    /// Create a source-based implementation reference with description.
     pub fn with_desc(
         module_path: impl Into<String>,
         class_name: impl Into<String>,
-        description: impl Into<String>,
+        _description: impl Into<String>,
     ) -> Self {
-        Self {
-            module_path: module_path.into(),
-            class_name: class_name.into(),
-            description: description.into(),
+        Self::Source {
+            source: module_path.into(),
+            path: class_name.into(),
         }
     }
 
     /// Get the full qualified name (module.class).
     pub fn full_name(&self) -> String {
-        format!("{}.{}", self.module_path, self.class_name)
+        match self {
+            ImplRef::External { .. } => "external".to_string(),
+            ImplRef::Source { source, path } => format!("{}.{}", source, path),
+        }
     }
 
     /// Get Python import statement.
     pub fn import_statement(&self) -> String {
-        format!("from {} import {}", self.module_path, self.class_name)
+        match self {
+            ImplRef::External { .. } => "external".to_string(),
+            ImplRef::Source { source, path } => format!("from {} import {}", source, path),
+        }
     }
 }
 
-/// Standard library registry - maps neuron names to implementations.
-pub struct StdlibRegistry {
-    primitives: HashMap<String, ImplRef>,
-}
 
 impl StdlibRegistry {
     /// Create a new registry with all standard primitives registered.
@@ -370,15 +359,17 @@ mod tests {
 
         // Check lookup works
         let linear = registry.lookup("Linear").unwrap();
-        assert_eq!(linear.class_name, "Linear");
-        assert_eq!(
-            linear.module_path,
-            "neuroscript_runtime.primitives.linear"
-        );
-        assert_eq!(
-            linear.full_name(),
-            "neuroscript_runtime.primitives.linear.Linear"
-        );
+        match linear {
+            ImplRef::Source { source, path } => {
+                assert_eq!(path, "Linear");
+                assert_eq!(source, "neuroscript_runtime.primitives.linear");
+                assert_eq!(
+                    linear.full_name(),
+                    "neuroscript_runtime.primitives.linear.Linear"
+                );
+            }
+            _ => panic!("Expected Source variant"),
+        }
     }
 
     #[test]
@@ -397,7 +388,6 @@ mod tests {
             impl_ref.import_statement(),
             "from neuroscript_runtime.primitives.linear import Linear"
         );
-        assert_eq!(impl_ref.description, "Dense layer");
     }
 
     #[test]
@@ -431,8 +421,15 @@ mod tests {
         // All primitives should have valid impl refs
         for name in primitives {
             let impl_ref = registry.lookup(&name).unwrap();
-            assert!(!impl_ref.module_path.is_empty());
-            assert!(!impl_ref.class_name.is_empty());
+            match impl_ref {
+                ImplRef::Source { source, path } => {
+                    assert!(!source.is_empty());
+                    assert!(!path.is_empty());
+                }
+                ImplRef::External { .. } => {
+                    // External impl refs are also valid
+                }
+            }
         }
     }
 }

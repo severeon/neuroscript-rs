@@ -1,28 +1,6 @@
-//! PyTorch code generation from NeuroScript IR
-//!
-//! This module implements Phase 0 codegen: direct lowering from NeuroScript IR
-//! to PyTorch Python code without shape inference or optimizations.
-//!
-//! Translation pipeline:
-//! ```text
-//! NeuroScript IR
-//!     ↓ Lowering
-//! PyTorch nn.Module skeleton
-//!     ↓ Emit Python source
-//! Generated Python file
-//! ```
-
-use crate::ir::{Connection, Endpoint, NeuronBody, NeuronDef, Program, Value};
-use crate::stdlib_registry::StdlibRegistry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
-
-#[derive(Debug)]
-pub enum CodegenError {
-    NeuronNotFound(String),
-    InvalidConnection(String),
-    UnsupportedFeature(String),
-}
+use crate::interfaces::*;
 
 impl std::fmt::Display for CodegenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,43 +13,6 @@ impl std::fmt::Display for CodegenError {
 }
 
 impl std::error::Error for CodegenError {}
-
-/// Result of shape check generation containing condition and dimension bindings
-#[derive(Debug)]
-struct ShapeCheckResult {
-    /// Boolean condition for runtime shape checking (e.g., "x.ndim == 2 and x.shape[1] == 512")
-    condition: String,
-    /// Dimension binding statements (e.g., vec!["d = x.shape[1]"])
-    /// These should be emitted before the pipeline code in a match arm
-    bindings: Vec<String>,
-    /// Guard expression (if present and uses captured dimensions, should be checked after bindings)
-    guard_condition: Option<String>,
-}
-
-/// Code generator state
-struct CodeGenerator<'a> {
-    program: &'a Program,
-    registry: StdlibRegistry,
-
-    /// Counter for generating unique node IDs
-    node_counter: usize,
-
-    /// Set of primitive neurons used (for imports)
-    used_primitives: HashSet<String>,
-
-    /// Mapping from IR endpoints to Python variable names
-    var_names: HashMap<String, String>,
-
-    /// Mapping from Call endpoint keys to module instance names
-    call_to_module: HashMap<String, String>,
-
-    /// Parameters of the current neuron being generated
-    current_neuron_params: HashSet<String>,
-
-    /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
-    /// Used to resolve dimension references in match arm pipelines
-    binding_context: HashMap<String, String>,
-}
 
 impl<'a> CodeGenerator<'a> {
     fn new(program: &'a Program) -> Self {
@@ -524,22 +465,22 @@ impl<'a> CodeGenerator<'a> {
     /// Named dimensions in patterns are handled as follows:
     /// - If the name is a neuron parameter: Check equality (no binding needed)
     /// - Otherwise: Capture the dimension value for use in the pipeline
-    fn generate_shape_check(&self, pattern: &crate::ir::Shape, guard: Option<&Value>, var_name: &str) -> ShapeCheckResult {
+    fn generate_shape_check(&self, pattern: &Shape, guard: Option<&Value>, var_name: &str) -> ShapeCheckResult {
         let mut checks = Vec::new();
         let mut bindings = Vec::new();
 
         // Rank check (unless variadic)
-        let has_variadic = pattern.dims.iter().any(|d| matches!(d, crate::ir::Dim::Variadic(_)));
+        let has_variadic = pattern.dims.iter().any(|d| matches!(d, Dim::Variadic(_)));
         if !has_variadic {
             checks.push(format!("{}.ndim == {}", var_name, pattern.dims.len()));
         }
 
         for (i, dim) in pattern.dims.iter().enumerate() {
             match dim {
-                crate::ir::Dim::Literal(n) => {
+                Dim::Literal(n) => {
                     checks.push(format!("{}.shape[{}] == {}", var_name, i, n));
                 }
-                crate::ir::Dim::Named(n) => {
+                Dim::Named(n) => {
                     // Check if it's a parameter
                     if self.current_neuron_params.contains(n) {
                         // Parameter: check equality with self.param
@@ -590,16 +531,16 @@ impl<'a> CodeGenerator<'a> {
             }
             Value::BinOp { op, left, right } => {
                 let op_str = match op {
-                    crate::ir::BinOp::Add => "+",
-                    crate::ir::BinOp::Sub => "-",
-                    crate::ir::BinOp::Mul => "*",
-                    crate::ir::BinOp::Div => "/",
-                    crate::ir::BinOp::Lt => "<",
-                    crate::ir::BinOp::Gt => ">",
-                    crate::ir::BinOp::Le => "<=",
-                    crate::ir::BinOp::Ge => ">=",
-                    crate::ir::BinOp::Eq => "==",
-                    crate::ir::BinOp::Ne => "!=",
+                    BinOp::Add => "+",
+                    BinOp::Sub => "-",
+                    BinOp::Mul => "*",
+                    BinOp::Div => "/",
+                    BinOp::Lt => "<",
+                    BinOp::Gt => ">",
+                    BinOp::Le => "<=",
+                    BinOp::Ge => ">=",
+                    BinOp::Eq => "==",
+                    BinOp::Ne => "!=",
                 };
                 format!("{} {} {}", self.value_to_python_with_self(left), op_str, self.value_to_python_with_self(right))
             }
@@ -727,16 +668,16 @@ impl<'a> CodeGenerator<'a> {
             Value::Name(n) => n.clone(),
             Value::BinOp { op, left, right } => {
                 let op_str = match op {
-                    crate::ir::BinOp::Add => "+",
-                    crate::ir::BinOp::Sub => "-",
-                    crate::ir::BinOp::Mul => "*",
-                    crate::ir::BinOp::Div => "/",
-                    crate::ir::BinOp::Lt => "<",
-                    crate::ir::BinOp::Gt => ">",
-                    crate::ir::BinOp::Le => "<=",
-                    crate::ir::BinOp::Ge => ">=",
-                    crate::ir::BinOp::Eq => "==",
-                    crate::ir::BinOp::Ne => "!=",
+                    BinOp::Add => "+",
+                    BinOp::Sub => "-",
+                    BinOp::Mul => "*",
+                    BinOp::Div => "/",
+                    BinOp::Lt => "<",
+                    BinOp::Gt => ">",
+                    BinOp::Le => "<=",
+                    BinOp::Ge => ">=",
+                    BinOp::Eq => "==",
+                    BinOp::Ne => "!=",
                 };
                 format!("{} {} {}", self.value_to_python(left), op_str, self.value_to_python(right))
             }

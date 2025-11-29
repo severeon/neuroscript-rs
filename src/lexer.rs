@@ -5,111 +5,12 @@
 
 use miette::{SourceSpan, Diagnostic};
 use thiserror::Error;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
-    // Keywords
-    Neuron,
-    Use,
-    In,
-    Out,
-    Impl,
-    Graph,
-    Match,
-    Where,
-    External,
-    And,
-    Or,
-
-    // Literals
-    Int(i64),
-    Float(f64),
-    String(String),
-    True,
-    False,
-
-    // Identifiers
-    Ident(String),
-
-    // Operators
-    Arrow,      // ->
-    Colon,      // :
-    Comma,      // ,
-    Dot,        // .
-    Slash,      // /
-    Star,       // *
-    Plus,       // +
-    Minus,      // -
-    Eq,         // ==
-    Ne,         // !=
-    Lt,         // <
-    Gt,         // >
-    Le,         // <=
-    Ge,         // >=
-    Assign,     // =
-
-    // Delimiters
-    LParen,     // (
-    RParen,     // )
-    LBracket,   // [
-    RBracket,   // ]
-
-    // Structure
-    Newline,
-    Indent,
-    Dedent,
-    Eof,
-}
-
-#[derive(Debug, Clone)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub span: Span,
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-    pub line: usize,
-    pub col: usize,
-}
+use crate::interfaces::*;
 
 impl From<Span> for SourceSpan {
     fn from(s: Span) -> Self {
         SourceSpan::new(s.start.into(), (s.end - s.start).into())
     }
-}
-
-#[derive(Debug, Error, Diagnostic)]
-pub enum LexError {
-    #[error("Unexpected character '{ch}'")]
-    UnexpectedChar {
-        ch: char,
-        #[label("here")]
-        span: SourceSpan,
-    },
-
-    #[error("Unterminated string")]
-    UnterminatedString {
-        #[label("string starts here")]
-        span: SourceSpan,
-    },
-
-    #[error("Invalid number")]
-    InvalidNumber {
-        #[label("here")]
-        span: SourceSpan,
-    },
-
-    #[error("Inconsistent indentation")]
-    InconsistentIndent {
-        #[label("expected {expected} spaces, found {found}")]
-        span: SourceSpan,
-        expected: usize,
-        found: usize,
-    },
 }
 
 impl LexError {
@@ -121,17 +22,6 @@ impl LexError {
             LexError::InconsistentIndent { span, .. } => *span,
         }
     }
-}
-
-pub struct Lexer<'a> {
-    source: &'a str,
-    chars: std::iter::Peekable<std::str::CharIndices<'a>>,
-    pos: usize,
-    line: usize,
-    col: usize,
-    indent_stack: Vec<usize>,
-    pending_dedents: usize,
-    at_line_start: bool,
 }
 
 impl<'a> Lexer<'a> {
