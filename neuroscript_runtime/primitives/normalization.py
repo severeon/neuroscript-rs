@@ -2,10 +2,10 @@
 Normalization primitives.
 
 Maps to NeuroScript neurons like:
-    neuron LayerNorm(normalized_shape: int | list[int], eps: float):
+    neuron LayerNorm(normalized_shape, eps):
         in: [*, normalized_shape]
         out: [*, normalized_shape]
-        impl: neuroscript_runtime.primitives.LayerNorm
+        impl: core,nn/norm
 """
 
 from typing import Union, List

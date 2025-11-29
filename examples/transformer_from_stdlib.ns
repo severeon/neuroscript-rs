@@ -26,6 +26,8 @@ neuron TokenEmbedding(vocab_size, d_model):
 neuron GPT(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_len):
     in: [batch, seq]  # Token IDs
     out: [batch, seq, vocab_size]  # Logits
+    let:
+        layers = sequential(num_layers, TransformerBlock)
     graph:
         # Token embeddings
         in ->
@@ -39,18 +41,7 @@ neuron GPT(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_len):
 
         # Transformer stack (12 layers for GPT-2 small)
         positioned ->
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
+            layers(d_model, num_heads, d_ff)
             features
 
         # Final layer norm

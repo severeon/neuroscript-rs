@@ -109,6 +109,8 @@ neuron RecursionCycle(d_model):
 neuron TRM(d_model, vocab_size, max_seq):
   in: [batch, seq]
   out: [batch, seq, vocab_size]
+  let:
+    recurse = RecursionCycle(d_model)
   graph:
     # Embed input question
     in ->
@@ -122,11 +124,11 @@ neuron TRM(d_model, vocab_size, max_seq):
 
     # T=3 recursion cycles (weight-shared - same RecursionCycle instance)
     # Cycle 1
-    (x, y_init, z_init) -> RecursionCycle(d_model) -> (y1, z1)
+    (x, y_init, z_init) -> recurse -> (y1, z1)
     # Cycle 2  
-    (x, y1, z1) -> RecursionCycle(d_model) -> (y2, z2)
+    (x, y1, z1) -> recurse -> (y2, z2)
     # Cycle 3
-    (x, y2, z2) -> RecursionCycle(d_model) -> (y_final, z_final)
+    (x, y2, z2) -> recurse -> (y_final, z_final)
 
     # Output head
     y_final ->

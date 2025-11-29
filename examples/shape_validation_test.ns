@@ -43,8 +43,10 @@ neuron TestCompatible(dim):
   out output: [*, dim]
   graph:
     # This should work - shapes match
-    input -> Linear(dim, dim) -> output
-
+    input ->
+      Linear(dim, dim)
+      output
+    
 # Test 2: Wildcard handling
 neuron TestWildcard():
   in input: [*, *]
