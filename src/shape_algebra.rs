@@ -1,29 +1,3 @@
-//! Shape algebra: primitives and pattern-matching for tensor shapes.
-//!
-//! - Shapes are `Vec<usize>` (rank = length of vec).
-//! - Total sizes (products) use `BigUint` to avoid overflow for large products.
-//! - Provides axiswise relations (<=, divides, gcd/lcm per-axis), broadcasting checks,
-//!   tiling/packing, refine/coarsen, pattern matching with wildcards and literals,
-//!   plus utilities like `factorizations` (integer factorization helper) and `aligned` checks.
-//!
-//! Example:
-//! ```rust
-//! use neuroscript::shape_algebra::*;
-//!
-//! // broadcastable middle axis example: pattern [*, 1, *]
-//! let p = Pattern::from_tokens(vec![PatToken::Any, PatToken::Lit(1), PatToken::Any]);
-//! assert!(p.matches(&Shape::new(vec![32,1,256])));
-//! assert!(!p.matches(&Shape::new(vec![32,2,256])));
-//!
-//! // cardinality arithmetic, quotient/remainder
-//! let a = Shape::new(vec![64]); // size 64
-//! let b = Shape::new(vec![256]); // size 256
-//! let (q, r) = quotient_remainder_total(&a, &b).unwrap(); // 4, 0
-//! assert_eq!(q, 4u32.into());
-//! assert_eq!(r, 0u32.into());
-//! ```
-//!
-
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{One, ToPrimitive, Zero};
@@ -460,43 +434,43 @@ mod tests {
 
     #[test]
     fn test_shape_new_and_rank() {
-        let s = Shape::new(vec![2, 3, 4]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
         assert_eq!(s.rank(), 3);
-        assert_eq!(s.dims, vec![2, 3, 4]);
+        assert_eq!(s.dims, vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
     }
 
     #[test]
     fn test_shape_empty() {
         let s = Shape::new(vec![]);
         assert_eq!(s.rank(), 0);
-        assert_eq!(s.size(), BigUint::one());
+        assert_eq!(s.size(), Some(BigUint::one()));
     }
 
     #[test]
     fn test_shape_size_basic() {
-        let s = Shape::new(vec![2, 3, 4]);
-        assert_eq!(s.size(), BigUint::from(24u32));
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
+        assert_eq!(s.size(), Some(BigUint::from(24u32)));
     }
 
     #[test]
     fn test_shape_size_with_zero() {
-        let s = Shape::new(vec![2, 0, 4]);
-        assert_eq!(s.size(), BigUint::zero());
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(0), Dim::Literal(4)]);
+        assert_eq!(s.size(), Some(BigUint::zero()));
     }
 
     #[test]
     fn test_shape_size_large() {
         // Test BigUint prevents overflow: 1000 * 1000 * 1000
-        let s = Shape::new(vec![1000, 1000, 1000]);
-        assert_eq!(s.size(), BigUint::from(1_000_000_000u64));
+        let s = Shape::new(vec![Dim::Literal(1000), Dim::Literal(1000), Dim::Literal(1000)]);
+        assert_eq!(s.size(), Some(BigUint::from(1_000_000_000u64)));
     }
 
     #[test]
     fn test_shape_size_very_large() {
         // Test very large product that would overflow usize on 32-bit
-        let s = Shape::new(vec![65536, 65536, 100]);
+        let s = Shape::new(vec![Dim::Literal(65536), Dim::Literal(65536), Dim::Literal(100)]);
         let expected = BigUint::from(65536u64) * BigUint::from(65536u64) * BigUint::from(100u64);
-        assert_eq!(s.size(), expected);
+        assert_eq!(s.size(), Some(expected));
     }
 
     // ========================================
@@ -505,99 +479,99 @@ mod tests {
 
     #[test]
     fn test_axiswise_le_basic() {
-        let a = Shape::new(vec![2, 3]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_le(&b), Some(true));
     }
 
     #[test]
     fn test_axiswise_le_false() {
-        let a = Shape::new(vec![5, 3]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(5), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_le(&b), Some(false));
     }
 
     #[test]
     fn test_axiswise_le_equal() {
-        let a = Shape::new(vec![4, 6]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_le(&b), Some(true));
     }
 
     #[test]
     fn test_axiswise_le_rank_mismatch() {
-        let a = Shape::new(vec![2, 3]);
-        let b = Shape::new(vec![4, 6, 8]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6), Dim::Literal(8)]);
         assert_eq!(a.axiswise_le(&b), None);
     }
 
     #[test]
     fn test_axiswise_divides_basic() {
-        let a = Shape::new(vec![2, 3]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_divides(&b), Some(true));
     }
 
     #[test]
     fn test_axiswise_divides_false() {
-        let a = Shape::new(vec![3, 4]);
-        let b = Shape::new(vec![7, 8]);
+        let a = Shape::new(vec![Dim::Literal(3), Dim::Literal(4)]);
+        let b = Shape::new(vec![Dim::Literal(7), Dim::Literal(8)]);
         assert_eq!(a.axiswise_divides(&b), Some(false));
     }
 
     #[test]
     fn test_axiswise_divides_with_zero() {
-        let a = Shape::new(vec![0, 3]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(0), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_divides(&b), Some(false)); // 0 doesn't divide anything
     }
 
     #[test]
     fn test_axiswise_divides_rank_mismatch() {
-        let a = Shape::new(vec![2]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(2)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert_eq!(a.axiswise_divides(&b), None);
     }
 
     #[test]
     fn test_axiswise_gcd_basic() {
-        let a = Shape::new(vec![12, 18]);
-        let b = Shape::new(vec![8, 24]);
-        assert_eq!(a.axiswise_gcd(&b), Some(Shape::new(vec![4, 6])));
+        let a = Shape::new(vec![Dim::Literal(12), Dim::Literal(18)]);
+        let b = Shape::new(vec![Dim::Literal(8), Dim::Literal(24)]);
+        assert_eq!(a.axiswise_gcd(&b), Some(Shape::new(vec![Dim::Literal(4), Dim::Literal(6)])));
     }
 
     #[test]
     fn test_axiswise_gcd_coprime() {
-        let a = Shape::new(vec![7, 11]);
-        let b = Shape::new(vec![3, 13]);
-        assert_eq!(a.axiswise_gcd(&b), Some(Shape::new(vec![1, 1])));
+        let a = Shape::new(vec![Dim::Literal(7), Dim::Literal(11)]);
+        let b = Shape::new(vec![Dim::Literal(3), Dim::Literal(13)]);
+        assert_eq!(a.axiswise_gcd(&b), Some(Shape::new(vec![Dim::Literal(1), Dim::Literal(1)])));
     }
 
     #[test]
     fn test_axiswise_gcd_rank_mismatch() {
-        let a = Shape::new(vec![12, 18]);
-        let b = Shape::new(vec![8]);
+        let a = Shape::new(vec![Dim::Literal(12), Dim::Literal(18)]);
+        let b = Shape::new(vec![Dim::Literal(8)]);
         assert_eq!(a.axiswise_gcd(&b), None);
     }
 
     #[test]
     fn test_axiswise_lcm_basic() {
-        let a = Shape::new(vec![4, 6]);
-        let b = Shape::new(vec![6, 9]);
-        assert_eq!(a.axiswise_lcm(&b), Some(Shape::new(vec![12, 18])));
+        let a = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
+        let b = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
+        assert_eq!(a.axiswise_lcm(&b), Some(Shape::new(vec![Dim::Literal(12), Dim::Literal(18)])));
     }
 
     #[test]
     fn test_axiswise_lcm_same() {
-        let a = Shape::new(vec![5, 7]);
-        let b = Shape::new(vec![5, 7]);
-        assert_eq!(a.axiswise_lcm(&b), Some(Shape::new(vec![5, 7])));
+        let a = Shape::new(vec![Dim::Literal(5), Dim::Literal(7)]);
+        let b = Shape::new(vec![Dim::Literal(5), Dim::Literal(7)]);
+        assert_eq!(a.axiswise_lcm(&b), Some(Shape::new(vec![Dim::Literal(5), Dim::Literal(7)])));
     }
 
     #[test]
     fn test_axiswise_lcm_rank_mismatch() {
-        let a = Shape::new(vec![4, 6]);
-        let b = Shape::new(vec![6]);
+        let a = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
+        let b = Shape::new(vec![Dim::Literal(6)]);
         assert_eq!(a.axiswise_lcm(&b), None);
     }
 
@@ -607,103 +581,103 @@ mod tests {
 
     #[test]
     fn test_flatten_multidim() {
-        let s = Shape::new(vec![2, 3, 4]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
         let flat = s.flatten();
-        assert_eq!(flat, Shape::new(vec![24]));
+        assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
     }
 
     #[test]
     fn test_flatten_already_flat() {
-        let s = Shape::new(vec![24]);
+        let s = Shape::new(vec![Dim::Literal(24)]);
         let flat = s.flatten();
-        assert_eq!(flat, Shape::new(vec![24]));
+        assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
     }
 
     #[test]
     fn test_flatten_empty() {
         let s = Shape::new(vec![]);
         let flat = s.flatten();
-        assert_eq!(flat, Shape::new(vec![1])); // Empty shape has size 1
+        assert_eq!(flat, Shape::new(vec![Dim::Literal(1)])); // Empty shape has size 1
     }
 
     #[test]
     fn test_permutes_true() {
-        let a = Shape::new(vec![2, 3, 4]);
-        let b = Shape::new(vec![4, 2, 3]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(2), Dim::Literal(3)]);
         assert!(a.permutes(&b));
     }
 
     #[test]
     fn test_permutes_false() {
-        let a = Shape::new(vec![2, 3, 4]);
-        let b = Shape::new(vec![2, 3, 5]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
+        let b = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(5)]);
         assert!(!a.permutes(&b));
     }
 
     #[test]
     fn test_permutes_different_rank() {
-        let a = Shape::new(vec![2, 3]);
-        let b = Shape::new(vec![2, 3, 1]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let b = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(1)]);
         assert!(!a.permutes(&b));
     }
 
     #[test]
     fn test_same_cardinality_true() {
-        let a = Shape::new(vec![2, 12]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(12)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert!(a.same_cardinality(&b));
     }
 
     #[test]
     fn test_same_cardinality_false() {
-        let a = Shape::new(vec![2, 12]);
-        let b = Shape::new(vec![4, 7]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(12)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(7)]);
         assert!(!a.same_cardinality(&b));
     }
 
     #[test]
     fn test_aligned_true() {
-        let s = Shape::new(vec![16, 32, 64]);
+        let s = Shape::new(vec![Dim::Literal(16), Dim::Literal(32), Dim::Literal(64)]);
         assert!(s.aligned(8));
         assert!(s.aligned(16));
     }
 
     #[test]
     fn test_aligned_false() {
-        let s = Shape::new(vec![16, 30, 64]);
+        let s = Shape::new(vec![Dim::Literal(16), Dim::Literal(30), Dim::Literal(64)]);
         assert!(!s.aligned(8));
     }
 
     #[test]
     fn test_aligned_zero() {
-        let s = Shape::new(vec![16, 32]);
+        let s = Shape::new(vec![Dim::Literal(16), Dim::Literal(32)]);
         assert!(!s.aligned(0)); // k=0 always returns false
     }
 
     #[test]
     fn test_aligned_one() {
-        let s = Shape::new(vec![16, 32, 17]);
+        let s = Shape::new(vec![Dim::Literal(16), Dim::Literal(32), Dim::Literal(17)]);
         assert!(s.aligned(1)); // Everything is aligned to 1
     }
 
     #[test]
     fn test_tiles_true() {
-        let tile = Shape::new(vec![2, 3]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert_eq!(tile.tiles(&container), Some(true));
     }
 
     #[test]
     fn test_tiles_false() {
-        let tile = Shape::new(vec![2, 4]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(2), Dim::Literal(4)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert_eq!(tile.tiles(&container), Some(false));
     }
 
     #[test]
     fn test_tiles_rank_mismatch() {
-        let tile = Shape::new(vec![2]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(2)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert_eq!(tile.tiles(&container), None);
     }
 
@@ -713,8 +687,8 @@ mod tests {
 
     #[test]
     fn test_quotient_remainder_total_exact() {
-        let a = Shape::new(vec![64]);
-        let b = Shape::new(vec![256]);
+        let a = Shape::new(vec![Dim::Literal(64)]);
+        let b = Shape::new(vec![Dim::Literal(256)]);
         let (q, r) = quotient_remainder_total(&a, &b).unwrap();
         assert_eq!(q, 4usize.into());
         assert_eq!(r, 0usize.into());
@@ -722,8 +696,8 @@ mod tests {
 
     #[test]
     fn test_quotient_remainder_total_with_remainder() {
-        let a = Shape::new(vec![10]);
-        let b = Shape::new(vec![37]);
+        let a = Shape::new(vec![Dim::Literal(10)]);
+        let b = Shape::new(vec![Dim::Literal(37)]);
         let (q, r) = quotient_remainder_total(&a, &b).unwrap();
         assert_eq!(q, 3usize.into());
         assert_eq!(r, 7usize.into());
@@ -731,15 +705,15 @@ mod tests {
 
     #[test]
     fn test_quotient_remainder_total_zero_divisor() {
-        let a = Shape::new(vec![0]);
-        let b = Shape::new(vec![100]);
+        let a = Shape::new(vec![Dim::Literal(0)]);
+        let b = Shape::new(vec![Dim::Literal(100)]);
         assert!(quotient_remainder_total(&a, &b).is_none());
     }
 
     #[test]
     fn test_quotient_remainder_total_smaller_dividend() {
-        let a = Shape::new(vec![100]);
-        let b = Shape::new(vec![50]);
+        let a = Shape::new(vec![Dim::Literal(100)]);
+        let b = Shape::new(vec![Dim::Literal(50)]);
         let (q, r) = quotient_remainder_total(&a, &b).unwrap();
         assert_eq!(q, 0usize.into());
         assert_eq!(r, 50usize.into());
@@ -747,37 +721,37 @@ mod tests {
 
     #[test]
     fn test_broadcastable_basic() {
-        assert!(broadcastable(&Shape::new(vec![4, 1, 8]), &Shape::new(vec![4, 10, 8])));
-        assert!(!broadcastable(&Shape::new(vec![4, 3, 1]), &Shape::new(vec![4, 10, 8])));
+        assert!(broadcastable(&Shape::new(vec![Dim::Literal(4), Dim::Literal(1), Dim::Literal(8)]), &Shape::new(vec![Dim::Literal(4), Dim::Literal(10), Dim::Literal(8)])));
+        assert!(!broadcastable(&Shape::new(vec![Dim::Literal(4), Dim::Literal(3), Dim::Literal(1)]), &Shape::new(vec![Dim::Literal(4), Dim::Literal(10), Dim::Literal(8)])));
     }
 
     #[test]
     fn test_broadcastable_different_ranks() {
-        assert!(broadcastable(&Shape::new(vec![5, 6]), &Shape::new(vec![6])));
-        assert!(broadcastable(&Shape::new(vec![1]), &Shape::new(vec![8, 1, 6, 1])));
+        assert!(broadcastable(&Shape::new(vec![Dim::Literal(5), Dim::Literal(6)]), &Shape::new(vec![Dim::Literal(6)])));
+        assert!(broadcastable(&Shape::new(vec![Dim::Literal(1)]), &Shape::new(vec![Dim::Literal(8), Dim::Literal(1), Dim::Literal(6), Dim::Literal(1)])));
     }
 
     #[test]
     fn test_broadcastable_all_ones() {
-        assert!(broadcastable(&Shape::new(vec![1, 1, 1]), &Shape::new(vec![8, 4, 6])));
+        assert!(broadcastable(&Shape::new(vec![Dim::Literal(1), Dim::Literal(1), Dim::Literal(1)]), &Shape::new(vec![Dim::Literal(8), Dim::Literal(4), Dim::Literal(6)])));
     }
 
     #[test]
     fn test_broadcastable_incompatible() {
-        assert!(!broadcastable(&Shape::new(vec![3, 4]), &Shape::new(vec![2, 5])));
+        assert!(!broadcastable(&Shape::new(vec![Dim::Literal(3), Dim::Literal(4)]), &Shape::new(vec![Dim::Literal(2), Dim::Literal(5)])));
     }
 
     #[test]
     fn test_reshapeable_same_size() {
-        let a = Shape::new(vec![2, 12]);
-        let b = Shape::new(vec![4, 6]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(12)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(6)]);
         assert!(reshapeable(&a, &b));
     }
 
     #[test]
     fn test_reshapeable_different_size() {
-        let a = Shape::new(vec![2, 12]);
-        let b = Shape::new(vec![4, 7]);
+        let a = Shape::new(vec![Dim::Literal(2), Dim::Literal(12)]);
+        let b = Shape::new(vec![Dim::Literal(4), Dim::Literal(7)]);
         assert!(!reshapeable(&a, &b));
     }
 
@@ -787,74 +761,74 @@ mod tests {
 
     #[test]
     fn test_refine_axis_basic() {
-        let s = Shape::new(vec![64]);
+        let s = Shape::new(vec![Dim::Literal(64)]);
         let r = refine_axis(&s, 0, &[8, 8]).unwrap();
-        assert_eq!(r, Shape::new(vec![8, 8]));
+        assert_eq!(r, Shape::new(vec![Dim::Literal(8), Dim::Literal(8)]));
     }
 
     #[test]
     fn test_refine_axis_middle() {
-        let s = Shape::new(vec![2, 12, 4]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(12), Dim::Literal(4)]);
         let r = refine_axis(&s, 1, &[3, 4]).unwrap();
-        assert_eq!(r, Shape::new(vec![2, 3, 4, 4]));
+        assert_eq!(r, Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4), Dim::Literal(4)]));
     }
 
     #[test]
     fn test_refine_axis_three_factors() {
-        let s = Shape::new(vec![24]);
+        let s = Shape::new(vec![Dim::Literal(24)]);
         let r = refine_axis(&s, 0, &[2, 3, 4]).unwrap();
-        assert_eq!(r, Shape::new(vec![2, 3, 4]));
+        assert_eq!(r, Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]));
     }
 
     #[test]
     fn test_refine_axis_invalid_axis() {
-        let s = Shape::new(vec![2, 3]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
         let r = refine_axis(&s, 2, &[2, 3]);
         assert!(r.is_none());
     }
 
     #[test]
     fn test_refine_axis_product_mismatch() {
-        let s = Shape::new(vec![12]);
+        let s = Shape::new(vec![Dim::Literal(12)]);
         let r = refine_axis(&s, 0, &[2, 5]);
         assert!(r.is_none()); // 2*5=10 != 12
     }
 
     #[test]
     fn test_coarsen_axes_basic() {
-        let s = Shape::new(vec![8, 8]);
+        let s = Shape::new(vec![Dim::Literal(8), Dim::Literal(8)]);
         let c = coarsen_axes(&s, 0..2).unwrap();
-        assert_eq!(c, Shape::new(vec![64]));
+        assert_eq!(c, Shape::new(vec![Dim::Literal(64)]));
     }
 
     #[test]
     fn test_coarsen_axes_middle() {
-        let s = Shape::new(vec![2, 3, 4, 5]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4), Dim::Literal(5)]);
         let c = coarsen_axes(&s, 1..3).unwrap();
-        assert_eq!(c, Shape::new(vec![2, 12, 5]));
+        assert_eq!(c, Shape::new(vec![Dim::Literal(2), Dim::Literal(12), Dim::Literal(5)]));
     }
 
     #[test]
     fn test_coarsen_axes_single() {
-        let s = Shape::new(vec![2, 3, 4]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
         let c = coarsen_axes(&s, 1..2).unwrap();
-        assert_eq!(c, Shape::new(vec![2, 3, 4]));
+        assert_eq!(c, Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]));
     }
 
     #[test]
     fn test_coarsen_axes_invalid_range() {
-        let s = Shape::new(vec![2, 3, 4]);
+        let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
         assert!(coarsen_axes(&s, 2..2).is_none()); // empty range
         assert!(coarsen_axes(&s, 1..5).is_none()); // out of bounds
     }
 
     #[test]
     fn test_refine_coarsen_roundtrip() {
-        let s = Shape::new(vec![64]);
+        let s = Shape::new(vec![Dim::Literal(64)]);
         let r = refine_axis(&s, 0, &[8, 8]).unwrap();
-        assert_eq!(r, Shape::new(vec![8, 8]));
+        assert_eq!(r, Shape::new(vec![Dim::Literal(8), Dim::Literal(8)]));
         let c = coarsen_axes(&r, 0..2).unwrap();
-        assert_eq!(c, Shape::new(vec![64]));
+        assert_eq!(c, Shape::new(vec![Dim::Literal(64)]));
     }
 
     // ========================================
@@ -924,36 +898,36 @@ mod tests {
 
     #[test]
     fn test_tile_count_basic() {
-        let tile = Shape::new(vec![2, 3]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(2), Dim::Literal(3)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert_eq!(tile_count(&tile, &container), Some(vec![3, 3]));
     }
 
     #[test]
     fn test_tile_count_exact() {
-        let tile = Shape::new(vec![4, 4]);
-        let container = Shape::new(vec![4, 4]);
+        let tile = Shape::new(vec![Dim::Literal(4), Dim::Literal(4)]);
+        let container = Shape::new(vec![Dim::Literal(4), Dim::Literal(4)]);
         assert_eq!(tile_count(&tile, &container), Some(vec![1, 1]));
     }
 
     #[test]
     fn test_tile_count_non_divisible() {
-        let tile = Shape::new(vec![3, 4]);
-        let container = Shape::new(vec![7, 10]);
+        let tile = Shape::new(vec![Dim::Literal(3), Dim::Literal(4)]);
+        let container = Shape::new(vec![Dim::Literal(7), Dim::Literal(10)]);
         assert_eq!(tile_count(&tile, &container), Some(vec![2, 2])); // floor division
     }
 
     #[test]
     fn test_tile_count_zero_tile() {
-        let tile = Shape::new(vec![0, 3]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(0), Dim::Literal(3)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert!(tile_count(&tile, &container).is_none());
     }
 
     #[test]
     fn test_tile_count_rank_mismatch() {
-        let tile = Shape::new(vec![2]);
-        let container = Shape::new(vec![6, 9]);
+        let tile = Shape::new(vec![Dim::Literal(2)]);
+        let container = Shape::new(vec![Dim::Literal(6), Dim::Literal(9)]);
         assert!(tile_count(&tile, &container).is_none());
     }
 
@@ -964,50 +938,50 @@ mod tests {
     #[test]
     fn test_pattern_literal_exact() {
         let pat = Pattern::from_tokens(vec![PatToken::Lit(32), PatToken::Lit(64)]);
-        assert!(pat.matches(&Shape::new(vec![32, 64])));
-        assert!(!pat.matches(&Shape::new(vec![32, 65])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(65)])));
     }
 
     #[test]
     fn test_pattern_literal_rank_mismatch() {
         let pat = Pattern::from_tokens(vec![PatToken::Lit(32), PatToken::Lit(64)]);
-        assert!(!pat.matches(&Shape::new(vec![32])));
-        assert!(!pat.matches(&Shape::new(vec![32, 64, 128])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128)])));
     }
 
     #[test]
     fn test_pattern_any_single() {
         let pat = Pattern::from_tokens(vec![PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![42])));
-        assert!(pat.matches(&Shape::new(vec![1000])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(42)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(1000)])));
     }
 
     #[test]
     fn test_pattern_any_multiple() {
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Any, PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![1, 2, 3])));
-        assert!(pat.matches(&Shape::new(vec![100, 200, 300])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(1), Dim::Literal(2), Dim::Literal(3)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(100), Dim::Literal(200), Dim::Literal(300)])));
     }
 
     #[test]
     fn test_pattern_any_with_literal() {
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Lit(1), PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![32, 1, 256])));
-        assert!(!pat.matches(&Shape::new(vec![32, 2, 256])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(1), Dim::Literal(256)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(2), Dim::Literal(256)])));
     }
 
     #[test]
     fn test_pattern_ignore() {
         let pat = Pattern::from_tokens(vec![PatToken::Ignore, PatToken::Lit(64)]);
-        assert!(pat.matches(&Shape::new(vec![123, 64])));
-        assert!(pat.matches(&Shape::new(vec![999, 64])));
-        assert!(!pat.matches(&Shape::new(vec![123, 65])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(123), Dim::Literal(64)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(999), Dim::Literal(64)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(123), Dim::Literal(65)])));
     }
 
     #[test]
     fn test_pattern_capture_any() {
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Lit(64), PatToken::Any]);
-        let shape = Shape::new(vec![32, 64, 128]);
+        let shape = Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128)]);
         let captured = pat.matches_and_capture(&shape, true).unwrap();
         assert_eq!(captured, vec![32, 128]);
     }
@@ -1015,7 +989,7 @@ mod tests {
     #[test]
     fn test_pattern_capture_ignore_not_captured() {
         let pat = Pattern::from_tokens(vec![PatToken::Ignore, PatToken::Any, PatToken::Lit(64)]);
-        let shape = Shape::new(vec![32, 128, 64]);
+        let shape = Shape::new(vec![Dim::Literal(32), Dim::Literal(128), Dim::Literal(64)]);
         let captured = pat.matches_and_capture(&shape, true).unwrap();
         assert_eq!(captured, vec![128]); // Only Any captured, not Ignore
     }
@@ -1023,35 +997,35 @@ mod tests {
     #[test]
     fn test_pattern_rest_at_end() {
         let pat = Pattern::from_tokens(vec![PatToken::Lit(32), PatToken::Rest]);
-        assert!(pat.matches(&Shape::new(vec![32])));
-        assert!(pat.matches(&Shape::new(vec![32, 64])));
-        assert!(pat.matches(&Shape::new(vec![32, 64, 128, 256])));
-        assert!(!pat.matches(&Shape::new(vec![64])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128), Dim::Literal(256)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(64)])));
     }
 
     #[test]
     fn test_pattern_rest_at_start() {
         let pat = Pattern::from_tokens(vec![PatToken::Rest, PatToken::Lit(256)]);
-        assert!(pat.matches(&Shape::new(vec![256])));
-        assert!(pat.matches(&Shape::new(vec![32, 256])));
-        assert!(pat.matches(&Shape::new(vec![32, 64, 128, 256])));
-        assert!(!pat.matches(&Shape::new(vec![32, 64])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(256)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(256)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128), Dim::Literal(256)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64)])));
     }
 
     #[test]
     fn test_pattern_rest_middle() {
         let pat = Pattern::from_tokens(vec![PatToken::Lit(32), PatToken::Rest, PatToken::Lit(256)]);
-        assert!(pat.matches(&Shape::new(vec![32, 256])));
-        assert!(pat.matches(&Shape::new(vec![32, 64, 256])));
-        assert!(pat.matches(&Shape::new(vec![32, 64, 128, 256])));
-        assert!(!pat.matches(&Shape::new(vec![32])));
-        assert!(!pat.matches(&Shape::new(vec![32, 64, 128])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(256)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(256)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128), Dim::Literal(256)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128)])));
     }
 
     #[test]
     fn test_pattern_rest_capture_prefix_suffix() {
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Rest, PatToken::Any]);
-        let shape = Shape::new(vec![32, 64, 128, 256]);
+        let shape = Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128), Dim::Literal(256)]);
         let captured = pat.matches_and_capture(&shape, true).unwrap();
         assert_eq!(captured, vec![32, 256]); // First and last
     }
@@ -1064,11 +1038,11 @@ mod tests {
     fn test_tensor_batch_pattern() {
         // Pattern: [batch, ...] - match any tensor with batch dimension
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Rest]);
-        assert!(pat.matches(&Shape::new(vec![32])));
-        assert!(pat.matches(&Shape::new(vec![32, 784])));
-        assert!(pat.matches(&Shape::new(vec![32, 3, 224, 224])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(784)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(3), Dim::Literal(224), Dim::Literal(224)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![16, 3, 224, 224]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(16), Dim::Literal(3), Dim::Literal(224), Dim::Literal(224)]), true).unwrap();
         assert_eq!(captured, vec![16]); // Batch size captured
     }
 
@@ -1076,11 +1050,11 @@ mod tests {
     fn test_tensor_channel_last_pattern() {
         // Pattern: [..., C] - match tensors with channel dimension at end
         let pat = Pattern::from_tokens(vec![PatToken::Rest, PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![3])));
-        assert!(pat.matches(&Shape::new(vec![224, 224, 3])));
-        assert!(pat.matches(&Shape::new(vec![32, 224, 224, 3])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(3)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(224), Dim::Literal(224), Dim::Literal(3)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(224), Dim::Literal(224), Dim::Literal(3)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![32, 224, 224, 3]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(32), Dim::Literal(224), Dim::Literal(224), Dim::Literal(3)]), true).unwrap();
         assert_eq!(captured, vec![3]); // Channels captured
     }
 
@@ -1093,9 +1067,9 @@ mod tests {
             PatToken::Any, 
             PatToken::Any
         ]);
-        assert!(pat.matches(&Shape::new(vec![32, 224, 224, 3])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(224), Dim::Literal(224), Dim::Literal(3)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![16, 128, 128, 64]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(16), Dim::Literal(128), Dim::Literal(128), Dim::Literal(64)]), true).unwrap();
         assert_eq!(captured, vec![16, 128, 128, 64]); // B, H, W, C
     }
 
@@ -1108,10 +1082,10 @@ mod tests {
             PatToken::Lit(224), 
             PatToken::Any
         ]);
-        assert!(pat.matches(&Shape::new(vec![32, 224, 224, 3])));
-        assert!(!pat.matches(&Shape::new(vec![32, 128, 128, 3])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(224), Dim::Literal(224), Dim::Literal(3)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(128), Dim::Literal(128), Dim::Literal(3)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![16, 224, 224, 64]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(16), Dim::Literal(224), Dim::Literal(224), Dim::Literal(64)]), true).unwrap();
         assert_eq!(captured, vec![16, 64]); // Batch and channels
     }
 
@@ -1124,9 +1098,9 @@ mod tests {
             PatToken::Any,  // Sequence length
             PatToken::Any   // Head dimension
         ]);
-        assert!(pat.matches(&Shape::new(vec![32, 8, 512, 64])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(8), Dim::Literal(512), Dim::Literal(64)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![16, 12, 256, 64]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(16), Dim::Literal(12), Dim::Literal(256), Dim::Literal(64)]), true).unwrap();
         assert_eq!(captured, vec![16, 12, 256, 64]); // B, H, Seq, D
     }
 
@@ -1139,8 +1113,8 @@ mod tests {
             PatToken::Any,
             PatToken::Lit(64)
         ]);
-        assert!(pat.matches(&Shape::new(vec![32, 8, 512, 64])));
-        assert!(!pat.matches(&Shape::new(vec![32, 8, 512, 128])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(8), Dim::Literal(512), Dim::Literal(64)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(8), Dim::Literal(512), Dim::Literal(128)])));
     }
 
     #[test]
@@ -1152,25 +1126,25 @@ mod tests {
             PatToken::Lit(3),
             PatToken::Lit(3)
         ]);
-        assert!(pat.matches(&Shape::new(vec![64, 128, 3, 3])));
-        assert!(!pat.matches(&Shape::new(vec![64, 128, 5, 5])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(64), Dim::Literal(128), Dim::Literal(3), Dim::Literal(3)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(64), Dim::Literal(128), Dim::Literal(5), Dim::Literal(5)])));
     }
 
     #[test]
     fn test_broadcastable_middle_axis() {
         // Pattern: [*, 1, *] - broadcastable middle dimension
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Lit(1), PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![32, 1, 256])));
-        assert!(!pat.matches(&Shape::new(vec![32, 2, 256])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(1), Dim::Literal(256)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(2), Dim::Literal(256)])));
     }
 
     #[test]
     fn test_sequence_to_sequence_pattern() {
         // Pattern: [Batch, SeqLen, Hidden] - transformer-style
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Any, PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![32, 512, 768])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(512), Dim::Literal(768)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![16, 256, 1024]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(16), Dim::Literal(256), Dim::Literal(1024)]), true).unwrap();
         assert_eq!(captured, vec![16, 256, 1024]);
     }
 
@@ -1178,9 +1152,9 @@ mod tests {
     fn test_embedding_pattern() {
         // Pattern: [VocabSize, EmbedDim] - embedding matrix
         let pat = Pattern::from_tokens(vec![PatToken::Any, PatToken::Any]);
-        assert!(pat.matches(&Shape::new(vec![50000, 768])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(50000), Dim::Literal(768)])));
         
-        let captured = pat.matches_and_capture(&Shape::new(vec![30000, 512]), true).unwrap();
+        let captured = pat.matches_and_capture(&Shape::new(vec![Dim::Literal(30000), Dim::Literal(512)]), true).unwrap();
         assert_eq!(captured, vec![30000, 512]);
     }
 
@@ -1189,44 +1163,44 @@ mod tests {
         // Pattern: [...] - match any rank
         let pat = Pattern::from_tokens(vec![PatToken::Rest]);
         assert!(pat.matches(&Shape::new(vec![])));
-        assert!(pat.matches(&Shape::new(vec![42])));
-        assert!(pat.matches(&Shape::new(vec![32, 64, 128])));
-        assert!(pat.matches(&Shape::new(vec![1, 2, 3, 4, 5])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(42)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(128)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(1), Dim::Literal(2), Dim::Literal(3), Dim::Literal(4), Dim::Literal(5)])));
     }
 
     #[test]
     fn test_specific_batch_size_pattern() {
         // Pattern: [32, ...] - require batch size of 32
         let pat = Pattern::from_tokens(vec![PatToken::Lit(32), PatToken::Rest]);
-        assert!(pat.matches(&Shape::new(vec![32])));
-        assert!(pat.matches(&Shape::new(vec![32, 784])));
-        assert!(pat.matches(&Shape::new(vec![32, 3, 224, 224])));
-        assert!(!pat.matches(&Shape::new(vec![16, 3, 224, 224])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(784)])));
+        assert!(pat.matches(&Shape::new(vec![Dim::Literal(32), Dim::Literal(3), Dim::Literal(224), Dim::Literal(224)])));
+        assert!(!pat.matches(&Shape::new(vec![Dim::Literal(16), Dim::Literal(3), Dim::Literal(224), Dim::Literal(224)])));
     }
 
     #[test]
     fn test_resnet_residual_pattern() {
         // Check if two shapes can be added (must be identical or broadcastable)
-        let a = Shape::new(vec![32, 64, 56, 56]);
-        let b = Shape::new(vec![32, 64, 56, 56]);
+        let a = Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(56), Dim::Literal(56)]);
+        let b = Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(56), Dim::Literal(56)]);
         assert!(broadcastable(&a, &b));
         
         // With 1x1 broadcast
-        let a = Shape::new(vec![32, 64, 56, 56]);
-        let b = Shape::new(vec![1, 64, 1, 1]);
+        let a = Shape::new(vec![Dim::Literal(32), Dim::Literal(64), Dim::Literal(56), Dim::Literal(56)]);
+        let b = Shape::new(vec![Dim::Literal(1), Dim::Literal(64), Dim::Literal(1), Dim::Literal(1)]);
         assert!(broadcastable(&a, &b));
     }
 
     #[test]
     fn test_tensor_reshape_compatibility() {
         // Check if [32, 784] can be reshaped to [32, 28, 28]
-        let a = Shape::new(vec![32, 784]);
-        let b = Shape::new(vec![32, 28, 28]);
+        let a = Shape::new(vec![Dim::Literal(32), Dim::Literal(784)]);
+        let b = Shape::new(vec![Dim::Literal(32), Dim::Literal(28), Dim::Literal(28)]);
         assert!(reshapeable(&a, &b));
         
         // [32, 3, 224, 224] can be flattened to [32, 150528]
-        let a = Shape::new(vec![32, 3, 224, 224]);
-        let b = Shape::new(vec![32, 150528]);
+        let a = Shape::new(vec![Dim::Literal(32), Dim::Literal(3), Dim::Literal(224), Dim::Literal(224)]);
+        let b = Shape::new(vec![Dim::Literal(32), Dim::Literal(150528)]);
         assert!(reshapeable(&a, &b));
     }
 }

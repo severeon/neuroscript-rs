@@ -355,7 +355,7 @@ mod tests {
         assert!(!registry.contains("NonExistent"));
 
         // Check we have the expected number of primitives
-        assert_eq!(registry.len(), 21); // 21 primitives registered
+        assert_eq!(registry.len(), 22); // 22 primitives registered
 
         // Check lookup works
         let linear = registry.lookup("Linear").unwrap();

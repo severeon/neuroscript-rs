@@ -1,6 +1,4 @@
 use crate::interfaces::*;
-use std::collections::HashMap;
-use thiserror::Error;
 
 impl InferenceContext {
     pub fn new() -> Self {

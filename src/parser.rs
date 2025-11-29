@@ -4,8 +4,7 @@
 
 use crate::interfaces::*;
 use crate::interfaces::{Lexer, Token, TokenKind};
-use miette::{Diagnostic, SourceSpan};
-use thiserror::Error;
+use miette::SourceSpan;
 
 impl ParseError {
     pub fn span(&self) -> SourceSpan {
