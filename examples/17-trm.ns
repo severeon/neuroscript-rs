@@ -92,16 +92,10 @@ neuron RecursionCycle(d_model):
   in z: [*batch, seq, d_model]
   out y_out: [*batch, seq, d_model]
   out z_out: [*batch, seq, d_model]
+  let:
+    step = sequential(6, ReasoningStep)
   graph:
-    # 6 reasoning steps (updating z)
-    (x, y, z) -> ReasoningStep(d_model) -> z1
-    (x, y, z1) -> ReasoningStep(d_model) -> z2
-    (x, y, z2) -> ReasoningStep(d_model) -> z3
-    (x, y, z3) -> ReasoningStep(d_model) -> z4
-    (x, y, z4) -> ReasoningStep(d_model) -> z5
-    (x, y, z5) -> ReasoningStep(d_model) -> z_out
-
-    # 1 answer step (updating y)
+    (x, y, z) -> step(d_model) -> z_out
     (y, z_out) -> AnswerStep(d_model) -> y_out
 
 # Full TRM with T=3 recursion cycles
@@ -110,7 +104,7 @@ neuron TRM(d_model, vocab_size, max_seq):
   in: [batch, seq]
   out: [batch, seq, vocab_size]
   let:
-    recurse = RecursionCycle(d_model)
+    cycle = RecursionCycle(d_model)
   graph:
     # Embed input question
     in ->
@@ -118,17 +112,12 @@ neuron TRM(d_model, vocab_size, max_seq):
       PositionalEncoding(d_model, max_len=max_seq)
       x_embedded
 
-    # Initialize y and z (typically learned embeddings or zeros)
     x_embedded -> Fork() -> (x, y_init)
     x_embedded -> Identity() -> z_init
 
-    # T=3 recursion cycles (weight-shared - same RecursionCycle instance)
-    # Cycle 1
-    (x, y_init, z_init) -> recurse -> (y1, z1)
-    # Cycle 2  
-    (x, y1, z1) -> recurse -> (y2, z2)
-    # Cycle 3
-    (x, y2, z2) -> recurse -> (y_final, z_final)
+    (x, y_init, z_init) -> cycle -> (y1, z1)
+    (x, y1, z1) -> cycle -> (y2, z2)
+    (x, y2, z2) -> cycle -> (y_final, z_final)
 
     # Output head
     y_final ->

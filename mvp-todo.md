@@ -22,7 +22,7 @@
 
 ### 2.1 Implement Shape Inference Engine ✅
 
-  - [x] Create src/shape_inference.rs module
+  - [x] Create src/shape/ module with inference engine
   - [x] Implement ShapeInferenceEngine struct
   - [x] Add shape constraint tracking from connections
   - [x] Implement dimension variable unification (e.g., d_model consistency)

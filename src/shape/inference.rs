@@ -17,7 +17,7 @@ impl InferenceContext {
     fn evaluate_expr(&self, expr: &DimExpr) -> Option<usize> {
         let left = self.resolve_dim(&expr.left)?;
         let right = self.resolve_dim(&expr.right)?;
-        
+
         match expr.op {
             BinOp::Add => Some(left + right),
             BinOp::Sub => Some(left.checked_sub(right)?),
@@ -26,7 +26,7 @@ impl InferenceContext {
             _ => None,
         }
     }
-    
+
     pub fn unify(&mut self, d1: &Dim, d2: &Dim) -> Result<(), String> {
         match (d1, d2) {
             (Dim::Literal(v1), Dim::Literal(v2)) => {
@@ -89,7 +89,7 @@ impl InferenceContext {
 
     /// Attempt to solve an expression for an unknown variable
     /// For example: if expr is "dim * 4" and target is 2048, solve for dim = 512
-    fn solve_expr_for_unknown(&mut self, expr: &DimExpr, target: usize) -> Result<(), String> {
+    pub(crate) fn solve_expr_for_unknown(&mut self, expr: &DimExpr, target: usize) -> Result<(), String> {
         // Try to solve for the left operand
         if let Dim::Named(left_name) = &expr.left {
             if !self.resolved_dims.contains_key(left_name) {
@@ -200,13 +200,13 @@ impl ShapeInferenceEngine {
 
     pub fn infer(&mut self, program: &Program) -> Result<(), Vec<ShapeError>> {
         let mut errors = Vec::new();
-        
+
         for (name, neuron) in &program.neurons {
             if let Err(e) = self.infer_neuron(neuron, program) {
                 errors.push(e);
             }
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -220,7 +220,7 @@ impl ShapeInferenceEngine {
         }
 
         let mut ctx = InferenceContext::new();
-        
+
         // 1. Initialize context with known params
         for param in &neuron.params {
             if let Some(Value::Int(val)) = param.default {
@@ -232,7 +232,7 @@ impl ShapeInferenceEngine {
         // "in" node outputs = neuron inputs
         let input_shapes: Vec<Shape> = neuron.inputs.iter().map(|p| p.shape.clone()).collect();
         ctx.node_outputs.insert("in".to_string(), input_shapes.clone());
-        
+
         // Also register individual input ports if they are named
         for (i, port) in neuron.inputs.iter().enumerate() {
             if port.name != "default" {
@@ -500,7 +500,7 @@ impl ShapeInferenceEngine {
     }
 
     /// Unify a pattern shape with a concrete shape, binding captured dimensions
-    fn unify_pattern_with_shape(&self, pattern: &Shape, concrete: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    pub(crate) fn unify_pattern_with_shape(&self, pattern: &Shape, concrete: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
         // Handle variadic patterns
         if self.has_variadic(pattern) {
             return self.unify_with_variadic_pattern(pattern,
@@ -603,7 +603,7 @@ impl ShapeInferenceEngine {
     }
 
     /// Check if two shapes are compatible (can be unified)
-    fn shapes_compatible(&self, s1: &Shape, s2: &Shape) -> bool {
+    pub(crate) fn shapes_compatible(&self, s1: &Shape, s2: &Shape) -> bool {
         // Create a temporary context for testing
         let mut test_ctx = InferenceContext::new();
         self.unify_shapes(s1, s2, &mut test_ctx).is_ok()
@@ -647,7 +647,7 @@ impl ShapeInferenceEngine {
                     // If it's a source, we need to instantiate it and get outputs.
                     // But we don't have inputs to unify.
                     // TODO: Handle source calls
-                    Ok(vec![]) 
+                    Ok(vec![])
                 }
             }
             Endpoint::Tuple(refs) => {
@@ -662,7 +662,7 @@ impl ShapeInferenceEngine {
         }
     }
 
-    fn unify_shapes(&self, s1: &Shape, s2: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    pub(crate) fn unify_shapes(&self, s1: &Shape, s2: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
         // Handle variadic dimensions first
         if self.has_variadic(s1) || self.has_variadic(s2) {
             return self.unify_shapes_with_variadic(s1, s2, ctx);
@@ -688,11 +688,11 @@ impl ShapeInferenceEngine {
         Ok(())
     }
 
-    fn has_wildcard(&self, shape: &Shape) -> bool {
+    pub(crate) fn has_wildcard(&self, shape: &Shape) -> bool {
         shape.dims.iter().any(|d| matches!(d, Dim::Wildcard))
     }
 
-    fn has_variadic(&self, shape: &Shape) -> bool {
+    pub(crate) fn has_variadic(&self, shape: &Shape) -> bool {
         shape.dims.iter().any(|d| matches!(d, Dim::Variadic(_)))
     }
 
@@ -841,7 +841,7 @@ impl ShapeInferenceEngine {
     }
 
     /// Check if a dimension can be resolved with current context
-    fn is_dim_resolvable(&self, dim: &Dim, ctx: &InferenceContext) -> bool {
+    pub(crate) fn is_dim_resolvable(&self, dim: &Dim, ctx: &InferenceContext) -> bool {
         match dim {
             Dim::Literal(_) => true,
             Dim::Named(name) => ctx.resolved_dims.contains_key(name),
@@ -872,352 +872,5 @@ impl ShapeInferenceEngine {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::*;
-
-    fn wildcard() -> Shape {
-        Shape::new(vec![Dim::Wildcard])
-    }
-
-    fn literal_shape(dims: Vec<i64>) -> Shape {
-        Shape::new(dims.into_iter().map(Dim::Literal).collect())
-    }
-
-    fn named_shape(names: Vec<&str>) -> Shape {
-        Shape::new(names.into_iter().map(|n| Dim::Named(n.to_string())).collect())
-    }
-
-    #[test]
-    fn test_wildcard_unification() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Wildcard matches literal
-        let s1 = wildcard();
-        let s2 = literal_shape(vec![512]);
-        assert!(engine.unify_shapes(&s1, &s2, &mut ctx).is_ok());
-
-        // Wildcard matches named dimension
-        let s1 = wildcard();
-        let s2 = named_shape(vec!["dim"]);
-        assert!(engine.unify_shapes(&s1, &s2, &mut ctx).is_ok());
-    }
-
-    #[test]
-    fn test_rank_mismatch() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        let s1 = literal_shape(vec![512]);
-        let s2 = literal_shape(vec![512, 256]);
-
-        let result = engine.unify_shapes(&s1, &s2, &mut ctx);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Rank mismatch"));
-    }
-
-    #[test]
-    fn test_dimension_unification() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Named dimensions should unify
-        let s1 = named_shape(vec!["batch", "dim"]);
-        let s2 = named_shape(vec!["batch", "dim"]);
-        assert!(engine.unify_shapes(&s1, &s2, &mut ctx).is_ok());
-
-        // Named dimension unifies with literal
-        let mut ctx = InferenceContext::new();
-        let s1 = named_shape(vec!["dim"]);
-        let s2 = literal_shape(vec![512]);
-        assert!(engine.unify_shapes(&s1, &s2, &mut ctx).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_dimension_conflict() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // First bind "dim" to 512
-        let s1 = named_shape(vec!["dim"]);
-        let s2 = literal_shape(vec![512]);
-        assert!(engine.unify_shapes(&s1, &s2, &mut ctx).is_ok());
-
-        // Try to bind "dim" to 256 - should fail
-        let s3 = named_shape(vec!["dim"]);
-        let s4 = literal_shape(vec![256]);
-        let result = engine.unify_shapes(&s3, &s4, &mut ctx);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_variadic_matching() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Pattern [dim, *rest] matches [512, 256, 128]
-        let pattern = Shape::new(vec![
-            Dim::Named("dim".to_string()),
-            Dim::Variadic("rest".to_string()),
-        ]);
-        let concrete = literal_shape(vec![512, 256, 128]);
-
-        assert!(engine.unify_shapes(&pattern, &concrete, &mut ctx).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_has_wildcard() {
-        let engine = ShapeInferenceEngine::new();
-
-        let s1 = wildcard();
-        assert!(engine.has_wildcard(&s1));
-
-        let s2 = literal_shape(vec![512]);
-        assert!(!engine.has_wildcard(&s2));
-
-        let s3 = Shape::new(vec![Dim::Literal(512), Dim::Wildcard]);
-        assert!(engine.has_wildcard(&s3));
-    }
-
-    #[test]
-    fn test_has_variadic() {
-        let engine = ShapeInferenceEngine::new();
-
-        let s1 = Shape::new(vec![Dim::Variadic("rest".to_string())]);
-        assert!(engine.has_variadic(&s1));
-
-        let s2 = literal_shape(vec![512]);
-        assert!(!engine.has_variadic(&s2));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_multiply() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: dim * 4 = 2048  =>  dim = 512
-        let expr = DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Mul,
-            right: Dim::Literal(4),
-        };
-
-        assert!(ctx.solve_expr_for_unknown(&expr, 2048).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_divide() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: dim / 2 = 256  =>  dim = 512
-        let expr = DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Div,
-            right: Dim::Literal(2),
-        };
-
-        assert!(ctx.solve_expr_for_unknown(&expr, 256).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_add() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: dim + 100 = 612  =>  dim = 512
-        let expr = DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Add,
-            right: Dim::Literal(100),
-        };
-
-        assert!(ctx.solve_expr_for_unknown(&expr, 612).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_subtract() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: dim - 100 = 412  =>  dim = 512
-        let expr = DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Sub,
-            right: Dim::Literal(100),
-        };
-
-        assert!(ctx.solve_expr_for_unknown(&expr, 412).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_right_operand() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: 2048 / dim = 4  =>  dim = 512
-        let expr = DimExpr {
-            left: Dim::Literal(2048),
-            op: BinOp::Div,
-            right: Dim::Named("dim".to_string()),
-        };
-
-        assert!(ctx.solve_expr_for_unknown(&expr, 4).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_expr_constraint_solving_invalid_division() {
-        let mut ctx = InferenceContext::new();
-
-        // Test: dim * 3 = 512  =>  Error (512 not divisible by 3)
-        let expr = DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Mul,
-            right: Dim::Literal(3),
-        };
-
-        let result = ctx.solve_expr_for_unknown(&expr, 512);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not divisible"));
-    }
-
-    #[test]
-    fn test_unify_expr_with_literal() {
-        let mut ctx = InferenceContext::new();
-
-        // Test unification: [dim * 4] unified with [2048] should solve for dim = 512
-        let expr_dim = Dim::Expr(Box::new(DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Mul,
-            right: Dim::Literal(4),
-        }));
-
-        let literal_dim = Dim::Literal(2048);
-
-        assert!(ctx.unify(&expr_dim, &literal_dim).is_ok());
-        assert_eq!(ctx.resolved_dims.get("dim"), Some(&512));
-    }
-
-    #[test]
-    fn test_is_dim_resolvable() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Literal is always resolvable
-        assert!(engine.is_dim_resolvable(&Dim::Literal(512), &ctx));
-
-        // Wildcard is always resolvable
-        assert!(engine.is_dim_resolvable(&Dim::Wildcard, &ctx));
-
-        // Named dimension not yet resolved
-        assert!(!engine.is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
-
-        // Resolve it
-        ctx.resolved_dims.insert("dim".to_string(), 512);
-        assert!(engine.is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
-
-        // Expression with resolvable operands
-        let expr = Dim::Expr(Box::new(DimExpr {
-            left: Dim::Named("dim".to_string()),
-            op: BinOp::Mul,
-            right: Dim::Literal(4),
-        }));
-        assert!(engine.is_dim_resolvable(&expr, &ctx));
-
-        // Expression with unresolvable operand
-        let expr2 = Dim::Expr(Box::new(DimExpr {
-            left: Dim::Named("unknown".to_string()),
-            op: BinOp::Mul,
-            right: Dim::Literal(4),
-        }));
-        assert!(!engine.is_dim_resolvable(&expr2, &ctx));
-    }
-
-    #[test]
-    fn test_match_pattern_unification() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Pattern [*, d] should match concrete shape [32, 512]
-        let pattern = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
-        let concrete = literal_shape(vec![32, 512]);
-
-        assert!(engine.unify_pattern_with_shape(&pattern, &concrete, &mut ctx).is_ok());
-        assert_eq!(ctx.resolved_dims.get("d"), Some(&512));
-    }
-
-    #[test]
-    fn test_match_pattern_literal_mismatch() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Pattern [*, 512] should NOT match [32, 256]
-        let pattern = Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]);
-        let concrete = literal_shape(vec![32, 256]);
-
-        let result = engine.unify_pattern_with_shape(&pattern, &concrete, &mut ctx);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_match_pattern_rank_mismatch() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Pattern [*, d] should NOT match 3D shape [32, 64, 512]
-        let pattern = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
-        let concrete = literal_shape(vec![32, 64, 512]);
-
-        let result = engine.unify_pattern_with_shape(&pattern, &concrete, &mut ctx);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Rank mismatch"));
-    }
-
-    #[test]
-    fn test_match_variadic_pattern() {
-        let mut ctx = InferenceContext::new();
-        let engine = ShapeInferenceEngine::new();
-
-        // Pattern [*batch, d] should match [32, 64, 128, 512]
-        let pattern = Shape::new(vec![
-            Dim::Variadic("batch".to_string()),
-            Dim::Named("d".to_string())
-        ]);
-        let concrete = literal_shape(vec![32, 64, 128, 512]);
-
-        assert!(engine.unify_pattern_with_shape(&pattern, &concrete, &mut ctx).is_ok());
-        assert_eq!(ctx.resolved_dims.get("d"), Some(&512));
-    }
-
-    #[test]
-    fn test_shapes_compatible() {
-        let engine = ShapeInferenceEngine::new();
-
-        // Compatible: same literal shapes
-        let s1 = literal_shape(vec![512, 256]);
-        let s2 = literal_shape(vec![512, 256]);
-        assert!(engine.shapes_compatible(&s1, &s2));
-
-        // Compatible: named dimensions can unify
-        let s3 = named_shape(vec!["d1", "d2"]);
-        let s4 = literal_shape(vec![512, 256]);
-        assert!(engine.shapes_compatible(&s3, &s4));
-
-        // Incompatible: different literals
-        let s5 = literal_shape(vec![512, 256]);
-        let s6 = literal_shape(vec![512, 128]);
-        assert!(!engine.shapes_compatible(&s5, &s6));
-
-        // Incompatible: rank mismatch
-        let s7 = literal_shape(vec![512]);
-        let s8 = literal_shape(vec![512, 256]);
-        assert!(!engine.shapes_compatible(&s7, &s8));
     }
 }

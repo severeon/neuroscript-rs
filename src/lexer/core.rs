@@ -1,28 +1,7 @@
-//! NeuroScript Lexer
-//!
-//! Tokenizes source text into a stream of tokens.
-//! Handles indentation-based scoping.
+//! Core lexer implementation
 
-use miette::{SourceSpan, Diagnostic};
-use thiserror::Error;
+use miette::SourceSpan;
 use crate::interfaces::*;
-
-impl From<Span> for SourceSpan {
-    fn from(s: Span) -> Self {
-        SourceSpan::new(s.start.into(), (s.end - s.start).into())
-    }
-}
-
-impl LexError {
-    pub fn span(&self) -> SourceSpan {
-        match self {
-            LexError::UnexpectedChar { span, .. } => *span,
-            LexError::UnterminatedString { span, .. } => *span,
-            LexError::InvalidNumber { span, .. } => *span,
-            LexError::InconsistentIndent { span, .. } => *span,
-        }
-    }
-}
 
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Self {
@@ -423,66 +402,5 @@ impl<'a> Lexer<'a> {
             line: self.line,
             col: self.col,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lex(s: &str) -> Vec<TokenKind> {
-        Lexer::new(s)
-            .tokenize()
-            .unwrap()
-            .into_iter()
-            .map(|t| t.kind)
-            .collect()
-    }
-
-    #[test]
-    fn test_simple_tokens() {
-        assert_eq!(
-            lex("-> : , . + -"),
-            vec![
-                TokenKind::Arrow,
-                TokenKind::Colon,
-                TokenKind::Comma,
-                TokenKind::Dot,
-                TokenKind::Plus,
-                TokenKind::Minus,
-                TokenKind::Eof
-            ]
-        );
-    }
-
-    #[test]
-    fn test_keywords() {
-        assert_eq!(
-            lex("neuron use in out impl graph"),
-            vec![
-                TokenKind::Neuron,
-                TokenKind::Use,
-                TokenKind::In,
-                TokenKind::Out,
-                TokenKind::Impl,
-                TokenKind::Graph,
-                TokenKind::Eof
-            ]
-        );
-    }
-
-    #[test]
-    fn test_string() {
-        assert_eq!(
-            lex("`hello world`"),
-            vec![TokenKind::String("hello world".into()), TokenKind::Eof]
-        );
-    }
-
-    #[test]
-    fn test_indent() {
-        let tokens = lex("a:\n  b\n  c\nd");
-        assert!(tokens.contains(&TokenKind::Indent));
-        assert!(tokens.contains(&TokenKind::Dedent));
     }
 }

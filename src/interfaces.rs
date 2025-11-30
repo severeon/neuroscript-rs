@@ -425,8 +425,6 @@ pub struct InferenceContext {
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
 }
 
-pub struct ShapeInferenceEngine {}
-
 #[derive(Debug, Error)]
 pub enum ShapeError {
     #[error("Shape mismatch: expected {expected}, got {got}")]
@@ -509,4 +507,38 @@ pub enum ValidationError {
         context: String,
     },
     Custom(String),
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationError::MissingNeuron { name, context } => {
+                write!(f, "Neuron '{}' not found (in {})", name, context)
+            }
+            ValidationError::PortMismatch { source_ports, dest_ports, context, details } => {
+                write!(f, "Port mismatch: {} -> {} (in {}: {})",
+                       source_ports, dest_ports, context, details)
+            }
+            ValidationError::CycleDetected { cycle, context } => {
+                write!(f, "Cycle detected in {}: {}", context, cycle.join(" -> "))
+            }
+            ValidationError::ArityMismatch { expected, got, context } => {
+                write!(f, "Arity mismatch: expected {} ports, got {} (in {})",
+                       expected, got, context)
+            }
+            ValidationError::UnknownNode { node, context } => {
+                write!(f, "Unknown node '{}' (in {})", node, context)
+            }
+            ValidationError::NonExhaustiveMatch { context, suggestion } => {
+                write!(f, "Non-exhaustive match expression (in {}): {}", context, suggestion)
+            }
+            ValidationError::UnreachableMatchArm { arm_index, shadowed_by, context } => {
+                write!(f, "Unreachable match arm {} shadowed by arm {} (in {})",
+                       arm_index, shadowed_by, context)
+            }
+            ValidationError::Custom(msg) => {
+                write!(f, "{}", msg)
+            }
+        }
+    }
 }

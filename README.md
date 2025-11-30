@@ -83,7 +83,7 @@ out: [batch, dim / 2]     # reduction
 **Full tensor shape operations with BigUint arithmetic to avoid overflow:**
 
 ```rust
-use neuroscript::shape_algebra::*;
+use neuroscript::shape::*;
 
 // Pattern matching with wildcards
 let pattern = Pattern::from_tokens(vec![

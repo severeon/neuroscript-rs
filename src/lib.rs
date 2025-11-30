@@ -21,8 +21,7 @@ pub mod interfaces;
 pub mod ir;
 pub mod lexer;
 pub mod parser;
-pub mod shape_algebra;
-pub mod shape_inference;
+pub mod shape;
 pub mod stdlib_registry;
 pub mod validator;
 
@@ -48,7 +47,7 @@ pub fn validate(program: &Program) -> Result<(), Vec<ValidationError>> {
     validator::Validator::validate(program)?;
 
     // Then run shape inference validation
-    let mut shape_engine = shape_inference::ShapeInferenceEngine::new();
+    let mut shape_engine = shape::ShapeInferenceEngine::new();
     match shape_engine.infer(program) {
         Ok(()) => Ok(()),
         Err(shape_errors) => {

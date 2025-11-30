@@ -86,7 +86,7 @@ Source (.ns) → Lexer → Tokens → Parser → IR → Validator → Codegen �
   3. No cycles in dependency graph
 - Returns `Result<(), Vec<ValidationError>>` - collects ALL errors rather than failing fast
 
-### 5. Shape Algebra (`src/shape_algebra.rs`)
+### 5. Shape System (`src/shape/`)
 - **Tensor shape operations** using BigUint arithmetic to avoid overflow
 - Provides pattern matching with wildcards and literals
 - Key operations:
