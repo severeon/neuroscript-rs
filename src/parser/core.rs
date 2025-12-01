@@ -596,6 +596,7 @@ impl Parser {
                 pattern,
                 guard,
                 pipeline,
+                is_reachable: true, // Default to reachable, validator will mark unreachable
             });
         }
 

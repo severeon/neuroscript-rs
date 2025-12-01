@@ -50,7 +50,8 @@ mod tests {
                                 pipeline: vec![
                                     Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![], id: 0 },
                                     Endpoint::Ref(PortRef::new("out"))
-                                ]
+                                ],
+                                is_reachable: true,
                             },
                             MatchArm {
                                 pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
@@ -58,7 +59,8 @@ mod tests {
                                 pipeline: vec![
                                     Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![], id: 1 },
                                     Endpoint::Ref(PortRef::new("out"))
-                                ]
+                                ],
+                                is_reachable: true,
                             }
                         ]
                     })
@@ -107,7 +109,8 @@ mod tests {
                                         id: 0
                                     },
                                     Endpoint::Ref(PortRef::new("out"))
-                                ]
+                                ],
+                                is_reachable: true,
                             },
                             MatchArm {
                                 pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]),
@@ -126,7 +129,8 @@ mod tests {
                                         id: 2
                                     },
                                     Endpoint::Ref(PortRef::new("out"))
-                                ]
+                                ],
+                                is_reachable: true,
                             }
                         ]
                     })
@@ -175,7 +179,8 @@ mod tests {
                                 pipeline: vec![
                                     Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![], id: 0 },
                                     Endpoint::Ref(PortRef::new("out"))
-                                ]
+                                ],
+                                is_reachable: true,
                             }
                         ]
                     })
