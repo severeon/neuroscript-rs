@@ -71,7 +71,7 @@
   - [x] Implement compile-time match resolution for known shapes
   - [x] Support runtime match generation (Python if/elif) for dynamic shapes
   - [x] Add exhaustiveness checking for pattern coverage
-  - [ ] Implement dead branch elimination
+  - [x] Implement dead branch elimination
   - [x] Create AdaptiveProjection example neuron
   - [x] Test compile-time pattern selection
   - [ ] Test runtime pattern fallback
