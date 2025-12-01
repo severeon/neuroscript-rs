@@ -233,4 +233,135 @@ class Concat(nn.Module):
         return result
 
 
-__all__ = ["Fork", "Fork3", "Add", "Concat"]
+class Reshape(nn.Module):
+    """
+    Reshape primitive: Reshape tensor to a new shape.
+
+    Changes the shape of a tensor without changing its data. The total number
+    of elements must remain the same. Supports dynamic shapes with -1 for
+    auto-inferred dimensions.
+
+    NeuroScript signature:
+        neuron Reshape(shape):
+            in: [*input_shape]
+            out: [*output_shape]
+            impl: neuroscript_runtime.primitives.Reshape
+
+    Args:
+        shape (tuple of int): Target shape. Use -1 for one dimension to be inferred.
+
+    Shape:
+        - Input: [*input_shape] (any shape)
+        - Output: [*output_shape] where product of dims equals input
+
+    Notes:
+        - Total number of elements must be preserved
+        - One dimension can be -1 for automatic inference
+        - Commonly used for multi-head attention to split/merge heads
+
+    Example:
+        >>> reshape = Reshape((32, 10, 8, 64))
+        >>> x = torch.randn(32, 10, 512)  # batch, seq, d_model where d_model=512=8*64
+        >>> result = reshape(x)
+        >>> assert result.shape == (32, 10, 8, 64)  # batch, seq, num_heads, d_k
+    """
+
+    def __init__(self, shape: Tuple[int, ...]):
+        super().__init__()
+        if not isinstance(shape, (tuple, list)):
+            raise TypeError(f"shape must be tuple or list, got {type(shape)}")
+        self.shape = tuple(shape)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Reshape the input tensor to the target shape.
+
+        Args:
+            input: Input tensor of any shape
+
+        Returns:
+            Reshaped tensor
+
+        Raises:
+            ValueError: If reshape is not possible (incompatible sizes)
+        """
+        try:
+            # Handle dynamic batch dimensions by replacing -1 appropriately
+            # and ensuring total element count matches
+            result = input.view(*self.shape)
+        except RuntimeError as e:
+            raise ValueError(
+                f"Cannot reshape tensor with shape {input.shape} to {self.shape}: {e}"
+            )
+
+        return result
+
+
+class Transpose(nn.Module):
+    """
+    Transpose primitive: Permute dimensions of a tensor.
+
+    Rearranges the dimensions of a tensor according to a permutation.
+    Also called "permute" in PyTorch terminology.
+
+    NeuroScript signature:
+        neuron Transpose(dims):
+            in: [*input_shape]
+            out: [*output_shape]
+            impl: neuroscript_runtime.primitives.Transpose
+
+    Args:
+        dims (tuple of int): Permutation of dimensions. For example,
+            (0, 2, 1) swaps the last two dimensions for a 3D tensor.
+
+    Shape:
+        - Input: [d0, d1, ..., dn]
+        - Output: [d_perm[0], d_perm[1], ..., d_perm[n]] where perm is the permutation
+
+    Notes:
+        - Number of dimensions in dims must match input tensor rank
+        - Each dimension index must appear exactly once
+        - Commonly used in multi-head attention to rearrange batch/head/seq dims
+
+    Example:
+        >>> transpose = Transpose((0, 2, 1, 3))
+        >>> x = torch.randn(32, 10, 8, 64)  # batch, seq, num_heads, d_k
+        >>> result = transpose(x)
+        >>> assert result.shape == (32, 8, 10, 64)  # batch, num_heads, seq, d_k
+    """
+
+    def __init__(self, dims: Tuple[int, ...]):
+        super().__init__()
+        if not isinstance(dims, (tuple, list)):
+            raise TypeError(f"dims must be tuple or list, got {type(dims)}")
+        self.dims = tuple(dims)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Permute the dimensions of the input tensor.
+
+        Args:
+            input: Input tensor
+
+        Returns:
+            Transposed tensor with permuted dimensions
+
+        Raises:
+            ValueError: If permutation is invalid for the input shape
+        """
+        if len(self.dims) != input.ndim:
+            raise ValueError(
+                f"Permutation has {len(self.dims)} dimensions but input has {input.ndim} dimensions"
+            )
+
+        try:
+            result = input.permute(*self.dims)
+        except RuntimeError as e:
+            raise ValueError(
+                f"Cannot permute tensor with shape {input.shape} using dims {self.dims}: {e}"
+            )
+
+        return result
+
+
+__all__ = ["Fork", "Fork3", "Add", "Concat", "Reshape", "Transpose"]

@@ -10,50 +10,25 @@
 # 4. Concatenate heads
 # 5. Project output
 
-# Scaled dot-product attention (single head)
+# Scaled dot-product attention primitive
+# Low-level building block for attention mechanisms
 # Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V
-neuron ScaledDotProductAttention(d_k):
-    in query: [batch, seq_q, d_k]
-    in key: [batch, seq_k, d_k]
-    in value: [batch, seq_k, d_v]
-    out: [batch, seq_q, d_v]
-    graph:
-        # TODO: Needs MatMul, Scale, Softmax primitives
-        # Placeholder implementation
-        query -> Linear(d_k, d_v) -> out
+neuron ScaledDotProductAttention:
+    in query: [*batch, seq_q, d_k]
+    in key: [*batch, seq_k, d_k]
+    in value: [*batch, seq_k, d_v]
+    out: [*batch, seq_q, d_v]
+    impl: primitives,attention/ScaledDotProductAttention
 
 
-# Multi-head attention (self-attention variant)
-# Input: [batch, seq, d_model]
-# Output: [batch, seq, d_model]
+# Multi-head self-attention primitive
+# Complete attention mechanism with Q, K, V projections and multi-head splitting
+# Input: [*batch, seq, d_model]
+# Output: [*batch, seq, d_model]
 neuron MultiHeadSelfAttention(d_model, num_heads):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        # Compute d_k (dimension per head)
-        # d_k = d_model / num_heads
-
-        # Project to Q, K, V
-        in -> (q_path, k_path, v_path)
-
-        q_path -> Linear(d_model, d_model) -> query
-        k_path -> Linear(d_model, d_model) -> key
-        v_path -> Linear(d_model, d_model) -> value
-
-        # Reshape to [batch, seq, num_heads, d_k]
-        # then transpose to [batch, num_heads, seq, d_k]
-        # query -> Reshape() -> q_heads
-        # key -> Reshape() -> k_heads
-        # value -> Reshape() -> v_heads
-
-        # Apply attention per head (in parallel)
-        # (q_heads, k_heads, v_heads) -> ScaledDotProductAttention(d_k) -> attended
-
-        # Reshape back to [batch, seq, d_model]
-        # attended -> Reshape() -> concatenated
-
-        # Output projection
-        concatenated -> Linear(d_model, d_model) -> out
+    in: [*batch, seq, d_model]
+    out: [*batch, seq, d_model]
+    impl: primitives,attention/MultiHeadSelfAttention
 
 
 # Cross-attention from queries to different key-value source

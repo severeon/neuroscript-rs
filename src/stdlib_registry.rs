@@ -268,6 +268,24 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "Reshape",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Reshape",
+                "Reshape tensor to a new shape (preserves element count)",
+            ),
+        );
+
+        self.register(
+            "Transpose",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Transpose",
+                "Permute tensor dimensions (transpose/permute operation)",
+            ),
+        );
+
         // Level 0: Attention
         self.register(
             "ScaledDotProductAttention",
@@ -275,6 +293,15 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.attention",
                 "ScaledDotProductAttention",
                 "Scaled dot-product attention (transformer building block)",
+            ),
+        );
+
+        self.register(
+            "MultiHeadSelfAttention",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.attention",
+                "MultiHeadSelfAttention",
+                "Multi-head self-attention (complete attention mechanism)",
             ),
         );
     }
@@ -355,7 +382,7 @@ mod tests {
         assert!(!registry.contains("NonExistent"));
 
         // Check we have the expected number of primitives
-        assert_eq!(registry.len(), 22); // 22 primitives registered
+        assert_eq!(registry.len(), 25); // 25 primitives registered (added Reshape, Transpose, MultiHeadSelfAttention)
 
         // Check lookup works
         let linear = registry.lookup("Linear").unwrap();

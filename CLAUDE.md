@@ -385,3 +385,5 @@ Generated PyTorch modules are standalone after runtime is installed.
 - **Indentation is structural**: Like Python, indentation defines scope in pipelines
 - **Shape algebra uses BigUint**: Prevents overflow when computing tensor sizes (e.g., `[1000, 1000, 1000]` = 1 billion elements)
 - **Codegen is string-based**: Phase 0 directly emits Python strings - future phases may use a PyTorch IR
+- we don't use dot notation in the impl field for neurons, it should be something like `core,attention/ScaledDotProductAttention` instead `<provider>,<library>/<neuron>`
+- always run `source ~/.venv_ai/bin/activate` or the python code will fail

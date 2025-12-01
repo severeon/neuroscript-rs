@@ -8,7 +8,7 @@ Provides primitives for:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple
+from typing import Tuple, Optional
 import math
 
 
@@ -59,7 +59,7 @@ class ScaledDotProductAttention(nn.Module):
         >>> assert output.shape == (32, 10, 128)  # [batch, seq_q, d_v]
     """
 
-    def __init__(self, dropout_p: float = 0.0, scale: float = None):
+    def __init__(self, dropout_p: float = 0.0, scale: Optional[float] = None):
         super().__init__()
 
         if dropout_p < 0.0 or dropout_p >= 1.0:
@@ -153,4 +153,150 @@ class ScaledDotProductAttention(nn.Module):
         return output
 
 
-__all__ = ["ScaledDotProductAttention"]
+class MultiHeadSelfAttention(nn.Module):
+    """
+    Multi-Head Self-Attention primitive.
+
+    Implements the multi-head attention mechanism from "Attention is All You Need".
+    Projects input to Q, K, V, splits into multiple heads, applies attention per head,
+    then concatenates and projects the output.
+
+    NeuroScript signature:
+        neuron MultiHeadSelfAttention(d_model, num_heads):
+            in: [*batch, seq, d_model]
+            out: [*batch, seq, d_model]
+            impl: neuroscript_runtime.primitives.MultiHeadSelfAttention
+
+    Args:
+        d_model (int): Model dimension (must be divisible by num_heads)
+        num_heads (int): Number of attention heads
+        dropout_p (float, optional): Dropout probability. Default: 0.0
+        bias (bool, optional): Whether to use bias in linear projections. Default: True
+
+    Shape:
+        - Input: [*batch, seq, d_model]
+        - Output: [*batch, seq, d_model]
+
+    Notes:
+        - d_model must be divisible by num_heads
+        - Each head has dimension d_k = d_model / num_heads
+        - Uses learned linear projections for Q, K, V and output
+        - Attention weights are computed per head independently
+
+    Example:
+        >>> mha = MultiHeadSelfAttention(d_model=512, num_heads=8)
+        >>> x = torch.randn(32, 10, 512)  # batch=32, seq=10, d_model=512
+        >>> output = mha(x)
+        >>> assert output.shape == (32, 10, 512)
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        dropout_p: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+
+        if d_model % num_heads != 0:
+            raise ValueError(
+                f"d_model ({d_model}) must be divisible by num_heads ({num_heads})"
+            )
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+        self.dropout_p = dropout_p
+
+        # Linear projections for Q, K, V (combined for efficiency)
+        self.qkv_proj = nn.Linear(d_model, 3 * d_model, bias=bias)
+
+        # Output projection
+        self.out_proj = nn.Linear(d_model, d_model, bias=bias)
+
+        # Dropout
+        self.dropout = nn.Dropout(dropout_p) if dropout_p > 0 else None
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Compute multi-head self-attention.
+
+        Args:
+            input: Input tensor [*batch, seq, d_model]
+
+        Returns:
+            Attention output [*batch, seq, d_model]
+
+        Raises:
+            ValueError: If input shape is incompatible
+        """
+        if input.ndim < 2:
+            raise ValueError(
+                f"Input must have at least 2 dimensions (seq, d_model), got {input.ndim}"
+            )
+
+        if input.shape[-1] != self.d_model:
+            raise ValueError(
+                f"Input last dimension must be {self.d_model}, got {input.shape[-1]}"
+            )
+
+        # Extract dimensions
+        # input: [*batch, seq, d_model]
+        *batch_dims, seq_len, _ = input.shape
+        batch_size = 1
+        for dim in batch_dims:
+            batch_size *= dim
+
+        # Project to Q, K, V
+        # qkv: [*batch, seq, 3 * d_model]
+        qkv = self.qkv_proj(input)
+
+        # Reshape and split into Q, K, V
+        # qkv: [batch_prod, seq, 3, num_heads, d_k]
+        qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.d_k)
+
+        # Permute to [3, batch_prod, num_heads, seq, d_k]
+        qkv = qkv.permute(2, 0, 3, 1, 4)
+
+        # Split into Q, K, V: each [batch_prod, num_heads, seq, d_k]
+        query, key, value = qkv[0], qkv[1], qkv[2]
+
+        # Compute attention scores: Q @ K^T
+        # scores: [batch_prod, num_heads, seq_q, seq_k]
+        scores = torch.matmul(query, key.transpose(-2, -1))
+
+        # Scale by 1/sqrt(d_k)
+        scores = scores / math.sqrt(self.d_k)
+
+        # Apply softmax
+        attn_weights = F.softmax(scores, dim=-1)
+
+        # Apply dropout to attention weights
+        if self.dropout is not None and self.training:
+            attn_weights = self.dropout(attn_weights)
+
+        # Apply attention to values
+        # attn_weights: [batch_prod, num_heads, seq, seq]
+        # value: [batch_prod, num_heads, seq, d_k]
+        # attn_output: [batch_prod, num_heads, seq, d_k]
+        attn_output = torch.matmul(attn_weights, value)
+
+        # Transpose and reshape to concatenate heads
+        # attn_output: [batch_prod, seq, num_heads, d_k]
+        attn_output = attn_output.transpose(1, 2)
+
+        # Concatenate heads: [batch_prod, seq, d_model]
+        attn_output = attn_output.contiguous().view(batch_size, seq_len, self.d_model)
+
+        # Restore original batch dimensions: [*batch, seq, d_model]
+        if batch_dims:
+            attn_output = attn_output.view(*batch_dims, seq_len, self.d_model)
+
+        # Output projection
+        output = self.out_proj(attn_output)
+
+        return output
+
+
+__all__ = ["ScaledDotProductAttention", "MultiHeadSelfAttention"]

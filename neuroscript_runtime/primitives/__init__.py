@@ -45,11 +45,14 @@ from neuroscript_runtime.primitives.structural import (
     Fork3,
     Add,
     Concat,
+    Reshape,
+    Transpose,
 )
 
 # Attention
 from neuroscript_runtime.primitives.attention import (
     ScaledDotProductAttention,
+    MultiHeadSelfAttention,
 )
 
 __all__ = [
@@ -79,6 +82,9 @@ __all__ = [
     "Fork3",
     "Add",
     "Concat",
+    "Reshape",
+    "Transpose",
     # Attention
     "ScaledDotProductAttention",
+    "MultiHeadSelfAttention",
 ]
