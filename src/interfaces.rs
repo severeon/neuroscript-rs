@@ -183,6 +183,9 @@ pub struct MatchArm {
     pub pattern: Shape,
     pub guard: Option<Value>, // where clause
     pub pipeline: Vec<Endpoint>,
+    /// Whether this arm is reachable (not shadowed by earlier arms)
+    /// Set to false by validator for dead code elimination
+    pub is_reachable: bool,
 }
 
 /// Pattern matching on shapes
