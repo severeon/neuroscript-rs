@@ -39,6 +39,38 @@ fn optimize_endpoint(endpoint: &mut Endpoint) -> usize {
     count
 }
 
+/// Count the total number of match expressions in the program.
+/// This is useful for logging optimizer statistics.
+pub fn count_matches(program: &Program) -> usize {
+    let mut count = 0;
+    for neuron in program.neurons.values() {
+        if let NeuronBody::Graph(connections) = &neuron.body {
+            for connection in connections {
+                count += count_matches_in_endpoint(&connection.source);
+                count += count_matches_in_endpoint(&connection.destination);
+            }
+        }
+    }
+    count
+}
+
+fn count_matches_in_endpoint(endpoint: &Endpoint) -> usize {
+    let mut count = 0;
+    match endpoint {
+        Endpoint::Match(match_expr) => {
+            count += 1;
+            // Recurse into arms
+            for arm in &match_expr.arms {
+                for pipe_endpoint in &arm.pipeline {
+                    count += count_matches_in_endpoint(pipe_endpoint);
+                }
+            }
+        }
+        _ => {}
+    }
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

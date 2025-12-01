@@ -4,17 +4,17 @@
 //! It handles all endpoint types including calls, match expressions, tuple unpacking,
 //! and references.
 
+use super::utils::*;
+use crate::interfaces::*;
 use std::collections::HashMap;
 use std::fmt::Write;
-use crate::interfaces::*;
-use super::utils::*;
 
 /// Generate forward method body from connections
 pub(super) fn generate_forward_body(
     gen: &mut CodeGenerator,
     output: &mut String,
     connections: &[Connection],
-    inputs: &[&str]
+    inputs: &[&str],
 ) -> Result<(), CodegenError> {
     // Clear var names for this forward pass
     gen.var_names.clear();
@@ -24,7 +24,8 @@ pub(super) fn generate_forward_body(
         gen.var_names.insert("in".to_string(), "x".to_string());
     } else {
         for input in inputs {
-            gen.var_names.insert((*input).to_string(), (*input).to_string());
+            gen.var_names
+                .insert((*input).to_string(), (*input).to_string());
         }
     }
 
@@ -41,14 +42,20 @@ pub(super) fn generate_forward_body(
     for conn in connections {
         // Resolve the source to a variable name
         let source_var = match &conn.source {
-            Endpoint::Ref(port_ref) => {
-                gen.var_names.get(&port_ref.node)
-                    .cloned()
-                    .unwrap_or_else(|| port_ref.node.clone())
-            }
+            Endpoint::Ref(port_ref) => gen
+                .var_names
+                .get(&port_ref.node)
+                .cloned()
+                .unwrap_or_else(|| port_ref.node.clone()),
             Endpoint::Tuple(refs) => {
-                let vars: Vec<String> = refs.iter()
-                    .map(|r| gen.var_names.get(&r.node).cloned().unwrap_or_else(|| r.node.clone()))
+                let vars: Vec<String> = refs
+                    .iter()
+                    .map(|r| {
+                        gen.var_names
+                            .get(&r.node)
+                            .cloned()
+                            .unwrap_or_else(|| r.node.clone())
+                    })
                     .collect();
                 format!("({})", vars.join(", "))
             }
@@ -56,33 +63,46 @@ pub(super) fn generate_forward_body(
                 // This Call should have been processed in a previous connection
                 // Look it up in our call_to_result map
                 let key = endpoint_key_impl(&conn.source);
-                call_to_result.get(&key)
-                    .cloned()
-                    .ok_or_else(|| CodegenError::InvalidConnection(
-                        format!("Call to {} used as source before being defined", name)
-                    ))?
+                call_to_result.get(&key).cloned().ok_or_else(|| {
+                    CodegenError::InvalidConnection(format!(
+                        "Call to {} used as source before being defined",
+                        name
+                    ))
+                })?
             }
             Endpoint::Match(_) => {
-                return Err(CodegenError::UnsupportedFeature("Match expressions as source".to_string()));
+                return Err(CodegenError::UnsupportedFeature(
+                    "Match expressions as source".to_string(),
+                ));
             }
         };
 
         // Process the destination
-        let result_var = process_destination(output, gen, &conn.destination, source_var, indent, &mut temp_var_counter, &mut call_to_result)?;
+        let result_var = process_destination(
+            output,
+            gen,
+            &conn.destination,
+            source_var,
+            indent,
+            &mut temp_var_counter,
+            &mut call_to_result,
+        )?;
 
         // Track the last result for implicit output
         last_result = Some(result_var.clone());
 
         // If destination was a Call, store result in call_to_result
         if let Endpoint::Call { .. } = &conn.destination {
-             let key = endpoint_key_impl(&conn.destination);
-             call_to_result.insert(key, result_var);
+            let key = endpoint_key_impl(&conn.destination);
+            call_to_result.insert(key, result_var);
         }
     }
 
     // Return the output variable
     // Priority: explicit "out" port > last result > last temp variable
-    let output_var = gen.var_names.get("out")
+    let output_var = gen
+        .var_names
+        .get("out")
         .cloned()
         .or(last_result)
         .unwrap_or_else(|| format!("x{}", temp_var_counter - 1));
@@ -99,48 +119,64 @@ fn process_destination(
     source_var: String,
     indent: &str,
     temp_var_counter: &mut usize,
-    call_to_result: &mut HashMap<String, String>
+    call_to_result: &mut HashMap<String, String>,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
             // Simple assignment - the source becomes this port's variable
-            gen.var_names.insert(port_ref.node.clone(), source_var.clone());
+            gen.var_names
+                .insert(port_ref.node.clone(), source_var.clone());
             Ok(source_var)
         }
         Endpoint::Tuple(refs) => {
             // Tuple unpacking
-            let var_names: Vec<String> = refs.iter().map(|r| {
-                let v = format!("x{}", *temp_var_counter);
-                *temp_var_counter += 1;
-                gen.var_names.insert(r.node.clone(), v.clone());
-                v
-            }).collect();
+            let var_names: Vec<String> = refs
+                .iter()
+                .map(|r| {
+                    let v = format!("x{}", *temp_var_counter);
+                    *temp_var_counter += 1;
+                    gen.var_names.insert(r.node.clone(), v.clone());
+                    v
+                })
+                .collect();
 
-            writeln!(output, "{}{} = {}", indent, var_names.join(", "), source_var).unwrap();
+            writeln!(
+                output,
+                "{}{} = {}",
+                indent,
+                var_names.join(", "),
+                source_var
+            )
+            .unwrap();
             Ok(source_var) // Return tuple as result
         }
-        Endpoint::Call { name, args, kwargs, .. } => {
+        Endpoint::Call {
+            name, args, kwargs, ..
+        } => {
             // Generate a call to the module
             let key = endpoint_key_impl(endpoint);
-            let module_name = gen.call_to_module.get(&key)
-                .cloned()
-                .ok_or_else(|| CodegenError::InvalidConnection(
-                    format!("Module for call to {} not found", name)
-                ))?;
+            let module_name = gen.call_to_module.get(&key).cloned().ok_or_else(|| {
+                CodegenError::InvalidConnection(format!("Module for call to {} not found", name))
+            })?;
 
             let result_var = format!("x{}", *temp_var_counter);
             *temp_var_counter += 1;
 
             // Check if this call has captured dimensions (needs lazy instantiation)
-            let has_captured = args.iter().any(|v| has_captured_dimensions_impl(v, &gen.current_neuron_params)) ||
-                               kwargs.iter().any(|(_, v)| has_captured_dimensions_impl(v, &gen.current_neuron_params));
+            let has_captured = args
+                .iter()
+                .any(|v| has_captured_dimensions_impl(v, &gen.current_neuron_params))
+                || kwargs
+                    .iter()
+                    .any(|(_, v)| has_captured_dimensions_impl(v, &gen.current_neuron_params));
 
             if has_captured {
                 // Lazy instantiation: check cache, instantiate if needed
                 writeln!(output, "{}if self._{} is None:", indent, module_name).unwrap();
 
                 // Generate instantiation with current dimension values
-                let args_str = args.iter()
+                let args_str = args
+                    .iter()
                     .map(|v| value_to_python_impl(v))
                     .collect::<Vec<_>>()
                     .join(", ");
@@ -148,7 +184,8 @@ fn process_destination(
                 let kwargs_str = if kwargs.is_empty() {
                     String::new()
                 } else {
-                    let kw: Vec<String> = kwargs.iter()
+                    let kw: Vec<String> = kwargs
+                        .iter()
                         .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
                         .collect();
                     if args.is_empty() {
@@ -167,13 +204,28 @@ fn process_destination(
                     gen.used_primitives.insert(name.clone());
                 }
 
-                writeln!(output, "{}    self._{} = {}({}{})", indent, module_name, name, args_str, kwargs_str).unwrap();
+                writeln!(
+                    output,
+                    "{}    self._{} = {}({}{})",
+                    indent, module_name, name, args_str, kwargs_str
+                )
+                .unwrap();
 
                 // Call the lazily-instantiated module
-                writeln!(output, "{}{} = self._{}({})", indent, result_var, module_name, source_var).unwrap();
+                writeln!(
+                    output,
+                    "{}{} = self._{}({})",
+                    indent, result_var, module_name, source_var
+                )
+                .unwrap();
             } else {
                 // Normal call to pre-instantiated module
-                writeln!(output, "{}{} = self.{}({})", indent, result_var, module_name, source_var).unwrap();
+                writeln!(
+                    output,
+                    "{}{} = self.{}({})",
+                    indent, result_var, module_name, source_var
+                )
+                .unwrap();
             }
 
             Ok(result_var)
@@ -187,8 +239,26 @@ fn process_destination(
 
             let mut first = true;
             let mut prev_condition = String::new();
+
+            // Check if there's a reachable catch-all arm (all wildcards, no guard)
+            let has_reachable_catchall = match_expr.arms.iter().any(|arm| {
+                arm.is_reachable
+                    && arm.guard.is_none()
+                    && arm
+                        .pattern
+                        .dims
+                        .iter()
+                        .all(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_)))
+            });
+
             for arm in &match_expr.arms {
-                let shape_check = generate_shape_check(gen, &arm.pattern, arm.guard.as_ref(), &source_var);
+                // Skip unreachable arms (pruned by optimizer)
+                if !arm.is_reachable {
+                    continue;
+                }
+
+                let shape_check =
+                    generate_shape_check(gen, &arm.pattern, arm.guard.as_ref(), &source_var);
 
                 // Determine prefix: use "else:" if pattern condition is same as previous
                 let prefix = if first {
@@ -229,24 +299,44 @@ fn process_destination(
                 let mut current_var = source_var.clone();
 
                 for ep in &arm.pipeline {
-                     current_var = process_destination(output, gen, ep, current_var, &pipeline_indent, temp_var_counter, call_to_result)?;
+                    current_var = process_destination(
+                        output,
+                        gen,
+                        ep,
+                        current_var,
+                        &pipeline_indent,
+                        temp_var_counter,
+                        call_to_result,
+                    )?;
 
-                     // If endpoint was a Call, store result in call_to_result
+                    // If endpoint was a Call, store result in call_to_result
                     if let Endpoint::Call { .. } = ep {
-                         let key = endpoint_key_impl(ep);
-                         call_to_result.insert(key, current_var.clone());
+                        let key = endpoint_key_impl(ep);
+                        call_to_result.insert(key, current_var.clone());
                     }
                 }
 
-                writeln!(output, "{}{} = {}", pipeline_indent, result_var, current_var).unwrap();
+                writeln!(
+                    output,
+                    "{}{} = {}",
+                    pipeline_indent, result_var, current_var
+                )
+                .unwrap();
 
                 // Restore var_names to prevent match arm scope from leaking
                 gen.var_names = saved_var_names;
             }
 
-            // Else clause
-            writeln!(output, "{}else:", indent).unwrap();
-            writeln!(output, "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')", indent, source_var).unwrap();
+            // Else clause: only raise if no reachable catch-all exists
+            if !has_reachable_catchall {
+                writeln!(output, "{}else:", indent).unwrap();
+                writeln!(
+                    output,
+                    "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')",
+                    indent, source_var
+                )
+                .unwrap();
+            }
 
             Ok(result_var)
         }
@@ -267,7 +357,7 @@ pub(super) fn generate_shape_check(
     gen: &CodeGenerator,
     pattern: &Shape,
     guard: Option<&Value>,
-    var_name: &str
+    var_name: &str,
 ) -> ShapeCheckResult {
     let mut checks = Vec::new();
     let mut bindings = Vec::new();
@@ -299,7 +389,9 @@ pub(super) fn generate_shape_check(
 
     // Handle guard: if it references captured dimensions, defer to after binding
     let guard_condition = if let Some(guard_expr) = guard {
-        if !bindings.is_empty() && has_captured_dimensions_impl(guard_expr, &gen.current_neuron_params) {
+        if !bindings.is_empty()
+            && has_captured_dimensions_impl(guard_expr, &gen.current_neuron_params)
+        {
             // Guard uses captured dims - check it separately after binding
             Some(gen.value_to_python_with_self(guard_expr))
         } else {
@@ -318,7 +410,11 @@ pub(super) fn generate_shape_check(
         checks.join(" and ")
     };
 
-    ShapeCheckResult { condition, bindings, guard_condition }
+    ShapeCheckResult {
+        condition,
+        bindings,
+        guard_condition,
+    }
 }
 
 #[cfg(test)]
@@ -331,10 +427,7 @@ mod tests {
         let program = Program::new();
         let gen = CodeGenerator::new(&program);
 
-        let shape = Shape::new(vec![
-            Dim::Wildcard,
-            Dim::Literal(512),
-        ]);
+        let shape = Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]);
 
         let result = generate_shape_check(&gen, &shape, None, "x");
         assert_eq!(result.condition, "x.ndim == 2 and x.shape[1] == 512");
@@ -347,10 +440,7 @@ mod tests {
         let program = Program::new();
         let gen = CodeGenerator::new(&program);
 
-        let shape = Shape::new(vec![
-            Dim::Wildcard,
-            Dim::Named("d".to_string()),
-        ]);
+        let shape = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
 
         let result = generate_shape_check(&gen, &shape, None, "x");
         assert_eq!(result.condition, "x.ndim == 2");
@@ -363,10 +453,7 @@ mod tests {
         let program = Program::new();
         let gen = CodeGenerator::new(&program);
 
-        let shape = Shape::new(vec![
-            Dim::Wildcard,
-            Dim::Named("d".to_string()),
-        ]);
+        let shape = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
 
         let guard = Value::BinOp {
             op: BinOp::Gt,

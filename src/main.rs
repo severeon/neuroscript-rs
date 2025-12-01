@@ -1,9 +1,9 @@
 //! NeuroScript CLI
 
+use miette::{IntoDiagnostic, NamedSource, WrapErr};
 use neuroscript::{parse, NeuronBody};
 use std::env;
 use std::fs;
-use miette::{IntoDiagnostic, WrapErr, NamedSource};
 
 fn main() -> miette::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -57,7 +57,11 @@ fn main() -> miette::Result<()> {
 
     match parse(&source) {
         Ok(mut program) => {
-            println!("Parsed {} imports and {} neurons:\n", program.uses.len(), program.neurons.len());
+            println!(
+                "Parsed {} imports and {} neurons:\n",
+                program.uses.len(),
+                program.neurons.len()
+            );
 
             for use_stmt in &program.uses {
                 println!("  use {},{}", use_stmt.source, use_stmt.path.join("/"));
@@ -73,11 +77,15 @@ fn main() -> miette::Result<()> {
                     NeuronBody::Graph(_) => "composite",
                 };
 
-                let inputs: Vec<_> = neuron.inputs.iter()
+                let inputs: Vec<_> = neuron
+                    .inputs
+                    .iter()
                     .map(|p| format!("{}: {}", p.name, p.shape))
                     .collect();
 
-                let outputs: Vec<_> = neuron.outputs.iter()
+                let outputs: Vec<_> = neuron
+                    .outputs
+                    .iter()
                     .map(|p| format!("{}: {}", p.name, p.shape))
                     .collect();
 
@@ -109,6 +117,17 @@ fn main() -> miette::Result<()> {
                 }
             }
 
+            // Run optimizer to prune dead match arms
+            let pruned_count = neuroscript::optimizer::optimize_matches(&mut program);
+            if pruned_count > 0 {
+                // Count total matches for better logging
+                let match_count = neuroscript::optimizer::count_matches(&program);
+                println!(
+                    "Pruned {} dead arms from {} matches",
+                    pruned_count, match_count
+                );
+            }
+
             // Run codegen if requested
             if let Some(neuron_name) = codegen_neuron {
                 match neuroscript::generate_pytorch(&program, &neuron_name) {
@@ -118,7 +137,10 @@ fn main() -> miette::Result<()> {
                             fs::write(&output_path, python_code)
                                 .into_diagnostic()
                                 .wrap_err_with(|| format!("Failed to write to {}", output_path))?;
-                            println!("Generated PyTorch code for '{}' -> {}", neuron_name, output_path);
+                            println!(
+                                "Generated PyTorch code for '{}' -> {}",
+                                neuron_name, output_path
+                            );
                         } else {
                             // Write to stdout
                             println!("# Generated PyTorch code for '{}'", neuron_name);
