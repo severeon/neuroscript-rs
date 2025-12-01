@@ -56,7 +56,7 @@ fn main() -> miette::Result<()> {
         .wrap_err_with(|| format!("Failed to read {}", filename))?;
 
     match parse(&source) {
-        Ok(program) => {
+        Ok(mut program) => {
             println!("Parsed {} imports and {} neurons:\n", program.uses.len(), program.neurons.len());
 
             for use_stmt in &program.uses {
@@ -95,7 +95,7 @@ fn main() -> miette::Result<()> {
             // Run validation if requested
             if validate_flag {
                 println!("Validating program...");
-                match neuroscript::validate(&program) {
+                match neuroscript::validate(&mut program) {
                     Ok(()) => {
                         println!("✓ Program is valid!");
                     }
