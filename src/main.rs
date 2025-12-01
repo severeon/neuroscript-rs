@@ -122,6 +122,12 @@ fn main() -> miette::Result<()> {
                 }
             }
 
+            // Run pattern reordering optimization
+            let reordered_count = neuroscript::optimizer::reorder_match_arms(&mut program);
+            if reordered_count > 0 {
+                println!("Pattern reordering: optimized {} match expressions", reordered_count);
+            }
+
             // Run optimizer to prune dead match arms
             let pruned_count = neuroscript::optimizer::optimize_matches(&mut program, enable_dead_elim);
             if pruned_count > 0 {

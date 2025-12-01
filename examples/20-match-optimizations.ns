@@ -1,0 +1,67 @@
+# Pattern Matching Optimizations Demo
+#
+# This example demonstrates all three pattern matching optimizations:
+# 1. Pattern reordering (specific before general)
+# 2. Cached shape checks (identical conditions use else)
+# 3. Compile-time resolution (when shapes are known)
+
+use core,nn/*
+
+neuron AdaptiveLayerNorm:
+  # Demonstrates pattern reordering optimization
+  # The optimizer will reorder these from most to least specific
+  in: [*, *]
+  out: [*, *]
+
+  graph:
+    in -> match:
+      # Listed in correct specificity order to avoid shadowing
+      # Most specific first, catch-all last
+
+      [32, 768]: LayerNorm(768) -> out   # Most specific (two literals)
+      [*, 768]: LayerNorm(768) -> out    # Medium specificity (one literal)
+      [*, d]: LayerNorm(d) -> out        # Least specific (catch-all)
+
+neuron ConditionalProjection:
+  # Demonstrates cached shape checks optimization
+  # Multiple arms with same pattern but different guards
+  in: [*, d]
+  out: [*, 512]
+
+  graph:
+    in -> match:
+      # Same pattern [*, d] with different guards
+      # Shape check will be cached, only guard differs
+      [*, d] where d > 1024: Linear(d, 512) -> Linear(512, 512) -> out
+      [*, d] where d > 512: Linear(d, 512) -> out
+      [*, d]: Linear(d, 256) -> Linear(256, 512) -> out
+
+neuron OptimizedEncoder:
+  # Demonstrates all optimizations together
+  # Pattern reordering + cached checks + potential compile-time resolution
+  in: [batch, seq, *]
+  out: [batch, seq, 512]
+
+  graph:
+    in -> match:
+      # Listed in sub-optimal order - optimizer will reorder by specificity
+      # Optimizer will put literals first, then guards, then catch-all
+
+      [*, *, 768]: Linear(768, 512) -> out         # High specificity (literal)
+      [*, *, 256]: Linear(256, 512) -> out         # High specificity (literal)
+      [*, *, d] where d > 512: Linear(d, 512) -> out  # Medium (guard)
+      [*, *, d]: Linear(d, 512) -> out             # Low (catch-all)
+
+neuron StaticResolutionDemo:
+  # When this neuron is instantiated with known shapes,
+  # the match can be resolved at compile-time
+  in: [batch, 768]  # Known dimension: 768
+  out: [batch, 512]
+
+  graph:
+    # This match will be statically resolved to Linear(768, 512)
+    # No runtime shape check needed!
+    in -> match:
+      [*, 512]: Identity() -> Linear(512, 512) -> out
+      [*, 768]: Linear(768, 512) -> out  # This arm will be chosen at compile-time
+      [*, d]: Linear(d, 256) -> Linear(256, 512) -> out

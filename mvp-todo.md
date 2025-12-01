@@ -79,12 +79,12 @@
  
 ### 3.2 Pattern Matching Optimizations
 
-  - [ ] Generate direct path when all shapes known at compile-time
-  - [ ] Reorder patterns for efficient checking (most specific first)
-  - [ ] Cache pattern checks to avoid redundant computation
-  - [ ] Test optimization with various pattern combinations
+  - [x] Generate direct path when all shapes known at compile-time
+  - [x] Reorder patterns for efficient checking (most specific first)
+  - [x] Cache pattern checks to avoid redundant computation
+  - [x] Test optimization with various pattern combinations
 
-**Deliverable**: Match expressions work for both compile-time and runtime routing
+**Deliverable**: Match expressions work for both compile-time and runtime routing ✅
 
 ## MVP Phase 4: Stdlib Composites
 
