@@ -11,6 +11,7 @@ fn main() -> miette::Result<()> {
     let mut validate_flag = false;
     let mut codegen_neuron: Option<String> = None;
     let mut output_file: Option<String> = None;
+    let mut enable_dead_elim = true;
 
     let mut i = 1;
     while i < args.len() {
@@ -35,12 +36,16 @@ fn main() -> miette::Result<()> {
                 output_file = Some(args[i + 1].clone());
                 i += 2;
             }
+            "--no-dead-elim" => {
+                enable_dead_elim = false;
+                i += 1;
+            }
             arg if !arg.starts_with('-') => {
                 filename = Some(arg.to_string());
                 i += 1;
             }
             _ => {
-                eprintln!("Usage: neuroscript [--validate] [--codegen <neuron>] [--output <file>] <file.ns>");
+                eprintln!("Usage: neuroscript [--validate] [--codegen <neuron>] [--output <file>] [--no-dead-elim] <file.ns>");
                 std::process::exit(1);
             }
         }
@@ -118,14 +123,9 @@ fn main() -> miette::Result<()> {
             }
 
             // Run optimizer to prune dead match arms
-            let pruned_count = neuroscript::optimizer::optimize_matches(&mut program);
+            let pruned_count = neuroscript::optimizer::optimize_matches(&mut program, enable_dead_elim);
             if pruned_count > 0 {
-                // Count total matches for better logging
-                let match_count = neuroscript::optimizer::count_matches(&program);
-                println!(
-                    "Pruned {} dead arms from {} matches",
-                    pruned_count, match_count
-                );
+                println!("Dead branch elimination: pruned {} arms", pruned_count);
             }
 
             // Run codegen if requested
