@@ -20,15 +20,16 @@ pub mod codegen;
 pub mod interfaces;
 pub mod ir;
 pub mod lexer;
+pub mod optimizer;
 pub mod parser;
 pub mod shape;
 pub mod stdlib_registry;
 pub mod validator;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
-pub use interfaces::*;
-pub use interfaces::Parser;
 pub use codegen::generate_pytorch;
+pub use interfaces::Parser;
+pub use interfaces::*;
 // Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
 
@@ -52,7 +53,8 @@ pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
         Ok(()) => Ok(()),
         Err(shape_errors) => {
             // Convert shape errors to validation errors
-            let validation_errors = shape_errors.into_iter()
+            let validation_errors = shape_errors
+                .into_iter()
                 .map(|e| ValidationError::Custom(format!("Shape error: {}", e)))
                 .collect();
             Err(validation_errors)
