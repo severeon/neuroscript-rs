@@ -86,7 +86,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(
@@ -124,7 +124,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(
@@ -164,7 +164,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(
@@ -195,7 +195,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(
@@ -252,7 +252,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(
@@ -281,7 +281,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(e, ValidationError::PortMismatch { .. })));
@@ -305,7 +305,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(e, ValidationError::PortMismatch { .. })));
@@ -329,7 +329,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok());
     }
 
@@ -359,7 +359,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(e, ValidationError::CycleDetected { .. })));
@@ -401,7 +401,7 @@ mod tests {
         };
         program.neurons.insert("Composite".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| matches!(e, ValidationError::CycleDetected { .. })));
@@ -468,7 +468,7 @@ mod tests {
         };
         program.neurons.insert("Residual".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok(), "Valid residual pattern should not have cycles: {:?}", result);
     }
 
@@ -486,7 +486,7 @@ mod tests {
         };
         program.neurons.insert("Empty".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok());
     }
 
@@ -505,7 +505,7 @@ mod tests {
         };
         program.neurons.insert("Passthrough".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok());
     }
 
@@ -537,7 +537,7 @@ mod tests {
         };
         program.neurons.insert("Pipeline".to_string(), composite);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok());
     }
 
@@ -572,7 +572,7 @@ mod tests {
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_ok(), "Match with catch-all pattern should be valid");
     }
 
@@ -607,7 +607,7 @@ mod tests {
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
-        let result = Validator::validate(&program);
+        let result = Validator::validate(&mut program);
         assert!(result.is_err(), "Match without catch-all should fail");
         if let Err(errors) = result {
             assert!(errors.iter().any(|e| matches!(e, ValidationError::NonExhaustiveMatch { .. })));
@@ -616,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_match_pattern_shadowing() {
-        // Match with shadowed pattern should fail
+        // Match with shadowed pattern should NOT fail, but mark as unreachable
         let mut program = Program::new();
         let neuron = NeuronDef {
             name: "TestMatch".to_string(),
@@ -639,16 +639,29 @@ mod tests {
                             pipeline: vec![Endpoint::Ref(PortRef::new("out"))],
                             is_reachable: true,
                         },
+                        MatchArm {
+                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]),
+                            guard: None,
+                            pipeline: vec![Endpoint::Ref(PortRef::new("out"))],
+                            is_reachable: true,
+                        },
                     ],
                 }),
             }]),
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
-        let result = Validator::validate(&program);
-        assert!(result.is_err(), "Match with shadowed pattern should fail");
-        if let Err(errors) = result {
-            assert!(errors.iter().any(|e| matches!(e, ValidationError::UnreachableMatchArm { .. })));
+        let result = Validator::validate(&mut program);
+        assert!(result.is_ok(), "Match with shadowed pattern should be valid (warning only)");
+        
+        // Verify is_reachable
+        let neuron = program.neurons.get("TestMatch").unwrap();
+        if let NeuronBody::Graph(connections) = &neuron.body {
+            if let Endpoint::Match(match_expr) = &connections[0].destination {
+                assert!(match_expr.arms[0].is_reachable, "First arm should be reachable");
+                assert!(!match_expr.arms[1].is_reachable, "Second arm (specific) should be unreachable (shadowed by first)");
+                assert!(!match_expr.arms[2].is_reachable, "Third arm (catch-all) should be unreachable (shadowed by first)");
+            }
         }
     }
 

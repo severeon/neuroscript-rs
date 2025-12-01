@@ -42,7 +42,7 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 /// 2. Connection endpoints match (tuple arity, port names, shapes)
 /// 3. No cycles in the dependency graph
 /// 4. Shape compatibility for all connections
-pub fn validate(program: &Program) -> Result<(), Vec<ValidationError>> {
+pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // First run basic validation
     validator::Validator::validate(program)?;
 

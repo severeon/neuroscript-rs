@@ -33,17 +33,32 @@ pub struct Validator;
 
 impl Validator {
     /// Validate an entire program
-    pub fn validate(program: &Program) -> Result<(), Vec<ValidationError>> {
+    /// Validate an entire program
+    pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
 
-        // Check each neuron
-        for (_neuron_name, neuron) in &program.neurons {
-            // Validate connections within this neuron if it's composite
-            if let NeuronBody::Graph(connections) = &neuron.body {
-                errors.extend(Self::validate_neuron_graph(
-                    neuron, connections, program
-                ));
+        // Check each neuron (read-only pass for structure)
+        // We use a scope to limit the borrow of program
+        {
+            for (_neuron_name, neuron) in &program.neurons {
+                // Validate connections within this neuron if it's composite
+                if let NeuronBody::Graph(connections) = &neuron.body {
+                    errors.extend(Self::validate_neuron_graph(
+                        neuron, connections, program
+                    ));
+                }
             }
+        }
+
+        // Check match expressions (mutable pass for reachability)
+        for (neuron_name, neuron) in &mut program.neurons {
+             if let NeuronBody::Graph(connections) = &mut neuron.body {
+                 for connection in connections {
+                     if let Endpoint::Match(match_expr) = &mut connection.destination {
+                         errors.extend(Self::validate_match_expression(match_expr, neuron_name));
+                     }
+                 }
+             }
         }
 
         if errors.is_empty() {
@@ -70,10 +85,10 @@ impl Validator {
             errors.extend(Self::check_neurons_exist(&connection.source, &neuron.name, program));
             errors.extend(Self::check_neurons_exist(&connection.destination, &neuron.name, program));
 
-            // Validate match expressions
-            if let Endpoint::Match(match_expr) = &connection.destination {
-                errors.extend(Self::validate_match_expression(match_expr, &neuron.name));
-            }
+            // Validate match expressions - moved to separate pass
+            // if let Endpoint::Match(match_expr) = &connection.destination {
+            //     errors.extend(Self::validate_match_expression(match_expr, &neuron.name));
+            // }
 
             // Resolve source and destination endpoints
             let source_resolution = Self::resolve_endpoint(
@@ -787,7 +802,9 @@ impl Validator {
     }
 
     /// Validate a match expression for exhaustiveness and pattern shadowing
-    fn validate_match_expression(match_expr: &MatchExpr, context_neuron: &str) -> Vec<ValidationError> {
+    /// Validate a match expression for exhaustiveness and pattern shadowing
+    /// Marks unreachable arms by setting is_reachable = false
+    fn validate_match_expression(match_expr: &mut MatchExpr, context_neuron: &str) -> Vec<ValidationError> {
         let mut errors = Vec::new();
 
         // Check exhaustiveness: last pattern should be a catch-all
@@ -803,20 +820,24 @@ impl Validator {
             }
         }
 
-        // Check for pattern shadowing
+        // Check for pattern shadowing and mark unreachable arms
         for i in 0..match_expr.arms.len() {
             for j in (i + 1)..match_expr.arms.len() {
-                let arm_i = &match_expr.arms[i];
-                let arm_j = &match_expr.arms[j];
-
                 // Check if arm i subsumes arm j (making j unreachable)
                 // A pattern with a guard does NOT subsume any pattern (guard can fail)
-                if arm_i.guard.is_none() && Self::pattern_subsumes(&arm_i.pattern, &arm_j.pattern) {
-                    errors.push(ValidationError::UnreachableMatchArm {
-                        arm_index: j,
-                        shadowed_by: i,
-                        context: format!("{}: pattern {} is unreachable", context_neuron, arm_j.pattern),
-                    });
+                // We need to access arms carefully to avoid multiple mutable borrows
+                let subsumes = {
+                    let arm_i = &match_expr.arms[i];
+                    let arm_j = &match_expr.arms[j];
+                    arm_i.guard.is_none() && Self::pattern_subsumes(&arm_i.pattern, &arm_j.pattern)
+                };
+
+                if subsumes {
+                    // Mark as unreachable
+                    match_expr.arms[j].is_reachable = false;
+                    
+                    // We don't error on shadowing anymore, just mark it
+                    // errors.push(ValidationError::UnreachableMatchArm { ... });
                 }
             }
         }
