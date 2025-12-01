@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-index": {
+      "command": "uvx",
+      "args": ["code-index-mcp", "--project-path", "/Users/tquick/projects/neuroscript-rs"]
+    }
+  }
+}
