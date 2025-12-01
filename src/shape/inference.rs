@@ -14,7 +14,7 @@ impl InferenceContext {
         }
     }
 
-    fn evaluate_expr(&self, expr: &DimExpr) -> Option<usize> {
+    pub fn evaluate_expr(&self, expr: &DimExpr) -> Option<usize> {
         let left = self.resolve_dim(&expr.left)?;
         let right = self.resolve_dim(&expr.right)?;
 
