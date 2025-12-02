@@ -35,7 +35,7 @@ neuron GatedFFN(dim, expansion):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> (gate_path, value_path)
+        in -> Fork() -> (gate_path, value_path)
 
         # Gate path with sigmoid
         gate_path ->
@@ -49,8 +49,88 @@ neuron GatedFFN(dim, expansion):
             GELU()
             value_signal
 
-        # Element-wise multiply (to be implemented)
-        # (gate_signal, value_signal) -> Multiply() -> activated
+        # Element-wise multiply (gating)
+        (gate_signal, value_signal) -> Multiply() -> activated
 
         # Project back down
-        # activated -> Linear(expansion, dim) -> out
+        activated -> Linear(expansion, dim) -> out
+
+
+# SwiGLU - Gated Linear Unit with SiLU activation
+# Used in LLaMA, PaLM, and other state-of-the-art models
+# More efficient than standard GLU variants
+neuron SwiGLU(dim, expansion):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+
+        # Gate path with SiLU (Swish) activation
+        gate_path ->
+            Linear(dim, expansion)
+            SiLU()
+            gate_signal
+
+        # Value path (no activation before gating)
+        value_path ->
+            Linear(dim, expansion)
+            value_signal
+
+        # Element-wise multiply (gating)
+        (gate_signal, value_signal) -> Multiply() -> activated
+
+        # Project back down
+        activated -> Linear(expansion, dim) -> out
+
+
+# GeGLU - Gated Linear Unit with GELU activation
+# Used in some Vision Transformers and language models
+# Similar to SwiGLU but with GELU gating
+neuron GeGLU(dim, expansion):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+
+        # Gate path with GELU activation
+        gate_path ->
+            Linear(dim, expansion)
+            GELU()
+            gate_signal
+
+        # Value path (no activation before gating)
+        value_path ->
+            Linear(dim, expansion)
+            value_signal
+
+        # Element-wise multiply (gating)
+        (gate_signal, value_signal) -> Multiply() -> activated
+
+        # Project back down
+        activated -> Linear(expansion, dim) -> out
+
+
+# ReGLU - Gated Linear Unit with ReLU activation
+# Simpler gated variant, computationally efficient
+neuron ReGLU(dim, expansion):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+
+        # Gate path with ReLU activation
+        gate_path ->
+            Linear(dim, expansion)
+            ReLU()
+            gate_signal
+
+        # Value path (no activation before gating)
+        value_path ->
+            Linear(dim, expansion)
+            value_signal
+
+        # Element-wise multiply (gating)
+        (gate_signal, value_signal) -> Multiply() -> activated
+
+        # Project back down
+        activated -> Linear(expansion, dim) -> out

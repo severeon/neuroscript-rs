@@ -260,6 +260,15 @@ impl StdlibRegistry {
         );
 
         self.register(
+            "Multiply",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Multiply",
+                "Element-wise multiplication (for gating mechanisms)",
+            ),
+        );
+
+        self.register(
             "Concat",
             ImplRef::with_desc(
                 "neuroscript_runtime.primitives.structural",
@@ -382,7 +391,7 @@ mod tests {
         assert!(!registry.contains("NonExistent"));
 
         // Check we have the expected number of primitives
-        assert_eq!(registry.len(), 25); // 25 primitives registered (added Reshape, Transpose, MultiHeadSelfAttention)
+        assert_eq!(registry.len(), 26); // 26 primitives registered (added Reshape, Transpose, MultiHeadSelfAttention, Multiply)
 
         // Check lookup works
         let linear = registry.lookup("Linear").unwrap();

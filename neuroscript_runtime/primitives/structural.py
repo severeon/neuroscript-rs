@@ -165,6 +165,69 @@ class Add(nn.Module):
         return result
 
 
+class Multiply(nn.Module):
+    """
+    Multiply primitive: Element-wise multiplication of two tensors.
+
+    This is a multi-input neuron that performs element-wise multiplication (Hadamard product).
+    Primary use case is gating mechanisms where one tensor modulates another,
+    such as in GLU (Gated Linear Units) and attention mechanisms.
+
+    NeuroScript signature:
+        neuron Multiply:
+            in left: [*shape]
+            in right: [*shape]
+            out: [*shape]
+            impl: neuroscript_runtime.primitives.Multiply
+
+    Args:
+        None
+
+    Shape:
+        - Input: tuple([*shape], [*shape]) where both tensors must be broadcastable
+        - Output: [*shape] (result of element-wise multiplication)
+
+    Notes:
+        The tensors must have compatible shapes for broadcasting according to
+        PyTorch broadcasting rules. Typically used with tensors of identical shape.
+
+    Example:
+        >>> multiply = Multiply()
+        >>> gate = torch.sigmoid(torch.randn(32, 512))
+        >>> value = torch.randn(32, 512)
+        >>> result = multiply((gate, value))
+        >>> assert result.shape == (32, 512)
+        >>> assert torch.allclose(result, gate * value)
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """
+        Multiply two tensors element-wise.
+
+        Args:
+            inputs: Tuple of (left, right) tensors to multiply
+
+        Returns:
+            Element-wise product of the two input tensors
+
+        Raises:
+            ValueError: If inputs cannot be broadcast together
+        """
+        left, right = inputs
+
+        try:
+            result = left * right
+        except RuntimeError as e:
+            raise ValueError(
+                f"Cannot multiply tensors with shapes {left.shape} and {right.shape}: {e}"
+            )
+
+        return result
+
+
 class Concat(nn.Module):
     """
     Concat primitive: Concatenate tensors along a specified dimension.
@@ -364,4 +427,4 @@ class Transpose(nn.Module):
         return result
 
 
-__all__ = ["Fork", "Fork3", "Add", "Concat", "Reshape", "Transpose"]
+__all__ = ["Fork", "Fork3", "Add", "Multiply", "Concat", "Reshape", "Transpose"]

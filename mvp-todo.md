@@ -91,8 +91,8 @@
 ### 4.1 Complete Standard Library Definitions
 
   - [x] Complete TransformerBlock.ns with full residual connections
-  - [ ] Implement MultiHeadAttention composite (not primitive)
-  - [ ] Build FFN variants
+  - [x] Implement MultiHeadAttention composite (not primitive)
+  - [x] Build FFN variants
   - [ ] Create TransformerStack composite
   - [ ] Validate all composites with shape inference
   - [ ] Test composition correctness
