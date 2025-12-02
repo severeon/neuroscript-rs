@@ -1,0 +1,18 @@
+# Default exclusions for project snapshot tool
+node_modules/
+dist/
+.history/
+.git/
+.gitignore
+.snapshots/
+target/
+.mypy_cache/
+project-snapshot.json
+.env
+*.log
+.DS_Store
+.pytest_cache/
+__scratch/
+__pycache__/
+.claude/
+.agent/
