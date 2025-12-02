@@ -1,0 +1,126 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron ComplexComposite(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> LayerNorm#13(dim)
+    LayerNorm#13(dim) -> normalized
+    normalized -> Fork#14()
+    Fork#14() -> (path1, path2)
+    path1 -> Linear#15(dim, (dim * 2))
+    Linear#15(dim, (dim * 2)) -> expanded
+    expanded -> GELU#16()
+    GELU#16() -> activated
+    activated -> Linear#17((dim * 2), dim)
+    Linear#17((dim * 2), dim) -> contracted
+    (contracted, path2) -> Add#18()
+    Add#18() -> summed
+    summed -> Dropout#19()
+    Dropout#19() -> out
+
+neuron DeepNetwork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> ResidualBlock#20(dim)
+    ResidualBlock#20(dim) -> ResidualBlock#21(dim)
+    ResidualBlock#21(dim) -> ResidualBlock#22(dim)
+    ResidualBlock#22(dim) -> out
+
+neuron Dropout(p = 0.1):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Dropout
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron ParameterizedMLP(dim, mult = 4, dropout = 0.1):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#3(dim, (dim * mult))
+    Linear#3(dim, (dim * mult)) -> GELU#4()
+    GELU#4() -> Dropout#5(p=dropout)
+    Dropout#5(p=dropout) -> Linear#6((dim * mult), dim)
+    Linear#6((dim * mult), dim) -> out
+
+neuron ResidualBlock(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#7()
+    Fork#7() -> (main, skip)
+    main -> LayerNorm#8(dim)
+    LayerNorm#8(dim) -> Linear#9(dim, (dim * 4))
+    Linear#9(dim, (dim * 4)) -> GELU#10()
+    GELU#10() -> Linear#11((dim * 4), dim)
+    Linear#11((dim * 4), dim) -> processed
+    (processed, skip) -> Add#12()
+    Add#12() -> out
+
+neuron SimpleMLP(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> GELU#1()
+    GELU#1() -> Linear#2((dim * 4), dim)
+    Linear#2((dim * 4), dim) -> out

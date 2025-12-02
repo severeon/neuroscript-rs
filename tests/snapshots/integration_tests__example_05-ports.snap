@@ -1,0 +1,68 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ComplexPorts(dim):
+  inputs:
+    query: [batch, seq, dim]
+    key: [batch, seq, dim]
+    value: [batch, seq, dim]
+  outputs:
+    attention: [batch, seq, dim]
+  impl:
+    Source: core,nn/Attention
+
+neuron ManyPorts:
+  inputs:
+    x: [*, 512]
+    y: [*, 512]
+    z: [*, 512]
+  outputs:
+    sum: [*, 512]
+    product: [*, 512]
+  impl:
+    Source: core,custom/ManyOps
+
+neuron MultipleInputs:
+  inputs:
+    left: [*, 512]
+    right: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,builtin/Add
+
+neuron MultipleOutputs:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron NamedInput:
+  inputs:
+    data: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,nn/Identity
+
+neuron NamedOutput:
+  inputs:
+    default: [*, 512]
+  outputs:
+    result: [*, 512]
+  impl:
+    Source: core,nn/Identity
+
+neuron UnnamedPorts:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,nn/Identity

@@ -1,0 +1,11 @@
+---
+source: tests/integration_tests.rs
+expression: error_text
+---
+MissingNeuron { name: "MissingNeuron", context: "Test" }
+
+UnknownNode { node: "in", context: "Test" }
+
+MissingNeuron { name: "MissingNeuron", context: "Test" }
+
+MissingNeuron { name: "MissingNeuron", context: "Test" }

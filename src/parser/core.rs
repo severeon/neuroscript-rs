@@ -71,6 +71,13 @@ impl Parser {
         kinds.iter().any(|k| self.at(k))
     }
 
+    fn peek_at_offset(&self, offset: usize, kind: &TokenKind) -> bool {
+        self.tokens
+            .get(self.pos + offset)
+            .map(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
+            .unwrap_or(false)
+    }
+
     fn advance(&mut self) -> &Token {
         let tok = &self.tokens[self.pos];
         if self.pos < self.tokens.len() - 1 {
@@ -95,6 +102,81 @@ impl Parser {
         while self.at(&TokenKind::Newline) {
             self.advance();
         }
+    }
+
+    // === Section parsing infrastructure ===
+
+    /// Generic section parser that handles both inline and indented styles.
+    ///
+    /// Inline style:   `keyword: item`
+    /// Indented style: `keyword:\n  item1\n  item2`
+    ///
+    /// Returns either a single item (inline) or multiple items (indented).
+    fn parse_section<F, T>(
+        &mut self,
+        keyword: &TokenKind,
+        mut parse_item: F,
+    ) -> Result<Vec<T>, ParseError>
+    where
+        F: FnMut(&mut Self) -> Result<T, ParseError>,
+    {
+        self.expect(keyword)?;
+        self.expect(&TokenKind::Colon)?;
+
+        // Check for inline vs indented style
+        if self.at(&TokenKind::Newline) {
+            self.advance();
+
+            // Empty section (no items)
+            if !self.at(&TokenKind::Indent) {
+                return Ok(vec![]);
+            }
+
+            // Indented style: parse multiple items
+            self.expect(&TokenKind::Indent)?;
+            let mut items = vec![];
+
+            while !self.at(&TokenKind::Dedent) && !self.at(&TokenKind::Eof) {
+                self.skip_newlines();
+                if self.at(&TokenKind::Dedent) {
+                    break;
+                }
+                items.push(parse_item(self)?);
+            }
+
+            if self.at(&TokenKind::Dedent) {
+                self.advance();
+            }
+
+            Ok(items)
+        } else {
+            // Inline style: parse single item
+            let item = parse_item(self)?;
+            self.expect(&TokenKind::Newline)?;
+            Ok(vec![item])
+        }
+    }
+
+    /// Parse a section that should contain exactly one item.
+    /// Used for sections like 'impl' where only one value is expected.
+    fn parse_single_section<F, T>(
+        &mut self,
+        keyword: &TokenKind,
+        parse_item: F,
+    ) -> Result<T, ParseError>
+    where
+        F: FnMut(&mut Self) -> Result<T, ParseError>,
+    {
+        let items = self.parse_section(keyword, parse_item)?;
+
+        if items.len() != 1 {
+            return Err(ParseError::Unexpected {
+                found: format!("{} items in section that expects exactly one", items.len()),
+                span: self.peek().span.into(),
+            });
+        }
+
+        Ok(items.into_iter().next().unwrap())
     }
 
     // === Grammar rules ===
@@ -190,13 +272,36 @@ impl Parser {
 
             match self.peek_kind() {
                 TokenKind::In => {
-                    inputs.push(self.port(true)?);
+                    // Support both old syntax (in name: [shape]) and new syntax (in: ...)
+                    if self.peek_at_offset(1, &TokenKind::Colon) {
+                        // New section-based syntax: in: ...
+                        let ports = self.parse_section(&TokenKind::In, |p| p.port_item())?;
+                        inputs.extend(ports);
+                    } else {
+                        // Old syntax: in name: [shape] (single port, no colon after keyword)
+                        self.advance(); // consume 'in'
+                        let port = self.port_item()?;
+                        self.expect(&TokenKind::Newline)?;
+                        inputs.push(port);
+                    }
                 }
                 TokenKind::Out => {
-                    outputs.push(self.port(false)?);
+                    // Support both old syntax (out name: [shape]) and new syntax (out: ...)
+                    if self.peek_at_offset(1, &TokenKind::Colon) {
+                        // New section-based syntax: out: ...
+                        let ports = self.parse_section(&TokenKind::Out, |p| p.port_item())?;
+                        outputs.extend(ports);
+                    } else {
+                        // Old syntax: out name: [shape] (single port, no colon after keyword)
+                        self.advance(); // consume 'out'
+                        let port = self.port_item()?;
+                        self.expect(&TokenKind::Newline)?;
+                        outputs.push(port);
+                    }
                 }
                 TokenKind::Impl => {
-                    body = Some(NeuronBody::Primitive(self.impl_body()?));
+                    let impl_ref = self.parse_single_section(&TokenKind::Impl, |p| p.impl_item())?;
+                    body = Some(NeuronBody::Primitive(impl_ref));
                 }
                 TokenKind::Graph => {
                     body = Some(NeuronBody::Graph(self.graph_body()?));
@@ -259,25 +364,21 @@ impl Parser {
         Ok(params)
     }
 
-    // in [name]: shape
-    fn port(&mut self, is_input: bool) -> Result<Port, ParseError> {
-        if is_input {
-            self.expect(&TokenKind::In)?;
-        } else {
-            self.expect(&TokenKind::Out)?;
-        }
-
-        // Optional port name
+    // Parse port content: [shape] or name: [shape]
+    // Used by parse_section for both inline and indented styles
+    // Note: The keyword and its colon are already consumed by parse_section
+    // Note: The newline is handled by parse_section, not here
+    fn port_item(&mut self) -> Result<Port, ParseError> {
+        // Check if we have a named port (name: [shape]) or unnamed ([shape])
         let name = if self.at(&TokenKind::Ident("".into())) && self.peek_at_colon() {
             let n = self.ident()?;
+            self.expect(&TokenKind::Colon)?;
             n
         } else {
             "default".to_string()
         };
 
-        self.expect(&TokenKind::Colon)?;
         let shape = self.shape()?;
-        self.expect(&TokenKind::Newline)?;
 
         Ok(Port { name, shape })
     }
@@ -358,17 +459,16 @@ impl Parser {
         }
     }
 
-    // impl: source,path
-    fn impl_body(&mut self) -> Result<ImplRef, ParseError> {
-        self.expect(&TokenKind::Impl)?;
-        self.expect(&TokenKind::Colon)?;
-
+    // Parse impl content: source,path or external(...)
+    // Used by parse_section for both inline and indented styles
+    // Note: The keyword and its colon are already consumed by parse_section
+    // Note: The newline is handled by parse_section, not here
+    fn impl_item(&mut self) -> Result<ImplRef, ParseError> {
         if self.at(&TokenKind::External) {
             self.advance();
             self.expect(&TokenKind::LParen)?;
             let (_, kwargs) = self.call_args()?;
             self.expect(&TokenKind::RParen)?;
-            self.expect(&TokenKind::Newline)?;
             Ok(ImplRef::External { kwargs })
         } else {
             let source = self.ident()?;
@@ -390,7 +490,6 @@ impl Parser {
                 }
             }
 
-            self.expect(&TokenKind::Newline)?;
             Ok(ImplRef::Source {
                 source,
                 path: path_parts.join("/"),
@@ -398,30 +497,15 @@ impl Parser {
         }
     }
 
-    // graph: connections...
+    // Parse graph content: one or more connections
+    // Used by parse_section for both inline and indented styles
     fn graph_body(&mut self) -> Result<Vec<Connection>, ParseError> {
-        self.expect(&TokenKind::Graph)?;
-        self.expect(&TokenKind::Colon)?;
-        self.expect(&TokenKind::Newline)?;
-        self.expect(&TokenKind::Indent)?;
+        // Use parse_section with connection as the item parser
+        // This returns Vec<Vec<Connection>> since each connection is a pipeline
+        let connection_groups = self.parse_section(&TokenKind::Graph, |p| p.connection())?;
 
-        let mut connections = vec![];
-
-        while !self.at(&TokenKind::Dedent) && !self.at(&TokenKind::Eof) {
-            self.skip_newlines();
-            if self.at(&TokenKind::Dedent) {
-                break;
-            }
-
-            let conns = self.connection()?;
-            connections.extend(conns);
-        }
-
-        if self.at(&TokenKind::Dedent) {
-            self.advance();
-        }
-
-        Ok(connections)
+        // Flatten the nested vectors
+        Ok(connection_groups.into_iter().flatten().collect())
     }
 
     // endpoint -> endpoint [-> endpoint...]

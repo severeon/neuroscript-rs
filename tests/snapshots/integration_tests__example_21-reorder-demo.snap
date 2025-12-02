@@ -1,0 +1,19 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron ReorderDemo:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, *]
+  graph:
+    in -> match:
+      [32, 768]: GELU#0() -> out
+      [*, 512]: GELU#1() -> out
+      [*, d]: GELU#2() -> out

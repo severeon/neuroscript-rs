@@ -1,0 +1,85 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron IndentedPipeline(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> LayerNorm#2(dim)
+    LayerNorm#2(dim) -> GELU#3()
+    GELU#3() -> out
+
+neuron InlinePipeline(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> GELU#1()
+    GELU#1() -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron LongPipeline(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#4(dim, (dim * 4))
+    Linear#4(dim, (dim * 4)) -> GELU#5()
+    GELU#5() -> Linear#6((dim * 4), (dim * 2))
+    Linear#6((dim * 4), (dim * 2)) -> GELU#7()
+    GELU#7() -> Linear#8((dim * 2), dim)
+    Linear#8((dim * 2), dim) -> out
+
+neuron MixedStyle(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#11(dim, (dim * 2))
+    Linear#11(dim, (dim * 2)) -> expanded
+    expanded -> GELU#12()
+    GELU#12() -> Linear#13((dim * 2), dim)
+    Linear#13((dim * 2), dim) -> out
+
+neuron MultipleConnections(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> intermediate
+    intermediate -> GELU#10()
+    GELU#10() -> out

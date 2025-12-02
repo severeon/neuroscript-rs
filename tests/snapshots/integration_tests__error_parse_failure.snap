@@ -1,0 +1,5 @@
+---
+source: tests/integration_tests.rs
+expression: error_text
+---
+Expected { expected: "Colon", found: "Newline", span: SourceSpan { offset: SourceOffset(13), length: 0 } }

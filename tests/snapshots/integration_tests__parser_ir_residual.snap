@@ -1,0 +1,66 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MLP(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> GELU#1()
+    GELU#1() -> Linear#2((dim * 4), dim)
+    Linear#2((dim * 4), dim) -> out
+
+neuron Residual(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#3()
+    Fork#3() -> (main, skip)
+    main -> MLP#4(dim)
+    MLP#4(dim) -> processed
+    (processed, skip) -> Add#5()
+    Add#5() -> out

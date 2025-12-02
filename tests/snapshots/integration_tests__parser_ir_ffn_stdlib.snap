@@ -1,0 +1,100 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron FFN(dim, expansion):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, expansion)
+    Linear#0(dim, expansion) -> GELU#1()
+    GELU#1() -> Linear#2(expansion, dim)
+    Linear#2(expansion, dim) -> out
+
+neuron FFNWithHidden(in_dim, hidden_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  graph:
+    in -> Linear#3(in_dim, hidden_dim)
+    Linear#3(in_dim, hidden_dim) -> GELU#4()
+    GELU#4() -> Linear#5(hidden_dim, out_dim)
+    Linear#5(hidden_dim, out_dim) -> out
+
+neuron GatedFFN(dim, expansion):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#6()
+    Fork#6() -> (gate_path, value_path)
+    gate_path -> Linear#7(dim, expansion)
+    Linear#7(dim, expansion) -> Sigmoid#8()
+    Sigmoid#8() -> gate_signal
+    value_path -> Linear#9(dim, expansion)
+    Linear#9(dim, expansion) -> GELU#10()
+    GELU#10() -> value_signal
+    (gate_signal, value_signal) -> Multiply#11()
+    Multiply#11() -> activated
+    activated -> Linear#12(expansion, dim)
+    Linear#12(expansion, dim) -> out
+
+neuron GeGLU(dim, expansion):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#19()
+    Fork#19() -> (gate_path, value_path)
+    gate_path -> Linear#20(dim, expansion)
+    Linear#20(dim, expansion) -> GELU#21()
+    GELU#21() -> gate_signal
+    value_path -> Linear#22(dim, expansion)
+    Linear#22(dim, expansion) -> value_signal
+    (gate_signal, value_signal) -> Multiply#23()
+    Multiply#23() -> activated
+    activated -> Linear#24(expansion, dim)
+    Linear#24(expansion, dim) -> out
+
+neuron ReGLU(dim, expansion):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#25()
+    Fork#25() -> (gate_path, value_path)
+    gate_path -> Linear#26(dim, expansion)
+    Linear#26(dim, expansion) -> ReLU#27()
+    ReLU#27() -> gate_signal
+    value_path -> Linear#28(dim, expansion)
+    Linear#28(dim, expansion) -> value_signal
+    (gate_signal, value_signal) -> Multiply#29()
+    Multiply#29() -> activated
+    activated -> Linear#30(expansion, dim)
+    Linear#30(expansion, dim) -> out
+
+neuron SwiGLU(dim, expansion):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#13()
+    Fork#13() -> (gate_path, value_path)
+    gate_path -> Linear#14(dim, expansion)
+    Linear#14(dim, expansion) -> SiLU#15()
+    SiLU#15() -> gate_signal
+    value_path -> Linear#16(dim, expansion)
+    Linear#16(dim, expansion) -> value_signal
+    (gate_signal, value_signal) -> Multiply#17()
+    Multiply#17() -> activated
+    activated -> Linear#18(expansion, dim)
+    Linear#18(expansion, dim) -> out

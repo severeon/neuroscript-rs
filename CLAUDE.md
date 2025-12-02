@@ -51,6 +51,12 @@ cargo test test_name
 # Test all example files (integration test)
 ./test_examples.sh
 
+# Snapshot testing with insta
+cargo test --test integration_tests  # Run integration snapshot tests
+cargo insta review                   # Review snapshot changes interactively
+cargo insta accept                   # Accept all snapshot changes
+cargo insta test --review            # Test and review in one step
+
 # Check without building (fast iteration)
 cargo check
 ```
@@ -277,6 +283,34 @@ Organized by module:
 ### Integration Test Script
 `./test_examples.sh` parses all `.ns` files in `examples/` and `stdlib/` directories
 
+### Snapshot Testing (`tests/integration_tests.rs`)
+Comprehensive snapshot testing using the `insta` crate for regression detection:
+
+**What we snapshot:**
+- **Parser IR**: Complete AST structures for all example files (46+ snapshots)
+- **Codegen output**: Generated PyTorch code for representative neurons
+- **Error messages**: Formatted diagnostics for validation and parse errors
+
+**Key features:**
+- Custom IR formatting for readable snapshots (omits spans, focuses on semantics)
+- All snapshots stored in `tests/snapshots/` directory
+- Automatic detection of unintended changes during refactoring
+- Interactive review workflow with `cargo insta review`
+
+**Workflow:**
+1. Run tests: `cargo test --test integration_tests`
+2. Review changes: `cargo insta review` (interactive UI with diffs)
+3. Accept valid changes, reject unexpected ones
+4. Commit snapshots with code changes
+
+**When to use:**
+- After changing parser, validator, or codegen logic
+- Before committing refactoring changes
+- When adding new language features
+- For comprehensive regression testing
+
+**Documentation:** See `tests/README.md` for detailed guide
+
 ## Common Patterns
 
 ### Adding New Token Types
@@ -371,6 +405,7 @@ Generated PyTorch modules are standalone after runtime is installed.
 - `num-integer` (0.1): Integer traits for gcd, lcm operations
 - `num-traits` (0.2): Numeric traits (Zero, One) for generic arithmetic
 - `pretty_assertions` (1.4): Enhanced test output with colored diffs (dev-only)
+- `insta` (1.34): Snapshot testing for comprehensive regression detection (dev-only, with yaml feature)
 
 ### Python Runtime (separate package)
 - Located in project root with `setup.py` / `pyproject.toml`

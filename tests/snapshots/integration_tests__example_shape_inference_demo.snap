@@ -1,0 +1,67 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron DualPath(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 4)]
+  graph:
+    in -> SplitProject#5(dim)
+    SplitProject#5(dim) -> (path_a, path_b)
+    path_a -> Linear#6((dim * 2), (dim * 4))
+    Linear#6((dim * 2), (dim * 4)) -> out_a
+    path_b -> Linear#7((dim * 2), (dim * 4))
+    Linear#7((dim * 2), (dim * 4)) -> out_b
+    (out_a, out_b) -> Add#8()
+    Add#8() -> out
+
+neuron ExpandContract(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#3(dim, (dim * 4))
+    Linear#3(dim, (dim * 4)) -> expanded
+    expanded -> Linear#4((dim * 4), dim)
+    Linear#4((dim * 4), dim) -> out
+
+neuron FixedFFN:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 2048]
+  graph:
+    in -> LinearProjection#1(512)
+    LinearProjection#1(512) -> out
+
+neuron LinearProjection(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 4)]
+  graph:
+    in -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> out
+
+neuron MultiDimNeuron(batch, seq, dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, (dim * 4)]
+  graph:
+    in -> Linear#2(dim, (dim * 4))
+    Linear#2(dim, (dim * 4)) -> out
+
+neuron SplitProject(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    a: [*, (dim * 2)]
+    b: [*, (dim * 2)]
+  impl:
+    Source: core,nn/Identity

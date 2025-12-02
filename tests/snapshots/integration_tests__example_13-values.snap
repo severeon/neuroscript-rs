@@ -1,0 +1,85 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BooleanValues(enabled = true, debug = false):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,custom/Op
+
+neuron CustomOp(size, rate, count, name, enabled):
+  inputs:
+    default: [*, size]
+  outputs:
+    default: [*, size]
+  impl:
+    Source: core,custom/Op
+
+neuron FloatValues(rate = 0.1, scale = 1.5, temp = 2.7):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,custom/Op
+
+neuron IntegerValues:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 256]
+  impl:
+    Source: core,nn/Linear
+
+neuron MixedValues(size = 512, rate = 0.1, count = 100, name = "default", enabled = true, offset = (0 - 10), scale = (0 - 0.5)):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, size]
+  impl:
+    Source: core,custom/Op
+
+neuron NameReferences(dim, hidden, dropout_rate):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, hidden]
+  impl:
+    Source: core,custom/Op
+
+neuron NegativeFloats(beta = (0 - 0.5), gamma = (0 - 1.2)):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,custom/Op
+
+neuron NegativeIntegers(offset = (0 - 42)):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,nn/Linear
+
+neuron SpecialNumbers(zero = 0, one = 1, minus_one = (0 - 1)):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,custom/Op
+
+neuron StringValues(model = "gpt-4", mode = "inference"):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    External with kwargs: model=model, mode=mode

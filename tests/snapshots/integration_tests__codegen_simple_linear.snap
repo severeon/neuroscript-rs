@@ -1,0 +1,16 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.linear import Linear
+
+class SimpleLinear(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_0 = Linear(512, 256)
+
+    def forward(self, x):
+        x0 = self.linear_0(x)
+        return x0

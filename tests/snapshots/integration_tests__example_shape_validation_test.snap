@@ -1,0 +1,130 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron Identity:
+  inputs:
+    default: [*any]
+  outputs:
+    default: [*any]
+  impl:
+    Source: core,nn/Identity
+
+neuron LayerNorm(normalized_shape):
+  inputs:
+    default: [*batch, normalized_shape]
+  outputs:
+    default: [*batch, normalized_shape]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron TestCompatible(dim):
+  inputs:
+    input: [*, dim]
+  outputs:
+    output: [*, dim]
+  graph:
+    input -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> output
+
+neuron TestDimUnification(d):
+  inputs:
+    x: [*, d]
+    y: [*, d]
+  outputs:
+    result: [*, d]
+  graph:
+    (x, y) -> Add#5()
+    Add#5() -> temp
+    temp -> result
+
+neuron TestMismatch:
+  inputs:
+    input: [*, 512]
+  outputs:
+    output: [*, 256]
+  graph:
+    input -> Linear#6(512, 128)
+    Linear#6(512, 128) -> output
+
+neuron TestNamedDims(batch, seq, dim):
+  inputs:
+    input: [batch, seq, dim]
+  outputs:
+    output: [batch, seq, dim]
+  graph:
+    input -> LayerNorm#8(dim)
+    LayerNorm#8(dim) -> temp
+    temp -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> output
+
+neuron TestRankMismatch:
+  inputs:
+    input: [*, 512]
+  outputs:
+    output: [*, 256, 256]
+  graph:
+    input -> Linear#7(512, 256)
+    Linear#7(512, 256) -> output
+
+neuron TestTupleCorrect:
+  inputs:
+    input: [*, 512]
+  outputs:
+    left: [*, 256]
+    right: [*, 256]
+  graph:
+    input -> Fork#2()
+    Fork#2() -> (a, b)
+    a -> Linear#3(512, 256)
+    Linear#3(512, 256) -> left
+    b -> Linear#4(512, 256)
+    Linear#4(512, 256) -> right
+
+neuron TestWildcard:
+  inputs:
+    input: [*, *]
+  outputs:
+    output: [*, *]
+  graph:
+    input -> Identity#1()
+    Identity#1() -> output

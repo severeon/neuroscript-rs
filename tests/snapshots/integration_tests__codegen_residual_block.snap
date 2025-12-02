@@ -1,0 +1,23 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.structural import Add
+from neuroscript_runtime.primitives.structural import Fork
+
+class Residual(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+        self.add_2 = Add()
+        self.fork_0 = Fork()
+        self.m_l_p_1 = MLP(dim)
+
+    def forward(self, x):
+        x0 = self.fork_0(x)
+        x1, x2 = x0
+        x3 = self.m_l_p_1(x1)
+        x4 = self.add_2((x3, x2))
+        return x4

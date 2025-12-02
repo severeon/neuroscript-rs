@@ -13,3 +13,4 @@ num-traits = "0.2"     # Numeric traits (Zero, One)
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+insta = { version = "1.34", features = ["yaml"] }  # Snapshot testing

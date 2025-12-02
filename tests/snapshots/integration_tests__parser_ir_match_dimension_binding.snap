@@ -1,0 +1,53 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AdaptiveCompression:
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, 128]
+  graph:
+    in -> match:
+      [*, d] where (d > 1024): Linear#3(d, 512) -> Linear#4(512, 128) -> out
+      [*, d] where (d > 128): Linear#5(d, 128) -> out
+      [*, d]: Identity#6() -> out
+
+neuron DynamicProjection:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 512): Linear#0(d, 512) -> out
+      [*, d] where (d <= 512): Linear#1(d, 256) -> Linear#2(256, 512) -> out
+
+neuron FlexibleEncoder:
+  inputs:
+    default: [*, seq, dim]
+  outputs:
+    default: [*, seq, 512]
+  graph:
+    in -> match:
+      [*, s, d] where (d < 512): Linear#7(d, 512) -> out
+      [*, s, d] where (d == 512): Identity#8() -> out
+      [*, s, d]: Linear#9(d, 512) -> out
+
+neuron Identity:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Identity
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear

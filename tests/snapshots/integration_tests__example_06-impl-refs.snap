@@ -1,0 +1,77 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron CoreActivations:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron CoreBuiltin:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Identity
+
+neuron CoreNN:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron CustomSource:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: models,transformers/BertLayer
+
+neuron ExternalAPI:
+  inputs:
+    default: [batch, seq, vocab]
+  outputs:
+    default: [batch, seq, vocab]
+  impl:
+    External with kwargs: provider="lmstudio", model="qwen3-vl-12b"
+
+neuron ExternalMultiKwargs:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    External with kwargs: provider="openai", model="gpt-4"
+
+neuron ExternalWithParams(model_name):
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    External with kwargs: provider="lmstudio", model=model_name
+
+neuron NestedPath:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: libs,vision/models/ResNet
+
+neuron StandardImpl:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  impl:
+    Source: core,nn/Linear

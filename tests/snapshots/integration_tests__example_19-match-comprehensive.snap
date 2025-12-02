@@ -1,0 +1,250 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AdaptiveEncoder:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity#62() -> out
+      [*, d] where (d > 2048): Linear#63(d, 1024) -> Linear#64(1024, 512) -> out
+      [*, d] where (d > 512): Linear#65(d, 512) -> out
+      [*, d]: Linear#66(d, 256) -> Linear#67(256, 512) -> out
+      [*, *, 512]: Identity#68() -> out
+      [*, *, d] where (d > 512): Linear#69(d, 512) -> out
+      [*, *, d]: Linear#70(d, 512) -> out
+      [*dims, d]: Linear#71(d, 512) -> out
+
+neuron ArithmeticGuards:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 512): Linear#40(d, 512) -> out
+      [*, d] where (d > 128): Linear#41(d, 256) -> Linear#42(256, 512) -> out
+      [*, d]: Linear#43(d, 128) -> Linear#44(128, 512) -> out
+
+neuron BasicProjection:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d]: Linear#0(d, 512) -> out
+
+neuron BatchAware:
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, 512]
+  graph:
+    in -> match:
+      [batch, 512]: Identity#49() -> out
+      [batch, d]: Linear#50(d, 512) -> out
+
+neuron ComparisonGuards:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 1000): Linear#34(d, 512) -> out
+      [*, d] where (d >= 500): Linear#35(d, 512) -> out
+      [*, d] where (d == 256): Linear#36(d, 512) -> out
+      [*, d] where (d <= 100): Linear#37(d, 512) -> out
+      [*, d] where (d < 50): Linear#38(d, 512) -> out
+      [*, d]: Linear#39(d, 512) -> out
+
+neuron ComplexPipeline:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 1024): LayerNorm#23(d) -> Linear#24(d, 512) -> Dropout#25(0.1) -> out
+      [*, d] where (d > 256): Linear#26(d, 512) -> Dropout#27(0.1) -> out
+      [*, d]: Linear#28(d, 512) -> out
+
+neuron ConditionalProjection:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 512): Linear#1(d, 512) -> out
+      [*, d]: Linear#2(d, 256) -> Linear#3(256, 512) -> out
+
+neuron Dropout(p):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Dropout
+
+neuron ExactDimensionRouter:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, 768]: Linear#29(768, 512) -> out
+      [*, 1024]: Linear#30(1024, 512) -> out
+      [*, 1280]: Linear#31(1280, 512) -> out
+      [*, 1600]: Linear#32(1600, 512) -> out
+      [*, d]: Linear#33(d, 512) -> out
+
+neuron ExhaustiveProjection:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity#4() -> out
+      [*, 256]: Linear#5(256, 512) -> out
+      [*, 1024]: Linear#6(1024, 512) -> out
+      [*, d]: Linear#7(d, 512) -> out
+
+neuron HighRank:
+  inputs:
+    default: [*, *, *, *, *]
+  outputs:
+    default: [*, *, *, *, 512]
+  graph:
+    in -> match:
+      [*, *, *, *, 512]: Identity#60() -> out
+      [*, *, *, *, d]: Linear#61(d, 512) -> out
+
+neuron Identity:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Identity
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MultiStageCompression:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 128]
+  graph:
+    in -> match:
+      [*, d] where (d > 2048): Linear#8(d, 1024) -> Linear#9(1024, 512) -> Linear#10(512, 128) -> out
+      [*, d] where (d > 512): Linear#11(d, 256) -> Linear#12(256, 128) -> out
+      [*, d] where (d > 128): Linear#13(d, 128) -> out
+      [*, d]: Identity#14() -> out
+
+neuron MultiTarget:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, *]
+  graph:
+    in -> match:
+      [*, d] where (d > 1024): Linear#53(d, 512) -> out
+      [*, d] where (d > 256): Linear#54(d, 256) -> out
+      [*, d]: Linear#55(d, 128) -> out
+
+neuron MultiWildcard:
+  inputs:
+    default: [*, *, *]
+  outputs:
+    default: [*, *, 512]
+  graph:
+    in -> match:
+      [*, *, 512]: Identity#45() -> out
+      [*, *, d]: Linear#46(d, 512) -> out
+
+neuron OneDimensional:
+  inputs:
+    default: [*]
+  outputs:
+    default: [512]
+  graph:
+    in -> match:
+      [512]: Identity#58() -> out
+      [d]: Linear#59(d, 512) -> out
+
+neuron RankAgnosticProjection:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  graph:
+    in -> match:
+      [*, 512]: Identity#18() -> out
+      [*, *, 512]: Identity#19() -> out
+      [*, d]: Linear#20(d, 512) -> out
+      [*, *, d]: Linear#21(d, 512) -> out
+      [*dims, d]: Linear#22(d, 512) -> out
+
+neuron Seq2Seq:
+  inputs:
+    default: [*, seq, *]
+  outputs:
+    default: [*, seq, 512]
+  graph:
+    in -> match:
+      [*, seq, 512]: Identity#51() -> out
+      [*, seq, d]: Linear#52(d, 512) -> out
+
+neuron SequenceProjection:
+  inputs:
+    default: [*, *, *]
+  outputs:
+    default: [*, *, 512]
+  graph:
+    in -> match:
+      [*, s, d] where (d < 512): Linear#15(d, 512) -> out
+      [*, s, d] where (d == 512): Identity#16() -> out
+      [*, s, d]: Linear#17(d, 512) -> out
+
+neuron ShapePreserving:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity#47() -> out
+      [*, d]: Linear#48(d, 512) -> out
+
+neuron VariadicWithGuard:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  graph:
+    in -> match:
+      [*dims, d] where (d > 512): Linear#56(d, 512) -> out
+      [*dims, d]: Identity#57() -> out

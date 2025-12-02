@@ -1,0 +1,212 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+use activations::* (source: core)
+
+=== Neurons ===
+
+neuron AdaptiveProjection:
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity#20() -> out
+      [*, 256]: Linear#21(256, 512) -> out
+      [*, d] where (d > 512): Linear#22(d, 512) -> out
+      [*, d]: Linear#23(d, 512) -> out
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron Attention(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork3#7()
+    Fork3#7() -> (q, k, v)
+    q -> Linear#8(dim, dim)
+    Linear#8(dim, dim) -> query
+    k -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> key
+    v -> Linear#10(dim, dim)
+    Linear#10(dim, dim) -> value
+    value -> Linear#11(dim, dim)
+    Linear#11(dim, dim) -> out
+
+neuron Concat(axis = (0 - 1)):
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Concat
+
+neuron Dropout(p = 0.1):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Dropout
+
+neuron Embedding(vocab, dim):
+  inputs:
+    default: [*batch, seq]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,nn/Embedding
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron Fork3:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+    c: [*shape]
+  impl:
+    Source: core,builtin/Fork3
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron HybridPipeline:
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq_out, vocab]
+  graph:
+    in -> SmallTransformer#33()
+    SmallTransformer#33() -> LMStudio#34("qwen3-vl-12b")
+    LMStudio#34("qwen3-vl-12b") -> out
+
+neuron Identity:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Identity
+
+neuron LMStudio(model):
+  inputs:
+    default: [batch, seq, vocab]
+  outputs:
+    default: [batch, seq_out, vocab]
+  impl:
+    External with kwargs: provider="lmstudio", model=model
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MLP(dim, hidden_mult = 4):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, (dim * hidden_mult))
+    Linear#0(dim, (dim * hidden_mult)) -> GELU#1()
+    GELU#1() -> Dropout#2()
+    Dropout#2() -> Linear#3((dim * hidden_mult), dim)
+    Linear#3((dim * hidden_mult), dim) -> out
+
+neuron ResidualMLP(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#4()
+    Fork#4() -> (main, skip)
+    main -> MLP#5(dim)
+    MLP#5(dim) -> processed
+    (processed, skip) -> Add#6()
+    Add#6() -> out
+
+neuron SmallTransformer(vocab = 50000, dim = 512, layers = 6, heads = 8):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab]
+  graph:
+    in -> Embedding#24(vocab, dim)
+    Embedding#24(vocab, dim) -> TransformerBlock#25(dim, heads)
+    TransformerBlock#25(dim, heads) -> TransformerBlock#26(dim, heads)
+    TransformerBlock#26(dim, heads) -> TransformerBlock#27(dim, heads)
+    TransformerBlock#27(dim, heads) -> TransformerBlock#28(dim, heads)
+    TransformerBlock#28(dim, heads) -> TransformerBlock#29(dim, heads)
+    TransformerBlock#29(dim, heads) -> TransformerBlock#30(dim, heads)
+    TransformerBlock#30(dim, heads) -> LayerNorm#31(dim)
+    LayerNorm#31(dim) -> Linear#32(dim, vocab)
+    Linear#32(dim, vocab) -> out
+
+neuron Softmax:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/Softmax
+
+neuron TransformerBlock(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#12()
+    Fork#12() -> (attn_in, skip1)
+    attn_in -> LayerNorm#13(dim)
+    LayerNorm#13(dim) -> Attention#14(dim, heads)
+    Attention#14(dim, heads) -> attn_out
+    (attn_out, skip1) -> Add#15()
+    Add#15() -> post_attn
+    post_attn -> Fork#16()
+    Fork#16() -> (ffn_in, skip2)
+    ffn_in -> LayerNorm#17(dim)
+    LayerNorm#17(dim) -> MLP#18(dim)
+    MLP#18(dim) -> ffn_out
+    (ffn_out, skip2) -> Add#19()
+    Add#19() -> out

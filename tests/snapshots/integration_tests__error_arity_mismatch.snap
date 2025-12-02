@@ -1,0 +1,11 @@
+---
+source: tests/integration_tests.rs
+expression: error_text
+---
+ArityMismatch { expected: 3, got: 2, context: "Test:  tuple unpacking" }
+
+UnknownNode { node: "in", context: "Test" }
+
+UnknownNode { node: "a", context: "Test" }
+
+UnknownNode { node: "a", context: "Test" }

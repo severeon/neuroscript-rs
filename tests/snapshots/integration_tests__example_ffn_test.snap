@@ -1,0 +1,35 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SimpleFFN:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> Linear#0(512, 2048)
+    Linear#0(512, 2048) -> GELU#1()
+    GELU#1() -> Linear#2(2048, 512)
+    Linear#2(2048, 512) -> out
+
+neuron TestGatedFFN:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> Fork#3()
+    Fork#3() -> (gate_path, value_path)
+    gate_path -> Linear#4(512, 2048)
+    Linear#4(512, 2048) -> Sigmoid#5()
+    Sigmoid#5() -> gate
+    value_path -> Linear#6(512, 2048)
+    Linear#6(512, 2048) -> GELU#7()
+    GELU#7() -> value
+    (gate, value) -> Multiply#8()
+    Multiply#8() -> activated
+    activated -> Linear#9(2048, 512)
+    Linear#9(2048, 512) -> out

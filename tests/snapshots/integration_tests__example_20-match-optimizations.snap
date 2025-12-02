@@ -1,0 +1,53 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron AdaptiveLayerNorm:
+  inputs:
+    default: [*, *]
+  outputs:
+    default: [*, *]
+  graph:
+    in -> match:
+      [32, 768]: LayerNorm#0(768) -> out
+      [*, 768]: LayerNorm#1(768) -> out
+      [*, d]: LayerNorm#2(d) -> out
+
+neuron ConditionalProjection:
+  inputs:
+    default: [*, d]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where (d > 1024): Linear#3(d, 512) -> Linear#4(512, 512) -> out
+      [*, d] where (d > 512): Linear#5(d, 512) -> out
+      [*, d]: Linear#6(d, 256) -> Linear#7(256, 512) -> out
+
+neuron OptimizedEncoder:
+  inputs:
+    default: [batch, seq, *]
+  outputs:
+    default: [batch, seq, 512]
+  graph:
+    in -> match:
+      [*, *, 768]: Linear#8(768, 512) -> out
+      [*, *, 256]: Linear#9(256, 512) -> out
+      [*, *, d] where (d > 512): Linear#10(d, 512) -> out
+      [*, *, d]: Linear#11(d, 512) -> out
+
+neuron StaticResolutionDemo:
+  inputs:
+    default: [batch, 768]
+  outputs:
+    default: [batch, 512]
+  graph:
+    in -> match:
+      [*, 512]: Identity#12() -> Linear#13(512, 512) -> out
+      [*, 768]: Linear#14(768, 512) -> out
+      [*, d]: Linear#15(d, 256) -> Linear#16(256, 512) -> out

@@ -1,0 +1,125 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AllWildcards:
+  inputs:
+    default: [*, *, *]
+  outputs:
+    default: [*, *, *]
+  impl:
+    Source: core,builtin/Identity
+
+neuron Identity:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Identity
+
+neuron LargeLiterals:
+  inputs:
+    default: [*, 65536]
+  outputs:
+    default: [*, 32768]
+  impl:
+    Source: core,nn/Linear
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron LongNames(input_dimension, output_dimension, hidden_layer_multiplier = 4):
+  inputs:
+    default: [*, input_dimension]
+  outputs:
+    default: [*, output_dimension]
+  impl:
+    Source: core,nn/Linear
+
+neuron ManyParameters(p1, p2, p3, p4, p5, p6, p7, p8, d1 = 1, d2 = 2, d3 = 3, d4 = 4, d5 = 5):
+  inputs:
+    default: [*, p1]
+  outputs:
+    default: [*, p2]
+  impl:
+    Source: core,nn/Linear
+
+neuron MixedVariadic:
+  inputs:
+    default: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,builtin/Identity
+
+neuron NegativeDimExpr(dim, offset = (0 - 128)):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, (dim + offset)]
+  impl:
+    Source: core,nn/Linear
+
+neuron OneDim:
+  inputs:
+    default: [512]
+  outputs:
+    default: [256]
+  impl:
+    Source: core,nn/Linear
+
+neuron OneExpr(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, (dim * 1)]
+  impl:
+    Source: core,nn/Linear
+
+neuron ScalarNeuron:
+  inputs:
+    default: []
+  outputs:
+    default: []
+  impl:
+    Source: core,builtin/Scalar
+
+neuron ShortNames(a, b, c = 1):
+  inputs:
+    default: [*, a]
+  outputs:
+    default: [*, b]
+  impl:
+    Source: core,nn/Linear
+
+neuron SimpleExpr(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, (dim * 2)]
+  impl:
+    Source: core,nn/Linear
+
+neuron UnderscoreNames(in_dim, out_dim, hidden_mult = 4):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron ZeroExpr(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, (dim + 0)]
+  impl:
+    Source: core,nn/Linear

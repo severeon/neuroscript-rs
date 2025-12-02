@@ -1,0 +1,112 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron Dropout(p):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Dropout
+
+neuron FFN(d_model, d_ff):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  graph:
+    in -> Linear#0(d_model, d_ff)
+    Linear#0(d_model, d_ff) -> Dropout#1(0.1)
+    Dropout#1(0.1) -> Linear#2(d_ff, d_model)
+    Linear#2(d_ff, d_model) -> out
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GPTStack2(d_model, num_heads, d_ff):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  graph:
+    in -> TransformerStack2#15(d_model, num_heads, d_ff)
+    TransformerStack2#15(d_model, num_heads, d_ff) -> LayerNorm#16(d_model)
+    LayerNorm#16(d_model) -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MultiHeadSelfAttention(d_model, num_heads):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention
+
+neuron TransformerBlock(d_model, num_heads, d_ff):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  graph:
+    in -> Fork#3()
+    Fork#3() -> (skip1, attn_path)
+    attn_path -> LayerNorm#4(d_model)
+    LayerNorm#4(d_model) -> MultiHeadSelfAttention#5(d_model, num_heads)
+    MultiHeadSelfAttention#5(d_model, num_heads) -> Dropout#6(0.1)
+    Dropout#6(0.1) -> attn_out
+    (skip1, attn_out) -> Add#7()
+    Add#7() -> attn_residual
+    attn_residual -> Fork#8()
+    Fork#8() -> (skip2, ffn_path)
+    ffn_path -> LayerNorm#9(d_model)
+    LayerNorm#9(d_model) -> FFN#10(d_model, d_ff)
+    FFN#10(d_model, d_ff) -> Dropout#11(0.1)
+    Dropout#11(0.1) -> ffn_out
+    (skip2, ffn_out) -> Add#12()
+    Add#12() -> out
+
+neuron TransformerStack2(d_model, num_heads, d_ff):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  graph:
+    in -> TransformerBlock#13(d_model, num_heads, d_ff)
+    TransformerBlock#13(d_model, num_heads, d_ff) -> TransformerBlock#14(d_model, num_heads, d_ff)
+    TransformerBlock#14(d_model, num_heads, d_ff) -> out
