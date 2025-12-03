@@ -420,7 +420,6 @@ pub(super) fn generate_shape_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::*;
 
     #[test]
     fn test_shape_check_literals() {

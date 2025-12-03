@@ -400,7 +400,7 @@ impl Validator {
         for (param, arg) in params.iter().zip(args.iter()) {
             if let Value::Int(val) = arg {
                 bindings.insert(param.name.clone(), *val);
-            } else if let Value::Name(name) = arg {
+            } else if let Value::Name(_name) = arg {
                 // Named arguments remain as named dimensions
                 // We could handle this better with a more sophisticated type system
                 // For now, we don't substitute named parameters

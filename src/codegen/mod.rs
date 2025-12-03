@@ -28,7 +28,6 @@ pub use generator::generate_pytorch;
 mod tests {
     use super::*;
     use crate::interfaces::*;
-    use crate::ir::*;
 
     #[test]
     fn test_codegen_match() {

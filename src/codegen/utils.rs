@@ -168,24 +168,24 @@ impl<'a> CodeGenerator<'a> {
     }
 
     /// Convert CamelCase to snake_case
-    pub(super) fn snake_case(&self, name: &str) -> String {
-        snake_case_impl(name)
-    }
+    // pub(super) fn snake_case(&self, name: &str) -> String {
+    //     snake_case_impl(name)
+    // }
 
     /// Generate a unique key for an endpoint
-    pub(super) fn endpoint_key(&self, endpoint: &Endpoint) -> String {
-        endpoint_key_impl(endpoint)
-    }
+    // pub(super) fn endpoint_key(&self, endpoint: &Endpoint) -> String {
+    //     endpoint_key_impl(endpoint)
+    // }
 
     /// Check if a Value contains references to captured dimensions
-    pub(super) fn has_captured_dimensions(&self, value: &Value) -> bool {
-        has_captured_dimensions_impl(value, &self.current_neuron_params)
-    }
+    // pub(super) fn has_captured_dimensions(&self, value: &Value) -> bool {
+    //     has_captured_dimensions_impl(value, &self.current_neuron_params)
+    // }
 
     /// Collect all Call endpoints recursively
-    pub(super) fn collect_calls(&self, connections: &[Connection], calls: &mut Vec<Endpoint>) {
-        collect_calls_impl(connections, calls)
-    }
+    // pub(super) fn collect_calls(&self, connections: &[Connection], calls: &mut Vec<Endpoint>) {
+    //     collect_calls_impl(connections, calls)
+    // }
 
     /// Generate a unique node ID
     pub(super) fn next_node_id(&mut self) -> usize {

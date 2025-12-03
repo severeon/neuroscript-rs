@@ -201,7 +201,7 @@ impl ShapeInferenceEngine {
     pub fn infer(&mut self, program: &Program) -> Result<(), Vec<ShapeError>> {
         let mut errors = Vec::new();
 
-        for (name, neuron) in &program.neurons {
+        for (_name, neuron) in &program.neurons {
             if let Err(e) = self.infer_neuron(neuron, program) {
                 errors.push(e);
             }
@@ -234,7 +234,7 @@ impl ShapeInferenceEngine {
         ctx.node_outputs.insert("in".to_string(), input_shapes.clone());
 
         // Also register individual input ports if they are named
-        for (i, port) in neuron.inputs.iter().enumerate() {
+        for (_i, port) in neuron.inputs.iter().enumerate() {
             if port.name != "default" {
                 ctx.node_outputs.insert(port.name.clone(), vec![port.shape.clone()]);
             }
@@ -275,7 +275,7 @@ impl ShapeInferenceEngine {
 
         // 2. Validate and process destination
         match &conn.destination {
-            Endpoint::Call { name, args, kwargs: _, id } => {
+            Endpoint::Call { name, args: _, kwargs: _, id } => {
                 // Validate call destination
                 let called_neuron = program.neurons.get(name)
                     .ok_or_else(|| ShapeError::UnknownNode(
@@ -524,7 +524,7 @@ impl ShapeInferenceEngine {
                     // Wildcard matches anything, no binding
                     continue;
                 }
-                (Dim::Literal(lit), _) => {
+                (Dim::Literal(_lit), _) => {
                     // Literal must match exactly - use unify to check
                     ctx.unify(pat_dim, conc_dim)
                         .map_err(|e| format!("Dimension {} mismatch: {}", i, e))?;
@@ -853,24 +853,24 @@ impl ShapeInferenceEngine {
         }
     }
 
-    /// Validate shape compatibility for a specific operation type
-    fn validate_shape_compatibility(&self, op: &str, source: &Shape, dest: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
-        match op {
-            // Operations that require exact shape match
-            "add" | "sub" | "mul" | "div" => {
-                self.unify_shapes(source, dest, ctx)?;
-            }
-            // Operations that support broadcasting
-            "broadcast_add" | "broadcast_mul" => {
-                // Check if shapes are broadcastable
-                // For MVP, just check they unify or one has wildcards
-                self.unify_shapes(source, dest, ctx)?;
-            }
-            // Default: require unification
-            _ => {
-                self.unify_shapes(source, dest, ctx)?;
-            }
-        }
-        Ok(())
-    }
+    // /// Validate shape compatibility for a specific operation type
+    // fn validate_shape_compatibility(&self, op: &str, source: &Shape, dest: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    //     match op {
+    //         // Operations that require exact shape match
+    //         "add" | "sub" | "mul" | "div" => {
+    //             self.unify_shapes(source, dest, ctx)?;
+    //         }
+    //         // Operations that support broadcasting
+    //         "broadcast_add" | "broadcast_mul" => {
+    //             // Check if shapes are broadcastable
+    //             // For MVP, just check they unify or one has wildcards
+    //             self.unify_shapes(source, dest, ctx)?;
+    //         }
+    //         // Default: require unification
+    //         _ => {
+    //             self.unify_shapes(source, dest, ctx)?;
+    //         }
+    //     }
+    //     Ok(())
+    // }
 }

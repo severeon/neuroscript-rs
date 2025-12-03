@@ -98,11 +98,10 @@ pub(super) fn generate_module_instantiations(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::*;
 
     #[test]
     fn test_module_instantiation_simple() {
-        let mut program = Program::new();
+        let program = Program::new();
         let mut gen = CodeGenerator::new(&program);
 
         // Simple connection with a Call
@@ -126,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_module_deduplication() {
-        let mut program = Program::new();
+        let program = Program::new();
         let mut gen = CodeGenerator::new(&program);
 
         // Two calls with same signature should deduplicate
@@ -160,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_lazy_instantiation_marker() {
-        let mut program = Program::new();
+        let program = Program::new();
         let mut gen = CodeGenerator::new(&program);
 
         // Call with captured dimension
