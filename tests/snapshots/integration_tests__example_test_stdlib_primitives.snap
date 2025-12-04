@@ -1,0 +1,68 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ConcreteModel:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 256]
+  graph:
+    in -> Linear#3(512, 1024)
+    Linear#3(512, 1024) -> GELU#4()
+    GELU#4() -> Linear#5(1024, 256)
+    Linear#5(1024, 256) -> out
+
+neuron SimpleModel(in_dim, hidden_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  graph:
+    in -> Linear#0(in_dim, hidden_dim)
+    Linear#0(in_dim, hidden_dim) -> GELU#1()
+    GELU#1() -> Linear#2(hidden_dim, out_dim)
+    Linear#2(hidden_dim, out_dim) -> out
+
+neuron TestActivations:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> ReLU#7()
+    ReLU#7() -> out
+
+neuron TestDropout:
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Dropout#8(0.1)
+    Dropout#8(0.1) -> out
+
+neuron TestNormalization(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> LayerNorm#6(dim)
+    LayerNorm#6(dim) -> out
+
+neuron TestResidual(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#9()
+    Fork#9() -> (main, skip)
+    main -> Linear#10(dim, dim)
+    Linear#10(dim, dim) -> GELU#11()
+    GELU#11() -> processed
+    (processed, skip) -> Add#12()
+    Add#12() -> out

@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SimpleFFNTest:
+  inputs:
+    default: [*, 512]
+  outputs:
+    default: [*, 512]
+  graph:
+    in -> FFN#0(512, 2048)
+    FFN#0(512, 2048) -> out

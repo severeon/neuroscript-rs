@@ -1,0 +1,9 @@
+# Scaled Dot-Product Attention
+# Core attention mechanism: Attention(Q, K, V) = softmax(QK^T / sqrt(d_k))V
+
+neuron ScaledDotProductAttention(d_k):
+    in query: [*, seq_q, d_k]
+    in key: [*, seq_k, d_k]
+    in value: [*, seq_v, d_v]
+    out: [*, seq_q, d_v]
+    impl: core,attention/ScaledDotProductAttention

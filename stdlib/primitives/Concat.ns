@@ -1,0 +1,8 @@
+# Concatenation
+# Concatenate tensors along specified dimension
+
+neuron Concat(dim):
+    in a: [*shape_a]
+    in b: [*shape_b]
+    out: [*shape_out]
+    impl: core,structural/Concat

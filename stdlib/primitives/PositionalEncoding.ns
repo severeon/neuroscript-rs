@@ -1,0 +1,7 @@
+# Positional Encoding (Sinusoidal)
+# Fixed positional encoding from "Attention is All You Need"
+
+neuron PositionalEncoding(dim, max_len):
+    in: [*, seq_len, dim]
+    out: [*, seq_len, dim]
+    impl: core,embeddings/PositionalEncoding

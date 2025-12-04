@@ -1,0 +1,7 @@
+# DropPath Regularization (Stochastic Depth)
+# Randomly drops entire paths/branches during training
+
+neuron DropPath(drop_prob):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/DropPath

@@ -1,0 +1,7 @@
+# RMS Normalization
+# Root Mean Square normalization - efficient variant of layer norm
+
+neuron RMSNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/RMSNorm

@@ -1,0 +1,7 @@
+# Sigmoid Activation
+# Maps input to (0, 1) range
+
+neuron Sigmoid:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Sigmoid

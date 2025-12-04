@@ -1,0 +1,8 @@
+# Element-wise Multiplication
+# Multiplies two tensors element-wise (for gating mechanisms)
+
+neuron Multiply:
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,structural/Multiply

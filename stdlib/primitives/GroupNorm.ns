@@ -1,0 +1,7 @@
+# Group Normalization
+# Normalize within groups of channels - works well with small batches
+
+neuron GroupNorm(num_groups, num_channels):
+    in: [*, num_channels, *, *]
+    out: [*, num_channels, *, *]
+    impl: core,normalization/GroupNorm

@@ -1,0 +1,7 @@
+# Layer Normalization
+# Normalize across features (commonly used in transformers)
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm

@@ -1,0 +1,7 @@
+# Learned Positional Embedding
+# Learned positional embeddings (BERT/GPT style)
+
+neuron LearnedPositionalEmbedding(max_positions, embedding_dim):
+    in: [*, seq_len, embedding_dim]
+    out: [*, seq_len, embedding_dim]
+    impl: core,embeddings/LearnedPositionalEmbedding

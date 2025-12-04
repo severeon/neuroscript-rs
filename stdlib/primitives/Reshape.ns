@@ -1,0 +1,7 @@
+# Reshape
+# Reshape tensor to new shape (preserves element count)
+
+neuron Reshape(target_shape):
+    in: [*shape_in]
+    out: [*shape_out]
+    impl: core,structural/Reshape

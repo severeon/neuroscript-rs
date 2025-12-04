@@ -1,0 +1,8 @@
+# Element-wise Addition
+# Adds two tensors element-wise (for residual connections)
+
+neuron Add:
+    in main: [*shape]
+    in skip: [*shape]
+    out: [*shape]
+    impl: core,structural/Add

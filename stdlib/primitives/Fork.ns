@@ -1,0 +1,8 @@
+# Fork (Duplicate)
+# Split tensor into two references for residual connections
+
+neuron Fork:
+    in: [*shape]
+    out main: [*shape]
+    out skip: [*shape]
+    impl: core,structural/Fork

@@ -1,0 +1,7 @@
+# Dropout Regularization
+# Randomly zero elements during training for regularization
+
+neuron Dropout(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/Dropout

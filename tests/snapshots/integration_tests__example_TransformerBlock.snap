@@ -4,96 +4,13 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron PostNormTransformerBlock(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> (skip1, attn_path)
-    attn_path -> MultiHeadSelfAttention#8(d_model, num_heads)
-    MultiHeadSelfAttention#8(d_model, num_heads) -> Dropout#9(0.1)
-    Dropout#9(0.1) -> attn_out
-    (skip1, attn_out) -> Add#10()
-    Add#10() -> attn_added
-    attn_added -> LayerNorm#11(d_model)
-    LayerNorm#11(d_model) -> attn_normed
-    attn_normed -> (skip2, ffn_path)
-    ffn_path -> FFN#12(d_model, d_ff)
-    FFN#12(d_model, d_ff) -> Dropout#13(0.1)
-    Dropout#13(0.1) -> ffn_out
-    (skip2, ffn_out) -> Add#14()
-    Add#14() -> ffn_added
-    ffn_added -> LayerNorm#15(d_model)
-    LayerNorm#15(d_model) -> out
-
 neuron SimpleTransformerBlock(dim):
   inputs:
     default: [*, dim]
   outputs:
     default: [*, dim]
   graph:
-    in -> LayerNorm#30(dim)
-    LayerNorm#30(dim) -> Linear#31(dim, dim)
-    Linear#31(dim, dim) -> Dropout#32(0.1)
-    Dropout#32(0.1) -> out
-
-neuron TransformerBlock(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> (skip1, attn_path)
-    attn_path -> LayerNorm#0(d_model)
-    LayerNorm#0(d_model) -> MultiHeadSelfAttention#1(d_model, num_heads)
-    MultiHeadSelfAttention#1(d_model, num_heads) -> Dropout#2(0.1)
-    Dropout#2(0.1) -> attn_out
-    (skip1, attn_out) -> Add#3()
-    Add#3() -> attn_residual
-    attn_residual -> (skip2, ffn_path)
-    ffn_path -> LayerNorm#4(d_model)
-    LayerNorm#4(d_model) -> FFN#5(d_model, d_ff)
-    FFN#5(d_model, d_ff) -> Dropout#6(0.1)
-    Dropout#6(0.1) -> ffn_out
-    (skip2, ffn_out) -> Add#7()
-    Add#7() -> out
-
-neuron TransformerDecoderBlock(d_model, num_heads, d_ff):
-  inputs:
-    decoder_input: [batch, seq_dec, d_model]
-    encoder_output: [batch, seq_enc, d_model]
-  outputs:
-    default: [batch, seq_dec, d_model]
-  graph:
-    decoder_input -> (skip1, self_attn)
-    self_attn -> LayerNorm#18(d_model)
-    LayerNorm#18(d_model) -> MultiHeadSelfAttention#19(d_model, num_heads)
-    MultiHeadSelfAttention#19(d_model, num_heads) -> Dropout#20(0.1)
-    Dropout#20(0.1) -> self_attn_out
-    (skip1, self_attn_out) -> Add#21()
-    Add#21() -> after_self_attn
-    after_self_attn -> (skip2, cross_attn_q)
-    (cross_attn_q, encoder_output) -> LayerNorm#22()
-    LayerNorm#22() -> MultiHeadCrossAttention#23(d_model, num_heads)
-    MultiHeadCrossAttention#23(d_model, num_heads) -> Dropout#24(0.1)
-    Dropout#24(0.1) -> cross_attn_out
-    (skip2, cross_attn_out) -> Add#25()
-    Add#25() -> after_cross_attn
-    after_cross_attn -> (skip3, ffn_path)
-    ffn_path -> LayerNorm#26(d_model)
-    LayerNorm#26(d_model) -> FFN#27(d_model, d_ff)
-    FFN#27(d_model, d_ff) -> Dropout#28(0.1)
-    Dropout#28(0.1) -> ffn_out
-    (skip3, ffn_out) -> Add#29()
-    Add#29() -> out
-
-neuron TransformerEncoderBlock(d_model, num_heads, d_ff, dropout):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> PreNormResidual#16(MultiHeadSelfAttention(d_model, num_heads), d_model)
-    PreNormResidual#16(MultiHeadSelfAttention(d_model, num_heads), d_model) -> PreNormResidual#17(FFN(d_model, d_ff), d_model)
-    PreNormResidual#17(FFN(d_model, d_ff), d_model) -> out
+    in -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> Dropout#2(0.1)
+    Dropout#2(0.1) -> out

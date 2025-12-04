@@ -4,106 +4,21 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron BERTEncoder12(d_model, num_heads, d_ff):
+neuron SequentialTransformer(d_model, num_heads, d_ff):
   inputs:
-    default: [batch, seq, d_model]
+    default: [*, d_model]
   outputs:
-    default: [batch, seq, d_model]
+    default: [*, d_model]
   graph:
-    in -> PositionalEncoding#28(d_model, max_len=512)
-    PositionalEncoding#28(d_model, max_len=512) -> TransformerStack12#29(d_model, num_heads, d_ff)
-    TransformerStack12#29(d_model, num_heads, d_ff) -> out
-
-neuron BERTEncoder6(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> PositionalEncoding#30(d_model, max_len=512)
-    PositionalEncoding#30(d_model, max_len=512) -> TransformerStack6#31(d_model, num_heads, d_ff)
-    TransformerStack6#31(d_model, num_heads, d_ff) -> out
-
-neuron GPT2Small(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerStack12#23(d_model, num_heads, d_ff)
-    TransformerStack12#23(d_model, num_heads, d_ff) -> out
-
-neuron GPTStack12(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerStack12#24(d_model, num_heads, d_ff)
-    TransformerStack12#24(d_model, num_heads, d_ff) -> LayerNorm#25(d_model)
-    LayerNorm#25(d_model) -> out
-
-neuron GPTStack6(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerStack6#26(d_model, num_heads, d_ff)
-    TransformerStack6#26(d_model, num_heads, d_ff) -> LayerNorm#27(d_model)
-    LayerNorm#27(d_model) -> out
-
-neuron SmallTransformerStack(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerBlock#20(d_model, num_heads, d_ff)
-    TransformerBlock#20(d_model, num_heads, d_ff) -> TransformerBlock#21(d_model, num_heads, d_ff)
-    TransformerBlock#21(d_model, num_heads, d_ff) -> TransformerBlock#22(d_model, num_heads, d_ff)
-    TransformerBlock#22(d_model, num_heads, d_ff) -> out
-
-neuron TransformerStack12(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerBlock#8(d_model, num_heads, d_ff)
-    TransformerBlock#8(d_model, num_heads, d_ff) -> TransformerBlock#9(d_model, num_heads, d_ff)
-    TransformerBlock#9(d_model, num_heads, d_ff) -> TransformerBlock#10(d_model, num_heads, d_ff)
-    TransformerBlock#10(d_model, num_heads, d_ff) -> TransformerBlock#11(d_model, num_heads, d_ff)
-    TransformerBlock#11(d_model, num_heads, d_ff) -> TransformerBlock#12(d_model, num_heads, d_ff)
-    TransformerBlock#12(d_model, num_heads, d_ff) -> TransformerBlock#13(d_model, num_heads, d_ff)
-    TransformerBlock#13(d_model, num_heads, d_ff) -> TransformerBlock#14(d_model, num_heads, d_ff)
-    TransformerBlock#14(d_model, num_heads, d_ff) -> TransformerBlock#15(d_model, num_heads, d_ff)
-    TransformerBlock#15(d_model, num_heads, d_ff) -> TransformerBlock#16(d_model, num_heads, d_ff)
-    TransformerBlock#16(d_model, num_heads, d_ff) -> TransformerBlock#17(d_model, num_heads, d_ff)
-    TransformerBlock#17(d_model, num_heads, d_ff) -> TransformerBlock#18(d_model, num_heads, d_ff)
-    TransformerBlock#18(d_model, num_heads, d_ff) -> TransformerBlock#19(d_model, num_heads, d_ff)
-    TransformerBlock#19(d_model, num_heads, d_ff) -> out
+    in -> SimpleTransformerBlock#2(d_model)
+    SimpleTransformerBlock#2(d_model) -> out
 
 neuron TransformerStack2(d_model, num_heads, d_ff):
   inputs:
-    default: [batch, seq, d_model]
+    default: [*, d_model]
   outputs:
-    default: [batch, seq, d_model]
+    default: [*, d_model]
   graph:
-    in -> TransformerBlock#0(d_model, num_heads, d_ff)
-    TransformerBlock#0(d_model, num_heads, d_ff) -> TransformerBlock#1(d_model, num_heads, d_ff)
-    TransformerBlock#1(d_model, num_heads, d_ff) -> out
-
-neuron TransformerStack6(d_model, num_heads, d_ff):
-  inputs:
-    default: [batch, seq, d_model]
-  outputs:
-    default: [batch, seq, d_model]
-  graph:
-    in -> TransformerBlock#2(d_model, num_heads, d_ff)
-    TransformerBlock#2(d_model, num_heads, d_ff) -> TransformerBlock#3(d_model, num_heads, d_ff)
-    TransformerBlock#3(d_model, num_heads, d_ff) -> TransformerBlock#4(d_model, num_heads, d_ff)
-    TransformerBlock#4(d_model, num_heads, d_ff) -> TransformerBlock#5(d_model, num_heads, d_ff)
-    TransformerBlock#5(d_model, num_heads, d_ff) -> TransformerBlock#6(d_model, num_heads, d_ff)
-    TransformerBlock#6(d_model, num_heads, d_ff) -> TransformerBlock#7(d_model, num_heads, d_ff)
-    TransformerBlock#7(d_model, num_heads, d_ff) -> out
+    in -> SimpleTransformerBlock#0(d_model)
+    SimpleTransformerBlock#0(d_model) -> SimpleTransformerBlock#1(d_model)
+    SimpleTransformerBlock#1(d_model) -> out

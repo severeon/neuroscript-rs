@@ -74,7 +74,7 @@ fn find_stdlib_dir() -> Result<PathBuf, StdlibError> {
 
 /// Load stdlib from a specific directory
 ///
-/// Parses all .ns files in the directory and merges them into a single Program.
+/// Parses all .ns files in the directory and its subdirectories, merging them into a single Program.
 /// Returns an error if any file fails to parse or if duplicate neuron names are found.
 fn load_stdlib_from_dir(dir: &Path) -> Result<Program, StdlibError> {
     let mut merged = Program {
@@ -85,15 +85,9 @@ fn load_stdlib_from_dir(dir: &Path) -> Result<Program, StdlibError> {
     // Track which file each neuron came from for better error messages
     let mut neuron_sources: HashMap<String, String> = HashMap::new();
 
-    // Find all .ns files
-    let entries = fs::read_dir(dir)
-        .map_err(|e| StdlibError::ReadError(dir.display().to_string(), e))?;
-
-    let mut ns_files: Vec<PathBuf> = entries
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("ns"))
-        .collect();
+    // Collect .ns files from directory and subdirectories
+    let mut ns_files: Vec<PathBuf> = Vec::new();
+    collect_ns_files(dir, &mut ns_files)?;
 
     // Sort for deterministic loading order
     ns_files.sort();
@@ -134,6 +128,24 @@ fn load_stdlib_from_dir(dir: &Path) -> Result<Program, StdlibError> {
     }
 
     Ok(merged)
+}
+
+/// Recursively collect all .ns files from a directory and its subdirectories
+fn collect_ns_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), StdlibError> {
+    let entries = fs::read_dir(dir)
+        .map_err(|e| StdlibError::ReadError(dir.display().to_string(), e))?;
+
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            // Recursively collect from subdirectories
+            collect_ns_files(&path, files)?;
+        } else if path.extension().and_then(|s| s.to_str()) == Some("ns") {
+            files.push(path);
+        }
+    }
+
+    Ok(())
 }
 
 /// Merge stdlib program with user program

@@ -1,0 +1,7 @@
+# DropConnect Regularization
+# Drops connections (weights) instead of activations
+
+neuron DropConnect(drop_prob):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/DropConnect

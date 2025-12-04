@@ -1,0 +1,7 @@
+# SiLU Activation (Swish)
+# Sigmoid Linear Unit: x * sigmoid(x)
+
+neuron SiLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/SiLU

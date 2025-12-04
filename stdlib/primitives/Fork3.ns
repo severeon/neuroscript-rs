@@ -1,0 +1,9 @@
+# Fork3 (Triple Duplicate)
+# Split tensor into three references
+
+neuron Fork3:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    out c: [*shape]
+    impl: core,structural/Fork3

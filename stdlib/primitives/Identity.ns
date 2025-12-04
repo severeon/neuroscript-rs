@@ -1,0 +1,7 @@
+# Identity Operation
+# Pass-through, no-op
+
+neuron Identity:
+    in: [*shape]
+    out: [*shape]
+    impl: core,structural/Identity

@@ -1,0 +1,7 @@
+# Token Embedding
+# Maps discrete tokens to dense vectors
+
+neuron Embedding(num_embeddings, embedding_dim):
+    in: [*, seq_len]
+    out: [*, seq_len, embedding_dim]
+    impl: core,embeddings/Embedding

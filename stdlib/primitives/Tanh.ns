@@ -1,0 +1,7 @@
+# Tanh Activation
+# Hyperbolic tangent - outputs in range (-1, 1)
+
+neuron Tanh:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Tanh

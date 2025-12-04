@@ -1,0 +1,7 @@
+# ReLU Activation
+# Rectified Linear Unit - max(0, x)
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ReLU

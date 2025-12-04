@@ -340,6 +340,42 @@ fn snapshot_parser_ir_ffn_stdlib() {
     insta::assert_snapshot!("parser_ir_ffn_stdlib", formatted);
 }
 
+#[test]
+fn test_stdlib_loading_with_primitives() {
+    use neuroscript::stdlib::load_stdlib;
+
+    // Load stdlib (should include primitives from stdlib/primitives/)
+    let stdlib = load_stdlib().expect("Failed to load stdlib");
+
+    // Verify we loaded a reasonable number of neurons
+    // Should have at least the 26 primitives + stdlib neurons
+    assert!(stdlib.neurons.len() >= 26,
+        "Expected at least 26 neurons (primitives), got {}",
+        stdlib.neurons.len());
+
+    // Verify key primitives are present and have proper shapes
+    assert!(stdlib.neurons.contains_key("Linear"), "Linear primitive not found");
+    assert!(stdlib.neurons.contains_key("GELU"), "GELU primitive not found");
+    assert!(stdlib.neurons.contains_key("LayerNorm"), "LayerNorm primitive not found");
+    assert!(stdlib.neurons.contains_key("Dropout"), "Dropout primitive not found");
+    assert!(stdlib.neurons.contains_key("Fork"), "Fork primitive not found");
+    assert!(stdlib.neurons.contains_key("Add"), "Add primitive not found");
+
+    // Verify Linear has proper shape signature
+    let linear = &stdlib.neurons["Linear"];
+    assert_eq!(linear.inputs.len(), 1);
+    assert_eq!(linear.outputs.len(), 1);
+    assert_eq!(linear.inputs[0].shape.dims.len(), 2);
+    assert_eq!(linear.outputs[0].shape.dims.len(), 2);
+
+    // Verify Fork has two output ports
+    let fork = &stdlib.neurons["Fork"];
+    assert_eq!(fork.outputs.len(), 2);
+
+    // Verify stdlib composite neurons are also present
+    assert!(stdlib.neurons.contains_key("FFN"), "FFN stdlib neuron not found");
+}
+
 // ============================================================================
 // Codegen Output Snapshot Tests
 // ============================================================================

@@ -1,0 +1,7 @@
+# Multi-Head Self-Attention
+# Complete multi-head self-attention mechanism
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [*, seq_len, dim]
+    out: [*, seq_len, dim]
+    impl: core,attention/MultiHeadSelfAttention

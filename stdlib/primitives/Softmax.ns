@@ -1,0 +1,7 @@
+# Softmax Activation
+# Normalize to probability distribution along last dimension
+
+neuron Softmax(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,activations/Softmax

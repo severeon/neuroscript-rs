@@ -1,0 +1,43 @@
+# Test stdlib primitive loading and shape validation
+# This should validate without port mismatches
+
+neuron SimpleModel(in_dim, hidden_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    graph:
+        in -> Linear(in_dim, hidden_dim) -> GELU() -> Linear(hidden_dim, out_dim) -> out
+
+# Test with concrete dimensions
+neuron ConcreteModel:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 1024) -> GELU() -> Linear(1024, 256) -> out
+
+# Test other primitives
+neuron TestNormalization(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> LayerNorm(dim) -> out
+
+neuron TestActivations:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in -> ReLU() -> out
+
+neuron TestDropout:
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Dropout(0.1) -> out
+
+# Test structural operations
+neuron TestResidual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> GELU() -> processed
+        (processed, skip) -> Add() -> out

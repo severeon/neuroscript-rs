@@ -1,0 +1,7 @@
+# Linear Layer (Dense/Fully-Connected)
+# Standard linear transformation: y = Wx + b
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
