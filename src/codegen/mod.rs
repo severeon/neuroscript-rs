@@ -38,33 +38,37 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]) }],
-            body: NeuronBody::Graph(vec![
-                Connection {
-                    source: Endpoint::Ref(PortRef::new("in")),
-                    destination: Endpoint::Match(MatchExpr {
-                        arms: vec![
-                            MatchArm {
-                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
-                                guard: None,
-                                pipeline: vec![
-                                    Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![], id: 0 },
-                                    Endpoint::Ref(PortRef::new("out"))
-                                ],
-                                is_reachable: true,
-                            },
-                            MatchArm {
-                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
-                                guard: None,
-                                pipeline: vec![
-                                    Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![], id: 1 },
-                                    Endpoint::Ref(PortRef::new("out"))
-                                ],
-                                is_reachable: true,
-                            }
-                        ]
-                    })
-                }
-            ])
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
+                    Connection {
+                        source: Endpoint::Ref(PortRef::new("in")),
+                        destination: Endpoint::Match(MatchExpr {
+                            arms: vec![
+                                MatchArm {
+                                    pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                                    guard: None,
+                                    pipeline: vec![
+                                        Endpoint::Call { name: "Identity".to_string(), args: vec![], kwargs: vec![], id: 0 },
+                                        Endpoint::Ref(PortRef::new("out"))
+                                    ],
+                                    is_reachable: true,
+                                },
+                                MatchArm {
+                                    pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
+                                    guard: None,
+                                    pipeline: vec![
+                                        Endpoint::Call { name: "Linear".to_string(), args: vec![Value::Int(256), Value::Int(512)], kwargs: vec![], id: 1 },
+                                        Endpoint::Ref(PortRef::new("out"))
+                                    ],
+                                    is_reachable: true,
+                                }
+                            ]
+                        })
+                    }
+                ]
+            }
         };
 
         program.neurons.insert("MatchTest".to_string(), neuron);
@@ -88,7 +92,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
@@ -134,7 +141,8 @@ mod tests {
                         ]
                     })
                 }
-            ])
+            ]
+            }
         };
 
         program.neurons.insert("DynamicMatch".to_string(), neuron);
@@ -163,7 +171,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
@@ -184,7 +195,7 @@ mod tests {
                         ]
                     })
                 }
-            ])
+            ]}
         };
 
         program.neurons.insert("GuardTest".to_string(), neuron);
@@ -210,7 +221,10 @@ mod tests {
                 params: vec![],
                 inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
                 outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-                body: NeuronBody::Graph(vec![
+                body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                     Connection {
                         source: Endpoint::Ref(PortRef::new("in")),
                         destination: Endpoint::Match(MatchExpr {
@@ -250,7 +264,7 @@ mod tests {
                             ]
                         })
                     }
-                ])
+                ]}
             };
             program.neurons.insert("OptimizedMatch".to_string(), neuron);
             program
@@ -267,7 +281,7 @@ mod tests {
         // Now mark some as unreachable (simulating validator) and optimize
         let mut marked_program = create_reachable_program();
         // Mark the shadowed arms as unreachable (simulating validator output)
-        if let NeuronBody::Graph(connections) = &mut marked_program.neurons.get_mut("OptimizedMatch").unwrap().body {
+        if let NeuronBody::Graph { connections, .. } = &mut marked_program.neurons.get_mut("OptimizedMatch").unwrap().body {
             if let Endpoint::Match(match_expr) = &mut connections[0].destination {
                 match_expr.arms[1].is_reachable = false; // [*, 512] shadowed by [*, d]
                 match_expr.arms[2].is_reachable = false; // [*, 256] shadowed by [*, d]
@@ -323,7 +337,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
@@ -358,7 +375,7 @@ mod tests {
                         ]
                     })
                 }
-            ])
+            ]}
         };
 
         program.neurons.insert("GuardedMatch".to_string(), neuron);

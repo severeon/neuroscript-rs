@@ -1,0 +1,130 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron AnswerStep(d_model):
+  inputs:
+    y: [*batch, seq, d_model]
+    z: [*batch, seq, d_model]
+  outputs:
+    default: [*batch, seq, d_model]
+  graph:
+    (y, z) -> Concatenate#19(dim=(0 - 1))
+    Concatenate#19(dim=(0 - 1)) -> combined
+    combined -> Linear#20((d_model * 2), d_model)
+    Linear#20((d_model * 2), d_model) -> TRMBlock#21(d_model)
+    TRMBlock#21(d_model) -> TRMBlock#22(d_model)
+    TRMBlock#22(d_model) -> out
+
+neuron RMSNorm(dim):
+  inputs:
+    default: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,nn/RMSNorm
+
+neuron ReasoningStep(d_model):
+  inputs:
+    x: [*batch, seq, d_model]
+    y: [*batch, seq, d_model]
+    z: [*batch, seq, d_model]
+  outputs:
+    default: [*batch, seq, d_model]
+  graph:
+    (x, y, z) -> Concatenate#15(dim=(0 - 1))
+    Concatenate#15(dim=(0 - 1)) -> combined
+    combined -> Linear#16((d_model * 3), d_model)
+    Linear#16((d_model * 3), d_model) -> TRMBlock#17(d_model)
+    TRMBlock#17(d_model) -> TRMBlock#18(d_model)
+    TRMBlock#18(d_model) -> out
+
+neuron RecursionCycle(d_model):
+  inputs:
+    x: [*batch, seq, d_model]
+    y: [*batch, seq, d_model]
+    z: [*batch, seq, d_model]
+  outputs:
+    y_out: [*batch, seq, d_model]
+    z_out: [*batch, seq, d_model]
+  let:
+    step = sequential(...)
+  graph:
+    (x, y, z) -> step#23(d_model)
+    step#23(d_model) -> z_out
+    (y, z_out) -> AnswerStep#24(d_model)
+    AnswerStep#24(d_model) -> y_out
+
+neuron SeqMLP(seq_len):
+  inputs:
+    default: [*batch, seq_len, dim]
+  outputs:
+    default: [*batch, seq_len, dim]
+  graph:
+    in -> Transpose#0(1, 2)
+    Transpose#0(1, 2) -> Linear#1(seq_len, seq_len)
+    Linear#1(seq_len, seq_len) -> SwiGLU#2(seq_len)
+    SwiGLU#2(seq_len) -> Linear#3(seq_len, seq_len)
+    Linear#3(seq_len, seq_len) -> Transpose#4(1, 2)
+    Transpose#4(1, 2) -> out
+
+neuron SwiGLU(dim):
+  inputs:
+    default: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,activations/SwiGLU
+
+neuron TRM(d_model, vocab_size, max_seq):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  let:
+    cycle = RecursionCycle(...)
+  graph:
+    in -> Embedding#25(vocab_size, d_model)
+    Embedding#25(vocab_size, d_model) -> PositionalEncoding#26(d_model, max_len=max_seq)
+    PositionalEncoding#26(d_model, max_len=max_seq) -> x_embedded
+    x_embedded -> Fork#27()
+    Fork#27() -> (x, y_init)
+    x_embedded -> Identity#28()
+    Identity#28() -> z_init
+    (x, y_init, z_init) -> cycle
+    cycle -> (y1, z1)
+    (x, y1, z1) -> cycle
+    cycle -> (y2, z2)
+    (x, y2, z2) -> cycle
+    cycle -> (y_final, z_final)
+    y_final -> RMSNorm#29(d_model)
+    RMSNorm#29(d_model) -> Linear#30(d_model, vocab_size)
+    Linear#30(d_model, vocab_size) -> out
+
+neuron TRMBlock(d_model):
+  inputs:
+    default: [*batch, seq, d_model]
+  outputs:
+    default: [*batch, seq, d_model]
+  graph:
+    in -> Fork#5()
+    Fork#5() -> (main1, skip1)
+    main1 -> RMSNorm#6(d_model)
+    RMSNorm#6(d_model) -> MultiHeadSelfAttention#7(d_model, 8)
+    MultiHeadSelfAttention#7(d_model, 8) -> attn_out
+    (attn_out, skip1) -> Add#8()
+    Add#8() -> post_attn
+    post_attn -> Fork#9()
+    Fork#9() -> (main2, skip2)
+    main2 -> RMSNorm#10(d_model)
+    RMSNorm#10(d_model) -> Linear#11(d_model, (d_model * 4))
+    Linear#11(d_model, (d_model * 4)) -> SwiGLU#12((d_model * 4))
+    SwiGLU#12((d_model * 4)) -> Linear#13((d_model * 4), d_model)
+    Linear#13((d_model * 4), d_model) -> ffn_out
+    (ffn_out, skip2) -> Add#14()
+    Add#14() -> out

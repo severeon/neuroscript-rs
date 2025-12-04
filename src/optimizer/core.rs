@@ -12,7 +12,7 @@ pub fn optimize_matches(program: &mut Program, enable_dead_elim: bool) -> usize 
     }
     let mut pruned_count = 0;
     for neuron in program.neurons.values_mut() {
-        if let NeuronBody::Graph(connections) = &mut neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
             for connection in connections {
                 pruned_count += optimize_endpoint(&mut connection.source);
                 pruned_count += optimize_endpoint(&mut connection.destination);
@@ -48,7 +48,7 @@ fn optimize_endpoint(endpoint: &mut Endpoint) -> usize {
 pub fn count_matches(program: &Program) -> usize {
     let mut count = 0;
     for neuron in program.neurons.values() {
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             for connection in connections {
                 count += count_matches_in_endpoint(&connection.source);
                 count += count_matches_in_endpoint(&connection.destination);
@@ -112,7 +112,7 @@ pub fn reorder_match_arms(program: &mut Program) -> usize {
     let mut reordered_count = 0;
 
     for neuron in program.neurons.values_mut() {
-        if let NeuronBody::Graph(connections) = &mut neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
             for connection in connections {
                 reordered_count += reorder_endpoint(&mut connection.source);
                 reordered_count += reorder_endpoint(&mut connection.destination);
@@ -365,7 +365,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("TestNeuron".to_string(), neuron);
@@ -375,7 +379,7 @@ mod tests {
 
         // Verify the arm was removed
         let neuron = program.neurons.get("TestNeuron").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert_eq!(match_expr.arms.len(), 2);
                 assert_eq!(match_expr.arms[0].is_reachable, true);
@@ -427,7 +431,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("ShadowTest".to_string(), neuron);
@@ -437,7 +445,7 @@ mod tests {
 
         // Verify only the general pattern remains
         let neuron = program.neurons.get("ShadowTest").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert_eq!(match_expr.arms.len(), 1, "Should have 1 arm after pruning");
                 assert_eq!(
@@ -495,7 +503,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("GuardTest".to_string(), neuron);
@@ -505,7 +517,7 @@ mod tests {
 
         // Verify both arms remain
         let neuron = program.neurons.get("GuardTest").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert_eq!(match_expr.arms.len(), 2, "Both arms should remain");
                 assert!(match_expr.arms[0].guard.is_some(), "First arm has guard");
@@ -573,7 +585,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("MultiPrune".to_string(), neuron);
@@ -583,7 +599,7 @@ mod tests {
 
         // Verify only catch-all remains
         let neuron = program.neurons.get("MultiPrune").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert_eq!(match_expr.arms.len(), 1);
                 assert_eq!(match_expr.arms[0].pattern.dims, vec![Dim::Wildcard]);
@@ -634,7 +650,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("DisabledTest".to_string(), neuron);
@@ -644,7 +664,7 @@ mod tests {
 
         // Verify both arms remain
         let neuron = program.neurons.get("DisabledTest").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert_eq!(match_expr.arms.len(), 2, "Both arms should remain");
             } else {
@@ -715,7 +735,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("NestedTest".to_string(), neuron);
@@ -728,7 +752,7 @@ mod tests {
 
         // Verify pruning at both levels
         let neuron = program.neurons.get("NestedTest").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(outer_match) = &connections[0].destination {
                 assert_eq!(outer_match.arms.len(), 1, "Outer should have 1 arm");
 
@@ -781,7 +805,10 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(match1),
@@ -790,7 +817,8 @@ mod tests {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(match2),
                 },
-            ]),
+            ],
+            },
         };
 
         program.neurons.insert("CountTest".to_string(), neuron);
@@ -884,7 +912,11 @@ mod tests {
             params: vec![],
             inputs: vec![],
             outputs: vec![],
-            body: NeuronBody::Graph(vec![connection]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![connection],
+            },
         };
 
         program.neurons.insert("ReorderTest".to_string(), neuron);
@@ -894,7 +926,7 @@ mod tests {
 
         // Verify order is now correct (specific first)
         let neuron = program.neurons.get("ReorderTest").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 // First arm should now be the specific pattern
                 assert!(matches!(match_expr.arms[0].pattern.dims[0], Dim::Literal(2)));

@@ -38,7 +38,7 @@ impl NeuronDef {
     }
 
     pub fn is_composite(&self) -> bool {
-        matches!(self.body, NeuronBody::Graph(_))
+        matches!(self.body, NeuronBody::Graph { .. })
     }
 }
 

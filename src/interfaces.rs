@@ -115,6 +115,9 @@ pub struct CodeGenerator<'a> {
     /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
     /// Used to resolve dimension references in match arm pipelines
     pub binding_context: HashMap<String, String>,
+
+    /// Lazy bindings from let: blocks (name -> (call_name, args, kwargs))
+    pub lazy_bindings: HashMap<String, (String, Vec<Value>, Vec<(String, Value)>)>,
 }
 
 /// An input or output port of a neuron
@@ -196,13 +199,26 @@ pub struct MatchExpr {
 
 // ImplRef is already defined above as a struct
 
+/// A binding in a let: or set: block
+#[derive(Debug, Clone, PartialEq)]
+pub struct Binding {
+    pub name: String,
+    pub call_name: String,
+    pub args: Vec<Value>,
+    pub kwargs: Vec<(String, Value)>,
+}
+
 /// The body of a neuron definition
 #[derive(Debug, Clone, PartialEq)]
 pub enum NeuronBody {
     /// Primitive: has implementation reference
     Primitive(ImplRef),
     /// Composite: defined by internal graph
-    Graph(Vec<Connection>),
+    Graph {
+        let_bindings: Vec<Binding>,
+        set_bindings: Vec<Binding>,
+        connections: Vec<Connection>,
+    },
 }
 
 /// A parameter in a neuron definition
@@ -252,6 +268,8 @@ pub enum TokenKind {
     External,
     And,
     Or,
+    Let,
+    Set,
 
     // Literals
     Int(i64),
@@ -509,6 +527,15 @@ pub enum ValidationError {
         shadowed_by: usize,
         context: String,
     },
+    DuplicateBinding {
+        name: String,
+        neuron: String,
+    },
+    InvalidRecursion {
+        binding: String,
+        neuron: String,
+        reason: String,
+    },
     Custom(String),
 }
 
@@ -538,6 +565,12 @@ impl std::fmt::Display for ValidationError {
             ValidationError::UnreachableMatchArm { arm_index, shadowed_by, context } => {
                 write!(f, "Unreachable match arm {} shadowed by arm {} (in {})",
                        arm_index, shadowed_by, context)
+            }
+            ValidationError::DuplicateBinding { name, neuron } => {
+                write!(f, "Duplicate binding '{}' in neuron '{}'", name, neuron)
+            }
+            ValidationError::InvalidRecursion { binding, neuron, reason } => {
+                write!(f, "Invalid recursion in binding '{}' of neuron '{}': {}", binding, neuron, reason)
             }
             ValidationError::Custom(msg) => {
                 write!(f, "{}", msg)

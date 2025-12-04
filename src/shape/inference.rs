@@ -241,7 +241,7 @@ impl ShapeInferenceEngine {
         }
 
         // 3. Walk the graph
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             for conn in connections {
                 self.check_connection(conn, &mut ctx, program)?;
             }

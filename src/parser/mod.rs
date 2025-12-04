@@ -299,7 +299,7 @@ neuron Test:
         let neuron = &program.neurons["Test"];
         assert!(neuron.is_composite());
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 assert_eq!(connections.len(), 2);
             }
             _ => panic!("Expected graph body"),
@@ -322,7 +322,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 assert_eq!(connections.len(), 4);
             }
             _ => panic!("Expected graph body"),
@@ -342,7 +342,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 assert_eq!(connections.len(), 4);
                 // Check tuple endpoint
                 assert!(matches!(&connections[1].destination, Endpoint::Tuple(_)));
@@ -364,7 +364,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Ref(port_ref) => {
                         assert_eq!(port_ref.node, "node");
@@ -389,7 +389,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 assert!(matches!(&connections[0].source, Endpoint::Ref(r) if r.node == "in"));
                 assert!(matches!(&connections[1].destination, Endpoint::Ref(r) if r.node == "out"));
             }
@@ -424,7 +424,7 @@ neuron SimpleMatch:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["SimpleMatch"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Match(match_expr) => {
                         assert_eq!(match_expr.arms.len(), 3);
@@ -463,7 +463,7 @@ neuron MatchWithWildcard:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["MatchWithWildcard"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Match(match_expr) => {
                         assert_eq!(match_expr.arms.len(), 2);
@@ -491,7 +491,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Match(match_expr) => {
                         assert!(match_expr.arms[0].guard.is_some());
@@ -606,7 +606,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Call { args, kwargs, .. } => {
                         assert_eq!(args.len(), 2);
@@ -631,7 +631,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Call { args, kwargs, .. } => {
                         assert_eq!(args.len(), 0);
@@ -659,7 +659,7 @@ neuron Test:
         let program = Parser::parse(source).unwrap();
         let neuron = &program.neurons["Test"];
         match &neuron.body {
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 match &connections[0].destination {
                     Endpoint::Call { args, kwargs, .. } => {
                         assert_eq!(args.len(), 2);
@@ -691,10 +691,10 @@ neuron Test:
         assert!(mlp.is_composite());
 
         // Extract connections from the graphs
-        let NeuronBody::Graph(residual_connections) = &residual.body else {
+        let NeuronBody::Graph { connections: residual_connections, .. } = &residual.body else {
             panic!("Expected graph body for Residual");
         };
-        let NeuronBody::Graph(mlp_connections) = &mlp.body else {
+        let NeuronBody::Graph { connections: mlp_connections, .. } = &mlp.body else {
             panic!("Expected graph body for MLP");
         };
 

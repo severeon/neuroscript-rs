@@ -74,7 +74,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Call {
                     name: "MissingNeuron".to_string(),
@@ -82,7 +85,8 @@ mod tests {
                     kwargs: vec![],
                     id: 0
                 },
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -103,7 +107,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
                     arms: vec![MatchArm {
@@ -120,7 +127,8 @@ mod tests {
                         is_reachable: true,
                     }],
                 }),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -157,10 +165,14 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Call { name: "TwoOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Call { name: "OneIn".to_string(), args: vec![], kwargs: vec![], id: 0 },
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -185,13 +197,17 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Call { name: "OneOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Tuple(vec![
                     PortRef::new("a"),
                     PortRef::new("b"),
                 ]),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -233,7 +249,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 // Fork creates (a, b)
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
@@ -248,7 +267,7 @@ mod tests {
                     source: Endpoint::Tuple(vec![PortRef::new("a")]),
                     destination: Endpoint::Call { name: "TwoIn".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
-            ]),
+            ]}
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -274,10 +293,14 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![], id: 0 },
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -298,10 +321,14 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Call { name: "In256".to_string(), args: vec![], kwargs: vec![], id: 0 },
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -322,10 +349,14 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 destination: Endpoint::Call { name: "In512".to_string(), args: vec![], kwargs: vec![], id: 0 },
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -346,7 +377,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -355,7 +389,7 @@ mod tests {
                     source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
-            ]),
+            ]}
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -383,7 +417,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -397,7 +434,7 @@ mod tests {
                     source: Endpoint::Ref(PortRef::new("main")),
                     destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
                 },
-            ]),
+            ]},
         };
         program.neurons.insert("Composite".to_string(), composite);
 
@@ -439,7 +476,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Call { name: "Fork".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -464,7 +504,7 @@ mod tests {
                     source: Endpoint::Call { name: "Add".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Ref(PortRef::new("out")),
                 },
-            ]),
+            ]},
         };
         program.neurons.insert("Residual".to_string(), composite);
 
@@ -482,7 +522,11 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![]),
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![],
+            },
         };
         program.neurons.insert("Empty".to_string(), composite);
 
@@ -498,10 +542,14 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Ref(PortRef::new("out")),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("Passthrough".to_string(), composite);
 
@@ -520,7 +568,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
-            body: NeuronBody::Graph(vec![
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Call { name: "A".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -533,7 +584,8 @@ mod tests {
                     source: Endpoint::Call { name: "B".to_string(), args: vec![], kwargs: vec![], id: 0 },
                     destination: Endpoint::Ref(PortRef::new("out")),
                 },
-            ]),
+            ],
+            },
         };
         program.neurons.insert("Pipeline".to_string(), composite);
 
@@ -550,7 +602,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
                     arms: vec![
@@ -568,7 +623,8 @@ mod tests {
                         },
                     ],
                 }),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
@@ -585,7 +641,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
                     arms: vec![
@@ -603,7 +662,8 @@ mod tests {
                         },
                     ],
                 }),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
@@ -623,7 +683,10 @@ mod tests {
             params: vec![],
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
-            body: NeuronBody::Graph(vec![Connection {
+            body: NeuronBody::Graph {
+                let_bindings: vec![],
+                set_bindings: vec![],
+                connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
                     arms: vec![
@@ -647,7 +710,8 @@ mod tests {
                         },
                     ],
                 }),
-            }]),
+            }],
+            },
         };
         program.neurons.insert("TestMatch".to_string(), neuron);
 
@@ -656,7 +720,7 @@ mod tests {
         
         // Verify is_reachable
         let neuron = program.neurons.get("TestMatch").unwrap();
-        if let NeuronBody::Graph(connections) = &neuron.body {
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
             if let Endpoint::Match(match_expr) = &connections[0].destination {
                 assert!(match_expr.arms[0].is_reachable, "First arm should be reachable");
                 assert!(!match_expr.arms[1].is_reachable, "Second arm (specific) should be unreachable (shadowed by first)");

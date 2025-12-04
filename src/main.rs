@@ -79,7 +79,7 @@ fn main() -> miette::Result<()> {
             for (name, neuron) in &program.neurons {
                 let kind = match &neuron.body {
                     NeuronBody::Primitive(_) => "primitive",
-                    NeuronBody::Graph(_) => "composite",
+                    NeuronBody::Graph { .. } => "composite",
                 };
 
                 let inputs: Vec<_> = neuron
@@ -98,7 +98,7 @@ fn main() -> miette::Result<()> {
                 println!("    in:  {}", inputs.join(", "));
                 println!("    out: {}", outputs.join(", "));
 
-                if let NeuronBody::Graph(conns) = &neuron.body {
+                if let NeuronBody::Graph { connections: conns, .. } = &neuron.body {
                     println!("    connections: {:?}", conns);
                 }
 

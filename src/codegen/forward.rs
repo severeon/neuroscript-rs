@@ -16,8 +16,8 @@ pub(super) fn generate_forward_body(
     connections: &[Connection],
     inputs: &[&str],
 ) -> Result<(), CodegenError> {
-    // Clear var names for this forward pass
-    gen.var_names.clear();
+    // Don't clear var_names - preserve module bindings from __init__
+    // Only add/override with input port mappings
 
     // Map input ports to initial variables
     if inputs.len() == 1 && inputs[0] == "default" {
@@ -123,7 +123,56 @@ fn process_destination(
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
-            // Simple assignment - the source becomes this port's variable
+            // Check if this is a reference to a bound module (from let: or set:)
+            // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
+            if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
+                if module_ref.starts_with("self.") {
+                    // Check if this is a lazy binding (starts with "self._")
+                    if module_ref.starts_with("self._") && gen.lazy_bindings.contains_key(&port_ref.node) {
+                        // Generate lazy instantiation code
+                        let (call_name, args, kwargs) = gen.lazy_bindings.get(&port_ref.node).unwrap();
+
+                        let args_str = args.iter()
+                            .map(|v| gen.value_to_python_with_self(v))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        let kwargs_str = if kwargs.is_empty() {
+                            String::new()
+                        } else {
+                            let kw: Vec<String> = kwargs.iter()
+                                .map(|(k, v)| format!("{}={}", k, gen.value_to_python_with_self(v)))
+                                .collect();
+                            if args.is_empty() {
+                                kw.join(", ")
+                            } else {
+                                format!(", {}", kw.join(", "))
+                            }
+                        };
+
+                        // Generate lazy instantiation check
+                        writeln!(output, "{}if {} is None:", indent, module_ref).unwrap();
+                        writeln!(output, "{}    {} = {}({}{})",
+                                indent, module_ref, call_name, args_str, kwargs_str).unwrap();
+                    }
+
+                    // This is a bound module - generate a call
+                    let result_var = format!("x{}", *temp_var_counter);
+                    *temp_var_counter += 1;
+                    writeln!(
+                        output,
+                        "{}{} = {}({})",
+                        indent, result_var, module_ref, source_var
+                    )
+                    .unwrap();
+
+                    // Also update the port_ref.node to map to result_var for future connections
+                    gen.var_names.insert(port_ref.node.clone(), result_var.clone());
+                    return Ok(result_var);
+                }
+            }
+
+            // Simple port reference - the source becomes this port's variable
             gen.var_names
                 .insert(port_ref.node.clone(), source_var.clone());
             Ok(source_var)

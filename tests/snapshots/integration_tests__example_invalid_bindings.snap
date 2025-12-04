@@ -1,0 +1,50 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron DuplicateBinding(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  set:
+    layer = Linear(...)
+    layer = Linear(...)
+  graph:
+    in -> layer
+    layer -> out
+
+neuron MissingInLet(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  let:
+    missing = NonExistentNeuron(...)
+  graph:
+    in -> missing
+    missing -> out
+
+neuron MissingInSet(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  set:
+    missing = AnotherNonExistent(...)
+  graph:
+    in -> missing
+    missing -> out
+
+neuron RecursiveSet(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  set:
+    recurse = RecursiveSet(...)
+  graph:
+    in -> recurse
+    recurse -> out

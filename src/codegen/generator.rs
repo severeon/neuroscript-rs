@@ -32,6 +32,7 @@ impl<'a> CodeGenerator<'a> {
             call_to_module: std::collections::HashMap::new(),
             current_neuron_params: HashSet::new(),
             binding_context: std::collections::HashMap::new(),
+            lazy_bindings: std::collections::HashMap::new(),
         }
     }
 
@@ -83,9 +84,9 @@ impl<'a> CodeGenerator<'a> {
                 // Primitives don't instantiate sub-modules
                 writeln!(output, "        pass").unwrap();
             }
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { let_bindings, set_bindings, connections } => {
                 // Instantiate all called neurons as modules
-                instantiation::generate_module_instantiations(self, output, connections)?;
+                instantiation::generate_module_instantiations(self, output, let_bindings, set_bindings, connections)?;
             }
         }
 
@@ -111,7 +112,7 @@ impl<'a> CodeGenerator<'a> {
                 // Primitive neurons just pass through
                 writeln!(output, "        return {}", input_params).unwrap();
             }
-            NeuronBody::Graph(connections) => {
+            NeuronBody::Graph { connections, .. } => {
                 forward::generate_forward_body(
                     self,
                     output,

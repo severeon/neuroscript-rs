@@ -93,8 +93,8 @@
   - [x] Complete TransformerBlock.ns with full residual connections
   - [x] Implement MultiHeadAttention composite (not primitive)
   - [x] Build FFN variants
-  - [ ] Create TransformerStack composite
-  - [ ] Validate all composites with shape inference
+  - [x] Create TransformerStack composite
+  - [x] Validate all composites with shape inference
   - [ ] Test composition correctness
  
 ### 4.2 Implement Stdlib Loading
@@ -166,42 +166,42 @@
 
 ## MVP Phase 7: `let`/`set` Bindings & Structural Recursion ⭐ KILLER FEATURE
 
-### 7.1 Lexer & Parser Extensions
+### 7.1 Lexer & Parser Extensions ✅
 
-  - [ ] Add `set` keyword to lexer (`let` already reserved)
-  - [ ] Implement `parse_set_block()` for eager bindings
-  - [ ] Implement `parse_let_block()` for lazy bindings
-  - [ ] Parse binding syntax: `name = NeuronCall(args)`
+  - [x] Add `set` keyword to lexer (`let` already reserved)
+  - [x] Implement `parse_set_block()` for eager bindings
+  - [x] Implement `parse_let_block()` for lazy bindings
+  - [x] Parse binding syntax: `name = NeuronCall(args)`
   - [ ] Support `Freeze(neuron)` meta-neuron syntax
-  - [ ] Test parsing of let/set blocks
+  - [x] Test parsing of let/set blocks
 
-### 7.2 IR Extensions for Bindings
+### 7.2 IR Extensions for Bindings ✅
 
-  - [ ] Add `set_bindings: Vec<SetBinding>` to `NeuronDef`
-  - [ ] Add `let_bindings: Vec<LetBinding>` to `NeuronDef`
-  - [ ] Define `SetBinding` struct with name + neuron call
-  - [ ] Define `LetBinding` struct with name + neuron call
-  - [ ] Update IR Display traits for bindings
-  - [ ] Test IR correctly represents bindings
+  - [x] Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`
+  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`
+  - [x] Define `Binding` struct with name + neuron call
+  - [x] Update IR Display traits for bindings
+  - [x] Test IR correctly represents bindings
 
-### 7.3 Validation Rules for Bindings
+### 7.3 Validation Rules for Bindings ✅
 
-  - [ ] Check no forward references in bindings
-  - [ ] Validate binding names don't conflict with parameters
-  - [ ] Validate binding names don't conflict with ports
-  - [ ] Check lazy bindings not used in eager (set) context
-  - [ ] Validate bound neuron names exist
-  - [ ] Test validation catches binding errors
+  - [x] Check no forward references in bindings
+  - [x] Validate binding names don't conflict (duplicate binding check)
+  - [x] Validate bound neuron names exist
+  - [x] Check for recursive set: bindings (not allowed)
+  - [x] Check for let: bindings with parameters (recursion control)
+  - [x] Test validation catches binding errors
 
-### 7.4 Basic Codegen (Weight Sharing, No Recursion)
+### 7.4 Basic Codegen (Weight Sharing, No Recursion) ✅
 
-  - [ ] Generate `set:` bindings in `__init__` (eager instantiation)
-  - [ ] Track bound names → module instance mapping
-  - [ ] Reference bound names in graph connections
-  - [ ] Support weight sharing (same instance multiple uses)
-  - [ ] Test basic set bindings generate correctly
-  - [ ] Test weight sharing with repeated references
-  - [ ] Create examples/17-let-set-basics.ns
+  - [x] Generate `set:` bindings in `__init__` (eager instantiation)
+  - [x] Generate `let:` bindings with lazy instantiation markers
+  - [x] Track bound names → module instance mapping
+  - [x] Reference bound names in graph connections
+  - [x] Support weight sharing (same instance multiple uses)
+  - [x] Test basic set bindings generate correctly
+  - [x] Test basic let bindings generate correctly with lazy instantiation
+  - [x] Create examples/let_set_basic.ns
 
 ### 7.5 Recursion Detection & Analysis
 

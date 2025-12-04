@@ -13,8 +13,82 @@ use super::utils::*;
 pub(super) fn generate_module_instantiations(
     gen: &mut CodeGenerator,
     output: &mut String,
+    let_bindings: &[Binding],
+    set_bindings: &[Binding],
     connections: &[Connection]
 ) -> Result<(), CodegenError> {
+    // First, generate set: bindings (eager instantiation)
+    for binding in set_bindings {
+        let module_name = binding.name.clone();
+        let name = &binding.call_name;
+        let args = &binding.args;
+        let kwargs = &binding.kwargs;
+
+        // Check if this is a primitive
+        let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
+            neuron.is_primitive()
+        } else {
+            true  // Assume primitive if not in program
+        };
+
+        if is_primitive {
+            gen.used_primitives.insert(name.clone());
+        }
+
+        // Generate instantiation for set binding
+        let args_str = args.iter()
+            .map(|v| value_to_python_impl(v))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let kwargs_str = if kwargs.is_empty() {
+            String::new()
+        } else {
+            let kw: Vec<String> = kwargs.iter()
+                .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
+                .collect();
+            if args.is_empty() {
+                kw.join(", ")
+            } else {
+                format!(", {}", kw.join(", "))
+            }
+        };
+
+        writeln!(output, "        self.{} = {}({}{})",
+                 module_name, name, args_str, kwargs_str).unwrap();
+
+        // Register the binding name as a variable for use in graph
+        gen.var_names.insert(module_name.clone(), format!("self.{}", module_name));
+    }
+
+    // TODO: Handle let: bindings - these need lazy instantiation
+    // For now, we'll mark them for lazy instantiation
+    for binding in let_bindings {
+        let module_name = binding.name.clone();
+        let name = &binding.call_name;
+
+        // Check if this is a primitive
+        let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
+            neuron.is_primitive()
+        } else {
+            true  // Assume primitive if not in program
+        };
+
+        if is_primitive {
+            gen.used_primitives.insert(name.clone());
+        }
+
+        // Initialize as None for lazy instantiation
+        writeln!(output, "        self._{} = None  # Lazy instantiation (let binding)", binding.name).unwrap();
+
+        // Store binding info for lazy instantiation in forward()
+        gen.lazy_bindings.insert(
+            module_name.clone(),
+            (name.clone(), binding.args.clone(), binding.kwargs.clone())
+        );
+        gen.var_names.insert(module_name.clone(), format!("self._{}", module_name));
+    }
+
     // Collect all unique Call endpoints and assign them IDs
     let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<(String, Value)>)> = HashMap::new();
     let mut all_endpoints = Vec::new();
@@ -118,7 +192,7 @@ mod tests {
         ];
 
         let mut output = String::new();
-        generate_module_instantiations(&mut gen, &mut output, &connections).unwrap();
+        generate_module_instantiations(&mut gen, &mut output, &[], &[], &connections).unwrap();
 
         assert!(output.contains("self.linear_0 = Linear(512, 256)"));
     }
@@ -151,7 +225,7 @@ mod tests {
         ];
 
         let mut output = String::new();
-        generate_module_instantiations(&mut gen, &mut output, &connections).unwrap();
+        generate_module_instantiations(&mut gen, &mut output, &[], &[], &connections).unwrap();
 
         // Should only have one instantiation
         assert_eq!(output.matches("Linear(512, 256)").count(), 1);
@@ -176,7 +250,7 @@ mod tests {
         ];
 
         let mut output = String::new();
-        generate_module_instantiations(&mut gen, &mut output, &connections).unwrap();
+        generate_module_instantiations(&mut gen, &mut output, &[], &[], &connections).unwrap();
 
         // Should generate lazy instantiation marker
         assert!(output.contains("self._linear_0 = None"));

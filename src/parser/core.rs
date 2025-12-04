@@ -265,7 +265,10 @@ impl Parser {
         // Parse ports and body
         let mut inputs = vec![];
         let mut outputs = vec![];
-        let mut body = None;
+        let mut let_bindings = vec![];
+        let mut set_bindings = vec![];
+        let mut graph_connections = None;
+        let mut impl_ref = None;
 
         while !self.at(&TokenKind::Dedent) && !self.at(&TokenKind::Eof) {
             self.skip_newlines();
@@ -299,12 +302,20 @@ impl Parser {
                         outputs.push(port);
                     }
                 }
+                TokenKind::Let => {
+                    let bindings = self.parse_section(&TokenKind::Let, |p| p.parse_binding())?;
+                    let_bindings.extend(bindings);
+                }
+                TokenKind::Set => {
+                    let bindings = self.parse_section(&TokenKind::Set, |p| p.parse_binding())?;
+                    set_bindings.extend(bindings);
+                }
                 TokenKind::Impl => {
-                    let impl_ref = self.parse_single_section(&TokenKind::Impl, |p| p.impl_item())?;
-                    body = Some(NeuronBody::Primitive(impl_ref));
+                    let impl_ref_item = self.parse_single_section(&TokenKind::Impl, |p| p.impl_item())?;
+                    impl_ref = Some(impl_ref_item);
                 }
                 TokenKind::Graph => {
-                    body = Some(NeuronBody::Graph(self.graph_body()?));
+                    graph_connections = Some(self.graph_body()?);
                 }
                 TokenKind::Dedent => break,
                 _ => {
@@ -320,11 +331,31 @@ impl Parser {
             self.advance();
         }
 
-        let body = body.ok_or_else(|| ParseError::Expected {
-            expected: "impl or graph".to_string(),
-            found: "end of neuron".to_string(),
-            span: self.peek().span.into(),
-        })?;
+        // Construct body based on what we found
+        let body = if let Some(impl_ref_item) = impl_ref {
+            NeuronBody::Primitive(impl_ref_item)
+        } else if let Some(connections) = graph_connections {
+            NeuronBody::Graph {
+                let_bindings,
+                set_bindings,
+                connections,
+            }
+        } else {
+            // If no impl or graph but we have bindings, treat as graph with empty connections
+            if !let_bindings.is_empty() || !set_bindings.is_empty() {
+                NeuronBody::Graph {
+                    let_bindings,
+                    set_bindings,
+                    connections: vec![],
+                }
+            } else {
+                return Err(ParseError::Expected {
+                    expected: "impl or graph".to_string(),
+                    found: "end of neuron".to_string(),
+                    span: self.peek().span.into(),
+                });
+            }
+        };
 
         Ok(NeuronDef {
             name,
@@ -506,6 +537,26 @@ impl Parser {
 
         // Flatten the nested vectors
         Ok(connection_groups.into_iter().flatten().collect())
+    }
+
+    // Parse a binding: name = NeuronCall(args)
+    fn parse_binding(&mut self) -> Result<Binding, ParseError> {
+        let name = self.ident()?;
+        self.expect(&TokenKind::Assign)?;
+
+        // Parse the neuron call
+        let call_name = self.ident()?;
+        self.expect(&TokenKind::LParen)?;
+        let (args, kwargs) = self.call_args()?;
+        self.expect(&TokenKind::RParen)?;
+        self.expect(&TokenKind::Newline)?;
+
+        Ok(Binding {
+            name,
+            call_name,
+            args,
+            kwargs,
+        })
     }
 
     // endpoint -> endpoint [-> endpoint...]
