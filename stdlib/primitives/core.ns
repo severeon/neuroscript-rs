@@ -1,0 +1,32 @@
+# Core Primitives
+# Linear transformations and fundamental operations
+
+# Linear: Fully-connected layer
+# Maps from input dimension to output dimension
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+
+# Embedding: Token embedding layer
+# Maps discrete tokens to dense vectors
+neuron Embedding(vocab_size, embedding_dim):
+    in: [*indices]
+    out: [*, embedding_dim]
+    impl: core,embeddings/Embedding
+
+
+# PositionalEncoding: Add positional information to embeddings
+# Preserves input shape while adding positional encoding
+neuron PositionalEncoding(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,embeddings/PositionalEncoding
+
+
+# LearnedPositionalEmbedding: Learned positional embeddings (BERT style)
+neuron LearnedPositionalEmbedding(max_seq_len, embedding_dim):
+    in: [*, embedding_dim]
+    out: [*, embedding_dim]
+    impl: core,embeddings/LearnedPositionalEmbedding

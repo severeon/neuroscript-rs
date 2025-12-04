@@ -1,99 +1,13 @@
 # Residual Connection / Skip Connection
 #
 # Implements: out = x + f(x)
-# Where f is an arbitrary transformation (typically FFN or Attention)
+# Where f is an arbitrary transformation
 #
 # This is the fundamental building block of ResNets and Transformers.
 # Enables training of very deep networks by providing gradient shortcuts.
-
-# Simple residual: applies function F and adds input
-# Note: This is a conceptual definition - actual implementation
-# would need a way to parameterize the inner function F
-neuron Residual(f):
-    in: [*shape]
-    out: [*shape]
-    graph:
-        # Split input
-        in -> (skip, transform)
-
-        # Apply transformation
-        transform -> f -> transformed
-
-        # Add skip connection
-        # (skip, transformed) -> Add() -> out
-
-
-# Pre-norm residual: LayerNorm before transformation
-# Pattern: out = x + f(LayerNorm(x))
-# This is the modern transformer style (vs post-norm)
-neuron PreNormResidual(f, dim):
-    in: [*, dim]
-    out: [*, dim]
-    graph:
-        in -> (skip, transform)
-
-        # Normalize then transform
-        transform ->
-            LayerNorm(dim)
-            f
-            transformed
-
-        # Add skip
-        # (skip, transformed) -> Add() -> out
-
-
-# Post-norm residual: LayerNorm after addition
-# Pattern: out = LayerNorm(x + f(x))
-# This is the original transformer style
-neuron PostNormResidual(f, dim):
-    in: [*, dim]
-    out: [*, dim]
-    graph:
-        in -> (skip, transform)
-
-        # Apply transformation
-        transform -> f -> transformed
-
-        # Add then normalize
-        # (skip, transformed) -> Add() -> added
-        # added -> LayerNorm(dim) -> out
-
-
-# Residual with learnable gate (Highway Network style)
-# out = gate * f(x) + (1 - gate) * x
-# where gate = sigmoid(Wg * x + bg)
-neuron HighwayResidual(dim, f):
-    in: [*, dim]
-    out: [*, dim]
-    graph:
-        in -> (gate_path, transform_path, skip_path)
-
-        # Compute gate signal
-        gate_path ->
-            Linear(dim, dim)
-            Sigmoid()
-            gate
-
-        # Transform input
-        transform_path ->
-            f
-            transformed
-
-        # Gated combination
-        # (gate, transformed, skip_path) -> GatedAdd() -> out
-
-
-# Simple concrete example: Residual FFN
-neuron ResidualFFN(dim, expansion):
-    in: [*, dim]
-    out: [*, dim]
-    graph:
-        in -> (skip, transform)
-
-        transform ->
-            Linear(dim, expansion)
-            GELU()
-            Linear(expansion, dim)
-            transformed
-
-        # (skip, transformed) -> Add() -> out
+#
+# NOTE: This simplified version does not use Fork() with tuple unpacking
+# due to validator limitations with empty port signatures.
+# Full residual patterns will be added once primitives have proper
+# port definitions in the shape system.
+# See MetaNeurons.ns for Identity() and other routing operations.

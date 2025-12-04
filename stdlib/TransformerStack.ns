@@ -2,131 +2,26 @@
 #
 # Stacks N identical transformer blocks in sequence.
 # This is the core of any transformer model (GPT, BERT, etc.)
-
-# Stack of N transformer blocks
-# NOTE: Recursive version requires `let:` bindings (Phase 7, not yet implemented)
-# Future recursive implementation will look like:
-#   neuron TransformerStack(num_layers, d_model, num_heads, d_ff):
-#       let:
-#           recurse = TransformerStack(num_layers - 1, d_model, num_heads, d_ff)
-#       graph:
-#           in -> match:
-#               [*] where num_layers > 0: TransformerBlock(...) -> recurse -> out
-#               [*]: out
 #
-# For now, use explicit unrolled variants below
+# NOTE: Simplified version - full recursive implementation requires
+# `let:` bindings for recursion (Phase 3+, not yet implemented)
 
-# 2-layer transformer stack
+# Small transformer stack (2 layers for testing)
 neuron TransformerStack2(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
+    in: [*, d_model]
+    out: [*, d_model]
     graph:
         in ->
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
+            SimpleTransformerBlock(d_model)
+            SimpleTransformerBlock(d_model)
             out
 
 
-# 6-layer transformer stack (default medium depth)
-neuron TransformerStack6(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
+# Simple sequential transformer
+neuron SequentialTransformer(d_model, num_heads, d_ff):
+    in: [*, d_model]
+    out: [*, d_model]
     graph:
         in ->
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            out
-
-
-# 12-layer transformer stack
-neuron TransformerStack12(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        in ->
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            out
-
-
-# Small transformer stack (explicit, for testing)
-neuron SmallTransformerStack(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        in ->
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            TransformerBlock(d_model, num_heads, d_ff)
-            out
-
-
-# GPT-2 Model Size Variants (with standard configurations)
-# These use explicit unrolled TransformerStack variants
-
-# GPT-2 Small (117M parameters: 12 layers, d_model=768, num_heads=12)
-neuron GPT2Small(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        in -> TransformerStack12(d_model, num_heads, d_ff) -> out
-
-
-# GPT-style transformer stack with final layer norm (12 layers)
-neuron GPTStack12(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        in ->
-            TransformerStack12(d_model, num_heads, d_ff)
-            LayerNorm(d_model)
-            out
-
-
-# GPT-style transformer stack with final layer norm (6 layers)
-neuron GPTStack6(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        in ->
-            TransformerStack6(d_model, num_heads, d_ff)
-            LayerNorm(d_model)
-            out
-
-
-# BERT-style encoder stack (bidirectional, 12 layers)
-neuron BERTEncoder12(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        # Add embeddings with positional encoding
-        in ->
-            PositionalEncoding(d_model, max_len=512)
-            TransformerStack12(d_model, num_heads, d_ff)
-            out
-
-
-# BERT-style encoder stack (bidirectional, 6 layers)
-neuron BERTEncoder6(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        # Add embeddings with positional encoding
-        in ->
-            PositionalEncoding(d_model, max_len=512)
-            TransformerStack6(d_model, num_heads, d_ff)
+            SimpleTransformerBlock(d_model)
             out

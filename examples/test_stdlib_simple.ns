@@ -1,12 +1,8 @@
-# Test using primitive neurons that are auto-loaded from registry
-# This demonstrates that primitives are recognized
-
-neuron SimpleModel(dim):
-    in: [*, dim]
-    out: [*, dim]
+# Test simple stdlib usage without Fork
+neuron SimpleFFNTest:
+    in: [*, 512]
+    out: [*, 512]
     graph:
         in ->
-            Linear(dim, dim * 2)
-            GELU()
-            Linear(dim * 2, dim)
+            FFN(512, 2048)
             out

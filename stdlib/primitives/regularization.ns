@@ -1,0 +1,24 @@
+# Regularization Primitives
+# Dropout and related techniques
+
+# Dropout: Stochastic regularization
+# Preserves shape during training, modulates during eval
+neuron Dropout(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/Dropout
+
+
+# DropPath: Stochastic depth / drop path regularization
+# Randomly drops entire paths during training
+neuron DropPath(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/DropPath
+
+
+# DropConnect: Connection dropout (drops weights)
+neuron DropConnect(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/DropConnect

@@ -1,10 +1,110 @@
-# Test using stdlib neurons
-# This example uses FFN from stdlib to demonstrate stdlib loading
+# Test Suite for Stdlib Neurons
+# Validates that all stdlib neurons parse, validate, and can be compiled
 
-neuron MyModel(dim):
-    in: [*, dim]
-    out: [*, dim]
+# ============================================================================
+# Test 1: FFN and variants
+# ============================================================================
+
+neuron TestFFN:
+    in: [*, 512]
+    out: [*, 512]
     graph:
         in ->
-            FFN(dim, dim * 4)
+            FFN(512, 2048)
+            out
+
+
+neuron TestFFNWithHidden:
+    in: [*, 256]
+    out: [*, 512]
+    graph:
+        in ->
+            FFNWithHidden(256, 1024, 512)
+            out
+
+
+# ============================================================================
+# Test 2: Meta-neurons and structural operations
+# ============================================================================
+
+neuron TestIdentity:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            Identity()
+            out
+
+
+neuron TestParallelFFN:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            ParallelFFN(512)
+            out
+
+
+# ============================================================================
+# Test 3: Attention mechanisms (primitives)
+# ============================================================================
+
+neuron TestMultiHeadAttention:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            MultiHeadSelfAttention(512, 8)
+            out
+
+
+# ============================================================================
+# Test 4: Transformer blocks and stacks
+# ============================================================================
+
+neuron TestSimpleTransformerBlock:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            SimpleTransformerBlock(512)
+            out
+
+
+neuron TestTransformerStack2:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            TransformerStack2(512, 8, 2048)
+            out
+
+
+neuron TestSequentialTransformer:
+    in: [*, 512]
+    out: [*, 512]
+    graph:
+        in ->
+            SequentialTransformer(512, 8, 2048)
+            out
+
+
+# ============================================================================
+# Test 5: Combined complex pipeline
+# ============================================================================
+
+neuron TestComplexPipeline:
+    in: [*, 768]
+    out: [*, 768]
+    graph:
+        # Embedding and positional encoding
+        in ->
+            PositionalEncoding(768)
+
+            # Transformer stack
+            TransformerStack2(768, 12, 3072)
+
+            # Final FFN
+            FFN(768, 2048)
+
             out

@@ -1,0 +1,66 @@
+# Structural Primitives
+# These define the port signatures for multi-input/multi-output operations
+
+# Fork: Split single input into two identical outputs
+# Used for creating branching paths in residual connections
+neuron Fork():
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,structural/Fork
+
+
+# Fork3: Split single input into three identical outputs
+neuron Fork3():
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    out c: [*shape]
+    impl: core,structural/Fork3
+
+
+# Add: Element-wise addition of two tensors
+# Takes two inputs with same shape, produces output with that shape
+neuron Add():
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,structural/Add
+
+
+# Multiply: Element-wise multiplication of two tensors
+# Takes two inputs with same shape, produces output with that shape
+neuron Multiply():
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,structural/Multiply
+
+
+# Concat: Concatenate tensors along a dimension
+neuron Concat(dim):
+    in a: [*shape]
+    in b: [*shape]
+    out: [*concatenated_shape]
+    impl: core,structural/Concat
+
+
+# Identity: Pass-through operation
+neuron Identity():
+    in: [*shape]
+    out: [*shape]
+    impl: core,structural/Identity
+
+
+# Reshape: Reshape tensor to target shape
+neuron Reshape(target_shape):
+    in: [*shape_in]
+    out: [*target_shape]
+    impl: core,structural/Reshape
+
+
+# Transpose: Transpose tensor dimensions
+neuron Transpose(dim0, dim1):
+    in: [*shape]
+    out: [*transposed_shape]
+    impl: core,structural/Transpose

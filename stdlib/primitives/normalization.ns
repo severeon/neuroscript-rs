@@ -1,0 +1,25 @@
+# Normalization Primitives
+# Normalize tensor values, preserve shape
+
+# LayerNorm: Layer normalization
+# Normalizes across last dimension(s), preserves shape
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+
+# RMSNorm: Root Mean Square normalization (efficient variant)
+# Used in modern models like LLaMA
+neuron RMSNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/RMSNorm
+
+
+# GroupNorm: Group normalization
+# Works well with small batch sizes
+neuron GroupNorm(num_groups, dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/GroupNorm
