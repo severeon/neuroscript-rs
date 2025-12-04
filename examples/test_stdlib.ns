@@ -1,0 +1,10 @@
+# Test using stdlib neurons
+# This example uses FFN from stdlib to demonstrate stdlib loading
+
+neuron MyModel(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            FFN(dim, dim * 4)
+            out

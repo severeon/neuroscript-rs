@@ -23,6 +23,7 @@ pub mod lexer;
 pub mod optimizer;
 pub mod parser;
 pub mod shape;
+pub mod stdlib;
 pub mod stdlib_registry;
 pub mod validator;
 

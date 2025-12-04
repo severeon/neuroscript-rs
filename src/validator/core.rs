@@ -32,10 +32,16 @@ impl SymbolTable {
 pub struct Validator;
 
 impl Validator {
+    /// Check if a neuron exists (either in the program or as a primitive)
+    fn neuron_exists(name: &str, program: &Program, registry: &StdlibRegistry) -> bool {
+        program.neurons.contains_key(name) || registry.contains(name)
+    }
+
     /// Validate an entire program
     /// Validate an entire program
     pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
+        let registry = StdlibRegistry::new();
 
         // Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
@@ -45,11 +51,11 @@ impl Validator {
                 if let NeuronBody::Graph { let_bindings, set_bindings, connections } = &neuron.body {
                     // Validate bindings first
                     errors.extend(Self::validate_bindings(
-                        neuron, let_bindings, set_bindings, program
+                        neuron, let_bindings, set_bindings, program, &registry
                     ));
 
                     errors.extend(Self::validate_neuron_graph(
-                        neuron, connections, program
+                        neuron, connections, program, &registry
                     ));
                 }
             }
@@ -79,6 +85,7 @@ impl Validator {
         let_bindings: &[Binding],
         set_bindings: &[Binding],
         program: &Program,
+        registry: &StdlibRegistry,
     ) -> Vec<ValidationError> {
         let mut errors = Vec::new();
         let mut defined_bindings = HashSet::new();
@@ -86,7 +93,7 @@ impl Validator {
         // Check set: bindings first (they're evaluated eagerly in __init__)
         for binding in set_bindings {
             // Check if the neuron being called exists
-            if !program.neurons.contains_key(&binding.call_name) {
+            if !Self::neuron_exists(&binding.call_name, program, registry) {
                 errors.push(ValidationError::MissingNeuron {
                     name: binding.call_name.clone(),
                     context: format!("set binding '{}' in neuron '{}'", binding.name, neuron.name),
@@ -115,7 +122,7 @@ impl Validator {
         // Check let: bindings (lazy instantiation)
         for binding in let_bindings {
             // Check if the neuron being called exists
-            if !program.neurons.contains_key(&binding.call_name) {
+            if !Self::neuron_exists(&binding.call_name, program, registry) {
                 errors.push(ValidationError::MissingNeuron {
                     name: binding.call_name.clone(),
                     context: format!("let binding '{}' in neuron '{}'", binding.name, neuron.name),
@@ -154,17 +161,18 @@ impl Validator {
         neuron: &NeuronDef,
         connections: &[Connection],
         program: &Program,
+        registry: &StdlibRegistry,
     ) -> Vec<ValidationError> {
         let mut errors = Vec::new();
 
         // Build symbol table for this neuron's graph
-        let symbol_table = Self::build_symbol_table(neuron, connections, program, &mut errors);
+        let symbol_table = Self::build_symbol_table(neuron, connections, program, registry, &mut errors);
 
         // Validate each connection
         for connection in connections {
             // Check that neurons exist
-            errors.extend(Self::check_neurons_exist(&connection.source, &neuron.name, program));
-            errors.extend(Self::check_neurons_exist(&connection.destination, &neuron.name, program));
+            errors.extend(Self::check_neurons_exist(&connection.source, &neuron.name, program, registry));
+            errors.extend(Self::check_neurons_exist(&connection.destination, &neuron.name, program, registry));
 
             // Validate match expressions - moved to separate pass
             // if let Endpoint::Match(match_expr) = &connection.destination {
@@ -177,6 +185,7 @@ impl Validator {
                 neuron,
                 &symbol_table,
                 program,
+                registry,
                 true, // is_source
             );
             let dest_resolution = Self::resolve_endpoint(
@@ -184,6 +193,7 @@ impl Validator {
                 neuron,
                 &symbol_table,
                 program,
+                registry,
                 false, // is_source
             );
 
@@ -216,6 +226,7 @@ impl Validator {
         neuron: &NeuronDef,
         connections: &[Connection],
         program: &Program,
+        registry: &StdlibRegistry,
         errors: &mut Vec<ValidationError>,
     ) -> SymbolTable {
         let mut table = SymbolTable::new();
@@ -258,7 +269,7 @@ impl Validator {
                 // Tuple unpacking: source -> (a, b, c)
                 Endpoint::Tuple(port_refs) => {
                     // Source must resolve to multiple ports
-                    match Self::resolve_endpoint_partial(&connection.source, neuron, &table, program, true, errors) {
+                    match Self::resolve_endpoint_partial(&connection.source, neuron, &table, program, registry, true, errors) {
                         Some(source_ports) => {
                             if source_ports.len() != port_refs.len() {
                                 errors.push(ValidationError::ArityMismatch {
@@ -281,7 +292,7 @@ impl Validator {
                 // Single intermediate node: source -> intermediate
                 Endpoint::Ref(port_ref) if port_ref.node != "in" && port_ref.node != "out" => {
                     // This creates an intermediate node
-                    match Self::resolve_endpoint_partial(&connection.source, neuron, &table, program, true, errors) {
+                    match Self::resolve_endpoint_partial(&connection.source, neuron, &table, program, registry, true, errors) {
                         Some(source_ports) => {
                             // Add the intermediate node with the source's output ports
                             table.add_node(port_ref.node.clone(), source_ports);
@@ -307,10 +318,11 @@ impl Validator {
         neuron: &NeuronDef,
         table: &SymbolTable,
         program: &Program,
+        registry: &StdlibRegistry,
         is_source: bool,
         errors: &mut Vec<ValidationError>,
     ) -> Option<Vec<Port>> {
-        match Self::resolve_endpoint(endpoint, neuron, table, program, is_source) {
+        match Self::resolve_endpoint(endpoint, neuron, table, program, registry, is_source) {
             Ok(ports) => Some(ports),
             Err(e) => {
                 errors.push(e);
@@ -325,6 +337,7 @@ impl Validator {
         neuron: &NeuronDef,
         symbol_table: &SymbolTable,
         program: &Program,
+        registry: &StdlibRegistry,
         is_source: bool,
     ) -> Result<Vec<Port>, ValidationError> {
         match endpoint {
@@ -340,6 +353,14 @@ impl Validator {
                     // Substitute parameters in port shapes
                     let substituted_ports = Self::substitute_params(ports, &called_neuron.params, args);
                     Ok(substituted_ports)
+                } else if registry.contains(name) {
+                    // Primitive neuron - skip detailed port validation
+                    // Primitives are validated at codegen time
+                    // Return a dummy port to allow validation to continue
+                    Ok(vec![Port {
+                        name: "default".to_string(),
+                        shape: Shape { dims: vec![] },
+                    }])
                 } else {
                     Err(ValidationError::MissingNeuron {
                         name: name.clone(),
@@ -377,6 +398,7 @@ impl Validator {
                         neuron,
                         symbol_table,
                         program,
+                        registry,
                         is_source,
                     )?;
                     ports.extend(resolved);
@@ -646,10 +668,11 @@ impl Validator {
         endpoint: &Endpoint,
         context_neuron: &str,
         program: &Program,
+        registry: &StdlibRegistry,
     ) -> Vec<ValidationError> {
         match endpoint {
             Endpoint::Call { name, .. } => {
-                if !program.neurons.contains_key(name) {
+                if !Self::neuron_exists(name, program, registry) {
                     vec![ValidationError::MissingNeuron {
                         name: name.clone(),
                         context: context_neuron.to_string(),
@@ -662,7 +685,7 @@ impl Validator {
                 match_expr.arms.iter()
                     .flat_map(|arm| {
                         arm.pipeline.iter()
-                            .flat_map(|ep| Self::check_neurons_exist(ep, context_neuron, program))
+                            .flat_map(|ep| Self::check_neurons_exist(ep, context_neuron, program, registry))
                     })
                     .collect()
             }

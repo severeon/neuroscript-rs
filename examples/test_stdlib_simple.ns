@@ -1,0 +1,12 @@
+# Test using primitive neurons that are auto-loaded from registry
+# This demonstrates that primitives are recognized
+
+neuron SimpleModel(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 2)
+            GELU()
+            Linear(dim * 2, dim)
+            out

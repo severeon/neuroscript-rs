@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use miette::{IntoDiagnostic, NamedSource, WrapErr};
-use neuroscript::{parse, validate, generate_pytorch, NeuronBody};
+use neuroscript::{parse, validate, generate_pytorch, stdlib, NeuronBody};
 use std::fs;
 use std::path::PathBuf;
 
@@ -37,6 +37,10 @@ enum Commands {
         /// Show IR structure and validation details
         #[arg(short, long)]
         verbose: bool,
+
+        /// Skip loading standard library
+        #[arg(long)]
+        no_stdlib: bool,
     },
 
     /// Compile NeuroScript to PyTorch
@@ -64,6 +68,10 @@ enum Commands {
         /// Show optimization details and timing
         #[arg(short, long)]
         verbose: bool,
+
+        /// Skip loading standard library
+        #[arg(long)]
+        no_stdlib: bool,
     },
 
     /// List all neurons in a file
@@ -83,7 +91,7 @@ fn main() -> miette::Result<()> {
 
     match cli.command {
         Commands::Parse { file, verbose } => cmd_parse(file, verbose),
-        Commands::Validate { file, verbose } => cmd_validate(file, verbose),
+        Commands::Validate { file, verbose, no_stdlib } => cmd_validate(file, verbose, no_stdlib),
         Commands::Compile {
             file,
             neuron,
@@ -91,7 +99,8 @@ fn main() -> miette::Result<()> {
             no_optimize,
             no_dead_elim,
             verbose,
-        } => cmd_compile(file, neuron, output, no_optimize, no_dead_elim, verbose),
+            no_stdlib,
+        } => cmd_compile(file, neuron, output, no_optimize, no_dead_elim, verbose, no_stdlib),
         Commands::List { file, verbose } => cmd_list(file, verbose),
     }
 }
@@ -128,16 +137,41 @@ fn cmd_parse(file: PathBuf, verbose: bool) -> miette::Result<()> {
 }
 
 /// Validate command: Parse and validate the program
-fn cmd_validate(file: PathBuf, verbose: bool) -> miette::Result<()> {
+fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool) -> miette::Result<()> {
     let source = read_source(&file)?;
-    let mut program = parse(&source).map_err(|e| {
+    let user_program = parse(&source).map_err(|e| {
         let source_named = NamedSource::new(file.to_string_lossy(), source);
         miette::Report::from(e).with_source_code(source_named)
     })?;
 
+    // Load and merge stdlib if not disabled
+    let mut program = if no_stdlib {
+        if verbose {
+            println!("Skipping stdlib loading (--no-stdlib)");
+        }
+        user_program
+    } else {
+        if verbose {
+            println!("Loading standard library...");
+        }
+        match stdlib::load_stdlib() {
+            Ok(stdlib_program) => {
+                if verbose {
+                    println!("✓ Loaded {} stdlib neurons", stdlib_program.neurons.len());
+                }
+                stdlib::merge_programs(stdlib_program, user_program)
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load stdlib: {}", e);
+                eprintln!("Continuing without stdlib...");
+                user_program
+            }
+        }
+    };
+
     if verbose {
         println!(
-            "Parsed {} imports and {} neurons\n",
+            "Parsed {} imports and {} neurons total\n",
             program.uses.len(),
             program.neurons.len()
         );
@@ -174,16 +208,42 @@ fn cmd_compile(
     no_optimize: bool,
     no_dead_elim: bool,
     verbose: bool,
+    no_stdlib: bool,
 ) -> miette::Result<()> {
     let source = read_source(&file)?;
-    let mut program = parse(&source).map_err(|e| {
+    let user_program = parse(&source).map_err(|e| {
         let source_named = NamedSource::new(file.to_string_lossy(), source);
         miette::Report::from(e).with_source_code(source_named)
     })?;
 
+    // Load and merge stdlib if not disabled
+    let mut program = if no_stdlib {
+        if verbose {
+            println!("Skipping stdlib loading (--no-stdlib)");
+        }
+        user_program
+    } else {
+        if verbose {
+            println!("Loading standard library...");
+        }
+        match stdlib::load_stdlib() {
+            Ok(stdlib_program) => {
+                if verbose {
+                    println!("✓ Loaded {} stdlib neurons", stdlib_program.neurons.len());
+                }
+                stdlib::merge_programs(stdlib_program, user_program)
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load stdlib: {}", e);
+                eprintln!("Continuing without stdlib...");
+                user_program
+            }
+        }
+    };
+
     if verbose {
         println!(
-            "Parsed {} imports and {} neurons",
+            "Parsed {} imports and {} neurons total",
             program.uses.len(),
             program.neurons.len()
         );
