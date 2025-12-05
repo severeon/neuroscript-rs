@@ -37,6 +37,20 @@ impl Validator {
         program.neurons.contains_key(name) || registry.contains(name)
     }
 
+    /// Extract the neuron name from a binding value
+    /// Returns None if the value is not a neuron-related value
+    fn extract_neuron_name(value: &Value) -> Option<String> {
+        match value {
+            Value::Call { name, .. } => Some(name.clone()),
+            Value::NeuronRef(name) => Some(name.clone()),
+            Value::PartialCall { neuron, .. } => {
+                // Recursively extract from the neuron field
+                Self::extract_neuron_name(neuron)
+            }
+            _ => None,
+        }
+    }
+
     /// Validate an entire program
     /// Validate an entire program
     pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
@@ -92,12 +106,17 @@ impl Validator {
 
         // Check set: bindings first (they're evaluated eagerly in __init__)
         for binding in set_bindings {
+            // Extract the neuron name from the binding value
+            let call_name = Self::extract_neuron_name(&binding.value);
+
             // Check if the neuron being called exists
-            if !Self::neuron_exists(&binding.call_name, program, registry) {
-                errors.push(ValidationError::MissingNeuron {
-                    name: binding.call_name.clone(),
-                    context: format!("set binding '{}' in neuron '{}'", binding.name, neuron.name),
-                });
+            if let Some(ref name) = call_name {
+                if !Self::neuron_exists(name, program, registry) {
+                    errors.push(ValidationError::MissingNeuron {
+                        name: name.clone(),
+                        context: format!("set binding '{}' in neuron '{}'", binding.name, neuron.name),
+                    });
+                }
             }
 
             // Check for duplicate binding names
@@ -110,23 +129,30 @@ impl Validator {
             defined_bindings.insert(binding.name.clone());
 
             // Check for recursion in set: bindings (not allowed for eager instantiation)
-            if binding.call_name == neuron.name {
-                errors.push(ValidationError::InvalidRecursion {
-                    binding: binding.name.clone(),
-                    neuron: neuron.name.clone(),
-                    reason: "set: bindings cannot be recursive (use let: for lazy recursion)".to_string(),
-                });
+            if let Some(ref name) = call_name {
+                if name == &neuron.name {
+                    errors.push(ValidationError::InvalidRecursion {
+                        binding: binding.name.clone(),
+                        neuron: neuron.name.clone(),
+                        reason: "set: bindings cannot be recursive (use let: for lazy recursion)".to_string(),
+                    });
+                }
             }
         }
 
         // Check let: bindings (lazy instantiation)
         for binding in let_bindings {
+            // Extract the neuron name from the binding value
+            let call_name = Self::extract_neuron_name(&binding.value);
+
             // Check if the neuron being called exists
-            if !Self::neuron_exists(&binding.call_name, program, registry) {
-                errors.push(ValidationError::MissingNeuron {
-                    name: binding.call_name.clone(),
-                    context: format!("let binding '{}' in neuron '{}'", binding.name, neuron.name),
-                });
+            if let Some(ref name) = call_name {
+                if !Self::neuron_exists(name, program, registry) {
+                    errors.push(ValidationError::MissingNeuron {
+                        name: name.clone(),
+                        context: format!("let binding '{}' in neuron '{}'", binding.name, neuron.name),
+                    });
+                }
             }
 
             // Check for duplicate binding names
@@ -140,16 +166,25 @@ impl Validator {
 
             // Allow recursion in let: bindings (lazy instantiation)
             // but warn if it's the same neuron without parameters (infinite recursion)
-            if binding.call_name == neuron.name {
-                // Check if there are parameters that could control recursion
-                if binding.args.is_empty() && binding.kwargs.is_empty() {
-                    errors.push(ValidationError::InvalidRecursion {
-                        binding: binding.name.clone(),
-                        neuron: neuron.name.clone(),
-                        reason: "let: binding to self without arguments may cause infinite recursion".to_string(),
-                    });
+            if let Some(ref name) = call_name {
+                if name == &neuron.name {
+                    // Check if there are parameters that could control recursion
+                    let has_args = match &binding.value {
+                        Value::Call { args, kwargs, .. } => !args.is_empty() || !kwargs.is_empty(),
+                        Value::PartialCall { args, kwargs, .. } => !args.is_empty() || !kwargs.is_empty(),
+                        Value::NeuronRef(_) => false,
+                        _ => false,
+                    };
+
+                    if !has_args {
+                        errors.push(ValidationError::InvalidRecursion {
+                            binding: binding.name.clone(),
+                            neuron: neuron.name.clone(),
+                            reason: "let: binding to self without arguments may cause infinite recursion".to_string(),
+                        });
+                    }
+                    // Otherwise, we allow it and trust the user to have termination conditions
                 }
-                // Otherwise, we allow it and trust the user to have termination conditions
             }
         }
 

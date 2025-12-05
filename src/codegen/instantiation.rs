@@ -20,9 +20,27 @@ pub(super) fn generate_module_instantiations(
     // First, generate set: bindings (eager instantiation)
     for binding in set_bindings {
         let module_name = binding.name.clone();
-        let name = &binding.call_name;
-        let args = &binding.args;
-        let kwargs = &binding.kwargs;
+
+        // Extract name, args, kwargs from the value
+        let (name, args, kwargs) = match &binding.value {
+            Value::Call { name, args, kwargs } => (name.clone(), args.clone(), kwargs.clone()),
+            Value::NeuronRef(name) => (name.clone(), vec![], vec![]),
+            Value::PartialCall { neuron, args, kwargs } => {
+                // For partial calls, extract the neuron name
+                if let Value::NeuronRef(name) = neuron.as_ref() {
+                    (name.clone(), args.clone(), kwargs.clone())
+                } else {
+                    return Err(CodegenError::UnsupportedFeature(
+                        "Nested partial calls in set: bindings not yet supported".to_string()
+                    ));
+                }
+            }
+            _ => {
+                return Err(CodegenError::UnsupportedFeature(
+                    format!("Unsupported binding value type in set: {:?}", binding.value)
+                ));
+            }
+        };
 
         // Check if this is a primitive
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
@@ -65,7 +83,27 @@ pub(super) fn generate_module_instantiations(
     // For now, we'll mark them for lazy instantiation
     for binding in let_bindings {
         let module_name = binding.name.clone();
-        let name = &binding.call_name;
+
+        // Extract name, args, kwargs from the value
+        let (name, args, kwargs) = match &binding.value {
+            Value::Call { name, args, kwargs } => (name.clone(), args.clone(), kwargs.clone()),
+            Value::NeuronRef(name) => (name.clone(), vec![], vec![]),
+            Value::PartialCall { neuron, args, kwargs } => {
+                // For partial calls, extract the neuron name
+                if let Value::NeuronRef(name) = neuron.as_ref() {
+                    (name.clone(), args.clone(), kwargs.clone())
+                } else {
+                    return Err(CodegenError::UnsupportedFeature(
+                        "Nested partial calls in let: bindings not yet supported".to_string()
+                    ));
+                }
+            }
+            _ => {
+                return Err(CodegenError::UnsupportedFeature(
+                    format!("Unsupported binding value type in let: {:?}", binding.value)
+                ));
+            }
+        };
 
         // Check if this is a primitive
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
@@ -84,7 +122,7 @@ pub(super) fn generate_module_instantiations(
         // Store binding info for lazy instantiation in forward()
         gen.lazy_bindings.insert(
             module_name.clone(),
-            (name.clone(), binding.args.clone(), binding.kwargs.clone())
+            (name.clone(), args.clone(), kwargs.clone())
         );
         gen.var_names.insert(module_name.clone(), format!("self._{}", module_name));
     }

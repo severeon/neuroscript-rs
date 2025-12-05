@@ -149,6 +149,17 @@ pub enum Value {
         args: Vec<Value>,
         kwargs: Vec<(String, Value)>,
     },
+    /// Reference to a neuron type (not instantiated)
+    /// Example: `MyNeuron` in `let: x = MyNeuron`
+    NeuronRef(String),
+    /// Partial application - neuron with some but not all parameters bound
+    /// Example: `MyNeuron(512)` where MyNeuron needs more parameters
+    /// The neuron field can be NeuronRef or another PartialCall for chaining
+    PartialCall {
+        neuron: Box<Value>,
+        args: Vec<Value>,
+        kwargs: Vec<(String, Value)>,
+    },
 }
 
 /// Reference to a port: in, out, fork.left
@@ -207,9 +218,7 @@ pub struct MatchExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
     pub name: String,
-    pub call_name: String,
-    pub args: Vec<Value>,
-    pub kwargs: Vec<(String, Value)>,
+    pub value: Value,
 }
 
 /// The body of a neuron definition

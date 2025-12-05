@@ -8,6 +8,20 @@ use std::fmt::Write;
 use crate::interfaces::*;
 use super::{instantiation, forward};
 
+/// Extract the neuron name from a binding value
+/// Returns None if the value is not a neuron-related value
+fn extract_neuron_name_from_value(value: &Value) -> Option<String> {
+    match value {
+        Value::Call { name, .. } => Some(name.clone()),
+        Value::NeuronRef(name) => Some(name.clone()),
+        Value::PartialCall { neuron, .. } => {
+            // Recursively extract from the neuron field
+            extract_neuron_name_from_value(neuron)
+        }
+        _ => None,
+    }
+}
+
 impl std::fmt::Display for CodegenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -152,12 +166,16 @@ fn collect_dependencies(
 
         // Collect from set bindings
         for binding in set_bindings {
-            called_neurons.insert(binding.call_name.clone());
+            if let Some(name) = extract_neuron_name_from_value(&binding.value) {
+                called_neurons.insert(name);
+            }
         }
 
         // Collect from let bindings
         for binding in let_bindings {
-            called_neurons.insert(binding.call_name.clone());
+            if let Some(name) = extract_neuron_name_from_value(&binding.value) {
+                called_neurons.insert(name);
+            }
         }
 
         // Collect from connections

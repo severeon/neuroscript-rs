@@ -1,0 +1,70 @@
+# First-Order Neurons: Phase 1 Demo
+#
+# This example demonstrates the Phase 1 features for first-order neurons:
+# - NeuronRef: Binding neuron types without instantiation
+# - PartialCall: Binding neurons with some arguments applied
+#
+# Note: This syntax is now supported in the IR and parser, but full
+# meta-neuron codegen requires Phase 4.
+
+# Simple neuron for testing
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron Identity:
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/Identity
+
+# Example 1: Neuron reference (no instantiation)
+neuron NeuronRefDemo:
+    in: [*, 512]
+    out: [*, 512]
+    let:
+        # Bind a neuron type without instantiating it
+        # This creates a NeuronRef value
+        layer_type = Identity
+    graph:
+        # To use it, we'd need to call it with arguments (if it had any)
+        # For now, this demonstrates the binding syntax
+        in -> Identity() -> out
+
+# Example 2: Call value in binding (existing behavior, now using Value::Call)
+neuron CallDemo:
+    in: [*, 512]
+    out: [*, 256]
+    set:
+        # Full call with all arguments - creates Value::Call
+        projection = Linear(512, 256)
+    graph:
+        in -> projection -> out
+
+# Example 3: Partial call (future use - Phase 4 meta-neurons)
+# This syntax is parsed but not yet used in meta-neuron instantiation
+neuron PartialCallDemo(in_dim):
+    in: [*, in_dim]
+    out: [*, 512]
+    let:
+        # This would create a PartialCall if MyNeuron needed more params
+        # For now, Linear has all params, so it's a full Call
+        partial_layer = Linear(in_dim, 512)
+    graph:
+        in -> partial_layer -> out
+
+# Example 4: Multiple bindings showing different Value types
+neuron MixedBindings:
+    in: [*, 512]
+    out: [*, 512]
+    let:
+        # NeuronRef - just the type
+        identity_type = Identity
+
+        # Call - full instantiation
+        norm = Identity()
+
+        # Another call with args (though Identity has none)
+        layer = Linear(512, 512)
+    graph:
+        in -> layer -> out

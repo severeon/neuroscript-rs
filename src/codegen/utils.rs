@@ -50,6 +50,41 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
 
             format!("{}({}{})", name, args_str, kwargs_str)
         }
+        Value::NeuronRef(name) => {
+            // A neuron reference is just the class name in Python
+            name.clone()
+        }
+        Value::PartialCall { neuron, args, kwargs } => {
+            // For partial application, use functools.partial
+            // Example: functools.partial(MyNeuron, 512, d_ff=2048)
+            let neuron_str = value_to_python_impl(neuron);
+
+            let args_str = args.iter()
+                .map(|v| value_to_python_impl(v))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let kwargs_str = if kwargs.is_empty() {
+                String::new()
+            } else {
+                let kw: Vec<String> = kwargs.iter()
+                    .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
+                    .collect();
+                if args.is_empty() {
+                    kw.join(", ")
+                } else {
+                    format!(", {}", kw.join(", "))
+                }
+            };
+
+            if args.is_empty() && kwargs.is_empty() {
+                // No partial application - just the neuron ref
+                neuron_str
+            } else {
+                // Use functools.partial for partial application
+                format!("functools.partial({}, {}{})", neuron_str, args_str, kwargs_str)
+            }
+        }
     }
 }
 
@@ -98,6 +133,16 @@ pub(super) fn has_captured_dimensions_impl(value: &Value, params: &HashSet<Strin
             has_captured_dimensions_impl(left, params) || has_captured_dimensions_impl(right, params)
         }
         Value::Call { args, kwargs, .. } => {
+            args.iter().any(|v| has_captured_dimensions_impl(v, params)) ||
+            kwargs.iter().any(|(_, v)| has_captured_dimensions_impl(v, params))
+        }
+        Value::NeuronRef(_) => {
+            // Neuron references themselves don't contain captured dimensions
+            false
+        }
+        Value::PartialCall { neuron, args, kwargs } => {
+            // Check if the neuron or any of its arguments contain captured dimensions
+            has_captured_dimensions_impl(neuron, params) ||
             args.iter().any(|v| has_captured_dimensions_impl(v, params)) ||
             kwargs.iter().any(|(_, v)| has_captured_dimensions_impl(v, params))
         }
@@ -162,6 +207,56 @@ impl<'a> CodeGenerator<'a> {
                     BinOp::Ne => "!=",
                 };
                 format!("{} {} {}", self.value_to_python_with_self(left), op_str, self.value_to_python_with_self(right))
+            }
+            Value::Call { name, args, kwargs } => {
+                // Handle calls with self-prefixed params
+                let args_str = args.iter()
+                    .map(|v| self.value_to_python_with_self(v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let kwargs_str = if kwargs.is_empty() {
+                    String::new()
+                } else {
+                    let kw: Vec<String> = kwargs.iter()
+                        .map(|(k, v)| format!("{}={}", k, self.value_to_python_with_self(v)))
+                        .collect();
+                    if args.is_empty() {
+                        kw.join(", ")
+                    } else {
+                        format!(", {}", kw.join(", "))
+                    }
+                };
+
+                format!("{}({}{})", name, args_str, kwargs_str)
+            }
+            Value::PartialCall { neuron, args, kwargs } => {
+                // Handle partial calls with self-prefixed params
+                let neuron_str = self.value_to_python_with_self(neuron);
+
+                let args_str = args.iter()
+                    .map(|v| self.value_to_python_with_self(v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let kwargs_str = if kwargs.is_empty() {
+                    String::new()
+                } else {
+                    let kw: Vec<String> = kwargs.iter()
+                        .map(|(k, v)| format!("{}={}", k, self.value_to_python_with_self(v)))
+                        .collect();
+                    if args.is_empty() {
+                        kw.join(", ")
+                    } else {
+                        format!(", {}", kw.join(", "))
+                    }
+                };
+
+                if args.is_empty() && kwargs.is_empty() {
+                    neuron_str
+                } else {
+                    format!("functools.partial({}, {}{})", neuron_str, args_str, kwargs_str)
+                }
             }
             _ => self.value_to_python(value)
         }
@@ -389,5 +484,73 @@ mod tests {
 
         // Same signature should have same key (id doesn't matter)
         assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call2));
+    }
+
+    #[test]
+    fn test_value_to_python_neuron_ref() {
+        // Simple neuron reference
+        let neuron_ref = Value::NeuronRef("TransformerBlock".to_string());
+        assert_eq!(value_to_python_impl(&neuron_ref), "TransformerBlock");
+    }
+
+    #[test]
+    fn test_value_to_python_partial_call() {
+        // Partial call with args
+        let partial = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![Value::Int(512)],
+            kwargs: vec![],
+        };
+        assert_eq!(value_to_python_impl(&partial), "functools.partial(MyNeuron, 512)");
+
+        // Partial call with kwargs
+        let partial_kwargs = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![],
+            kwargs: vec![("d_ff".to_string(), Value::Int(2048))],
+        };
+        assert_eq!(value_to_python_impl(&partial_kwargs), "functools.partial(MyNeuron, d_ff=2048)");
+
+        // Partial call with both
+        let partial_both = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![Value::Int(512)],
+            kwargs: vec![("d_ff".to_string(), Value::Int(2048))],
+        };
+        assert_eq!(value_to_python_impl(&partial_both), "functools.partial(MyNeuron, 512, d_ff=2048)");
+
+        // Empty partial call (should just return neuron ref)
+        let empty_partial = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![],
+            kwargs: vec![],
+        };
+        assert_eq!(value_to_python_impl(&empty_partial), "MyNeuron");
+    }
+
+    #[test]
+    fn test_has_captured_dimensions_with_new_values() {
+        let mut params = HashSet::new();
+        params.insert("d_model".to_string());
+
+        // NeuronRef has no captured dimensions
+        let neuron_ref = Value::NeuronRef("MyNeuron".to_string());
+        assert!(!has_captured_dimensions_impl(&neuron_ref, &params));
+
+        // PartialCall with parameter - not captured
+        let partial_param = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![Value::Name("d_model".to_string())],
+            kwargs: vec![],
+        };
+        assert!(!has_captured_dimensions_impl(&partial_param, &params));
+
+        // PartialCall with captured dimension
+        let partial_captured = Value::PartialCall {
+            neuron: Box::new(Value::NeuronRef("MyNeuron".to_string())),
+            args: vec![Value::Name("d".to_string())],
+            kwargs: vec![],
+        };
+        assert!(has_captured_dimensions_impl(&partial_captured, &params));
     }
 }

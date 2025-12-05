@@ -539,24 +539,59 @@ impl Parser {
         Ok(connection_groups.into_iter().flatten().collect())
     }
 
-    // Parse a binding: name = NeuronCall(args)
+    // Parse a binding: name = Value
+    // Can be: name = NeuronRef, name = NeuronRef(args), name = expr, etc.
     fn parse_binding(&mut self) -> Result<Binding, ParseError> {
         let name = self.ident()?;
         self.expect(&TokenKind::Assign)?;
 
-        // Parse the neuron call
-        let call_name = self.ident()?;
-        self.expect(&TokenKind::LParen)?;
-        let (args, kwargs) = self.call_args()?;
-        self.expect(&TokenKind::RParen)?;
+        // Parse the value expression
+        // This can be a neuron reference, a call, or any other value
+        let value = self.parse_binding_value()?;
+
         self.expect(&TokenKind::Newline)?;
 
-        Ok(Binding {
-            name,
-            call_name,
-            args,
-            kwargs,
-        })
+        Ok(Binding { name, value })
+    }
+
+    // Parse the right-hand side of a binding
+    // This can be:
+    // - NeuronRef: MyNeuron
+    // - Call: MyNeuron(512, d_ff=2048)
+    // - PartialCall: MyNeuron(512) (where MyNeuron needs more params)
+    // - Other values: int, float, string, etc.
+    fn parse_binding_value(&mut self) -> Result<Value, ParseError> {
+        // For now, we'll try to parse as an expression
+        // If it's an identifier followed by optional call, we'll create:
+        // - NeuronRef if no call
+        // - Call if complete call
+        // - PartialCall if partial (but we can't determine this at parse time)
+
+        // Check if it's an identifier (potential neuron reference or call)
+        if self.at(&TokenKind::Ident("".into())) {
+            let neuron_name = self.ident()?;
+
+            // Check if it's followed by a call
+            if self.at(&TokenKind::LParen) {
+                self.advance();
+                let (args, kwargs) = if self.at(&TokenKind::RParen) {
+                    (vec![], vec![])
+                } else {
+                    self.call_args()?
+                };
+                self.expect(&TokenKind::RParen)?;
+
+                // For now, we'll create a Call value
+                // In Phase 4, we might convert this to PartialCall based on type info
+                Ok(Value::Call { name: neuron_name, args, kwargs })
+            } else {
+                // No call - this is a neuron reference
+                Ok(Value::NeuronRef(neuron_name))
+            }
+        } else {
+            // Parse as general expression (int, float, string, etc.)
+            self.expr()
+        }
     }
 
     // endpoint -> endpoint [-> endpoint...]
