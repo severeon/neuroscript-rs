@@ -1,0 +1,372 @@
+// NeuroScript Grammar
+// PEG grammar for parsing NeuroScript neural architecture definitions
+// Indentation handling is done in the AST builder, not in this grammar
+
+// ============================================================================
+// Whitespace and Comments
+// ============================================================================
+
+WHITESPACE = _{ " " | "\t" }
+NEWLINE = { "\n" | "\r\n" }
+COMMENT = { "#" ~ (!NEWLINE ~ ANY)* }
+
+// ============================================================================
+// Keywords (atomic - no whitespace allowed within)
+// ============================================================================
+
+keyword_neuron = @{ "neuron" ~ !ident_cont }
+keyword_use = @{ "use" ~ !ident_cont }
+keyword_in = @{ "in" ~ !ident_cont }
+keyword_out = @{ "out" ~ !ident_cont }
+keyword_impl = @{ "impl" ~ !ident_cont }
+keyword_graph = @{ "graph" ~ !ident_cont }
+keyword_match = @{ "match" ~ !ident_cont }
+keyword_where = @{ "where" ~ !ident_cont }
+keyword_external = @{ "external" ~ !ident_cont }
+keyword_and = @{ "and" ~ !ident_cont }
+keyword_or = @{ "or" ~ !ident_cont }
+keyword_let = @{ "let" ~ !ident_cont }
+keyword_set = @{ "set" ~ !ident_cont }
+keyword_true = @{ "true" ~ !ident_cont }
+keyword_false = @{ "false" ~ !ident_cont }
+
+// ============================================================================
+// Operators
+// ============================================================================
+
+arrow = { "->" }
+assign = { "=" }
+colon = { ":" }
+comma = { "," }
+dot = { "." }
+slash = { "/" }
+plus = { "+" }
+minus = { "-" }
+star = { "*" }
+eq_op = { "==" }
+ne_op = { "!=" }
+le_op = { "<=" }
+ge_op = { ">=" }
+lt_op = { "<" }
+gt_op = { ">" }
+
+lparen = { "(" }
+rparen = { ")" }
+lbracket = { "[" }
+rbracket = { "]" }
+
+// ============================================================================
+// Literals
+// ============================================================================
+
+// Integers: 42, -1, 0
+integer = @{ minus? ~ ASCII_DIGIT+ }
+
+// Floats: 3.14, -0.5, 1e-3, 2.5e10
+float = @{ 
+    minus? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ (^"e" ~ (plus | minus)? ~ ASCII_DIGIT+)?
+}
+
+// Strings: `hello`, `path/to/file`
+string = @{ "`" ~ (!("`" | NEWLINE) ~ ANY)* ~ "`" }
+
+// Booleans
+bool = { keyword_true | keyword_false }
+
+// ============================================================================
+// Identifiers
+// ============================================================================
+
+// Helper for identifier continuation characters
+ident_cont = _{ ASCII_ALPHANUMERIC | "_" }
+
+// All keywords for lookahead
+keyword = _{
+    keyword_neuron | keyword_use | keyword_in | keyword_out
+  | keyword_impl | keyword_graph | keyword_match | keyword_where
+  | keyword_external | keyword_and | keyword_or | keyword_let
+  | keyword_set | keyword_true | keyword_false
+}
+
+// Identifiers: foo, _bar, baz123
+// Must not be a keyword
+ident = @{
+    !keyword ~ (ASCII_ALPHA | "_") ~ ident_cont*
+}
+
+// ============================================================================
+// Shapes and Dimensions
+// ============================================================================
+
+// Dimension: *, *batch, dim, 512, dim * 4, seq - 1
+dim = {
+    dim_primary ~ (dim_op ~ dim_primary)*
+}
+
+dim_primary = {
+    lparen ~ dim ~ rparen
+  | star ~ ident  // *batch (variadic)
+  | star          // * (wildcard)
+  | integer       // 512
+  | ident         // dim
+}
+
+dim_op = {
+    plus | minus | star | slash
+}
+
+// Shape: [batch, seq, dim], [*, 512], []
+shape = {
+    lbracket ~ (dim ~ (comma ~ dim)*)? ~ rbracket
+}
+
+// ============================================================================
+// Values and Expressions
+// ============================================================================
+
+// Value: used in parameters, arguments, guards
+value = {
+    value_comparison
+}
+
+value_comparison = {
+    value_additive ~ (comparison_op ~ value_additive)*
+}
+
+comparison_op = {
+    eq_op | ne_op | le_op | ge_op | lt_op | gt_op
+}
+
+value_additive = {
+    value_multiplicative ~ ((plus | minus) ~ value_multiplicative)*
+}
+
+value_multiplicative = {
+    value_primary ~ ((star | slash) ~ value_primary)*
+}
+
+value_primary = {
+    lparen ~ value ~ rparen
+  | float
+  | integer
+  | string
+  | bool
+  | call_expr
+  | ident
+}
+
+// Call expression: Foo(1, 2, x=3)
+call_expr = {
+    ident ~ lparen ~ call_args? ~ rparen
+}
+
+call_args = {
+    (kwarg | value) ~ (comma ~ (kwarg | value))*
+}
+
+kwarg = {
+    ident ~ assign ~ value
+}
+
+// ============================================================================
+// Parameters
+// ============================================================================
+
+// Parameter list: (dim, heads=8, neuron_type: NeuronType)
+params = {
+    lparen ~ (param ~ (comma ~ param)*)? ~ rparen
+}
+
+param = {
+    ident ~ (colon ~ type_annotation)? ~ (assign ~ value)?
+}
+
+type_annotation = {
+    ident  // Currently only "NeuronType" is supported
+}
+
+// ============================================================================
+// Ports
+// ============================================================================
+
+// Port definition: name: [shape]
+port_def = {
+    ident ~ colon ~ shape
+}
+
+// In section: supports both inline and indented styles
+// Inline: in: [shape] or in name: [shape]
+// Indented: in:\n  name: [shape]\n  name2: [shape]
+in_section = {
+    keyword_in ~ (
+        // Inline with optional name
+        (ident ~ colon ~ shape)
+      | (colon ~ shape)
+      | (colon ~ NEWLINE ~ (NEWLINE* ~ port_def)+)
+    )
+}
+
+// Out section: supports both inline and indented styles
+out_section = {
+    keyword_out ~ (
+        // Inline with optional name
+        (ident ~ colon ~ shape)
+      | (colon ~ shape)
+      | (colon ~ NEWLINE ~ (NEWLINE* ~ port_def)+)
+    )
+}
+
+// ============================================================================
+// Implementation Reference
+// ============================================================================
+
+// impl: supports both inline and indented
+impl_section = {
+    keyword_impl ~ colon ~ (impl_ref | (NEWLINE ~ impl_ref))
+}
+
+// Implementation reference: core,nn/Linear or external(...)
+impl_ref = {
+    (ident ~ comma ~ impl_path)
+  | (keyword_external ~ lparen ~ call_args ~ rparen)
+}
+
+impl_path = {
+    (ident | star) ~ (slash ~ (ident | star))*
+}
+
+// ============================================================================
+// Bindings (let/set)
+// ============================================================================
+
+// let: always indented
+let_section = {
+    keyword_let ~ colon ~ NEWLINE ~ (NEWLINE* ~ binding)+
+}
+
+// set: always indented
+set_section = {
+    keyword_set ~ colon ~ NEWLINE ~ (NEWLINE* ~ binding)+
+}
+
+// Binding: name = NeuronCall(args)
+binding = {
+    ident ~ assign ~ call_expr
+}
+
+// ============================================================================
+// Graph Connections
+// ============================================================================
+
+// graph: always indented
+graph_section = {
+    keyword_graph ~ colon ~ NEWLINE ~ (NEWLINE* ~ connection)+
+}
+
+// Connection: source -> dest or pipeline
+// Two styles:
+// Inline: a -> b -> c -> d
+// Indented: a ->\n  b\n  c\n  d  (implicit arrows between lines)
+connection = {
+    endpoint ~ arrow ~ connection_tail
+}
+
+connection_tail = {
+    // Inline: endpoints separated by arrows, all on one line
+    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE)
+    // Indented: newline, then one of:
+  | (NEWLINE ~ indented_pipeline)
+}
+
+// Indented pipeline: can have arrows between lines or not
+// Stops when we see an endpoint followed by arrow at start of line (next connection)
+indented_pipeline = {
+    indented_pipeline_item+
+}
+
+indented_pipeline_item = {
+    // Item with trailing arrow means continue to next line
+    (!(ref_endpoint ~ arrow ~ NEWLINE) ~ endpoint ~ arrow ~ NEWLINE)
+    // Item without trailing arrow (may be followed by next connection or end)
+  | (!(ref_endpoint ~ arrow ~ NEWLINE) ~ endpoint ~ NEWLINE)
+}
+
+// Endpoint: in, out, foo, Foo(args), (a, b), match: ...
+endpoint = {
+    match_expr
+  | tuple_endpoint
+  | call_endpoint
+  | ref_endpoint
+}
+
+// Reference endpoint: in, out, foo, foo.bar
+ref_endpoint = {
+    (keyword_in | keyword_out | ident) ~ (dot ~ ident)?
+}
+
+// Call endpoint: Linear(512, 256)
+call_endpoint = {
+    ident ~ lparen ~ call_args? ~ rparen
+}
+
+// Tuple endpoint: (a, b, c)
+tuple_endpoint = {
+    lparen ~ ref_endpoint ~ (comma ~ ref_endpoint)* ~ rparen
+}
+
+// ============================================================================
+// Match Expressions
+// ============================================================================
+
+// Match expression
+match_expr = {
+    keyword_match ~ colon ~ NEWLINE ~ (NEWLINE* ~ match_arm)+
+}
+
+// Match arm: [pattern] where guard: pipeline
+match_arm = {
+    shape ~ (keyword_where ~ value)? ~ colon ~ match_pipeline
+}
+
+// Pipeline in match arm
+match_pipeline = {
+    endpoint ~ (arrow ~ endpoint)*
+}
+
+// ============================================================================
+// Neuron Definitions
+// ============================================================================
+
+// Neuron body section
+neuron_section = {
+    in_section
+  | out_section
+  | impl_section
+  | let_section
+  | set_section
+  | graph_section
+}
+
+// Neuron definition: neuron Foo(params): ...
+neuron_def = {
+    keyword_neuron ~ ident ~ params? ~ colon ~ NEWLINE ~ 
+    (NEWLINE* ~ neuron_section)+
+}
+
+// ============================================================================
+// Use Statements
+// ============================================================================
+
+// Use statement: use core,nn/*
+use_stmt = {
+    keyword_use ~ ident ~ comma ~ impl_path
+}
+
+// ============================================================================
+// Program
+// ============================================================================
+
+// Top-level program
+program = {
+    SOI ~ NEWLINE* ~ (use_stmt ~ NEWLINE+)* ~ (neuron_def ~ NEWLINE*)* ~ EOI
+}

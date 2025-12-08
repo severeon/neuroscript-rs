@@ -2,4 +2,4 @@
 source: tests/integration_tests.rs
 expression: error_text
 ---
-Expected { expected: "Colon", found: "Newline", span: SourceSpan { offset: SourceOffset(13), length: 0 } }
+Expected { expected: "COMMENT, colon, or lparen", found: "unexpected input", span: SourceSpan { offset: SourceOffset(91), length: 1 } }

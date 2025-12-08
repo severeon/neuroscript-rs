@@ -1,0 +1,93 @@
+# GPT-2 Small Implementation
+#
+# Self-contained GPT-2 small model for testing end-to-end compilation.
+# Single layer, simplified architecture.
+
+use core,nn/*
+
+# Primitives (copied from stdlib for self-containment)
+neuron Embedding(vocab_size, d_model):
+    in: [batch, seq]
+    out: [batch, seq, d_model]
+    impl: core,nn/Embedding
+
+neuron PositionalEncoding(d_model, max_len):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    impl: core,nn/PositionalEncoding
+
+neuron LayerNorm(dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,normalization/LayerNorm
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/MultiHeadSelfAttention
+
+neuron Linear(in_dim, out_dim):
+    in: [batch, seq, in_dim]
+    out: [batch, seq, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,activations/GELU
+
+# Simplified Transformer Block (single layer, no residuals)
+neuron GPTTransformerBlock(dim, num_heads, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            FFN(dim, d_ff)
+            out
+
+# GPT-2 Small: Single layer for testing
+neuron GPT2Small(vocab_size):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    graph:
+        # Token embeddings
+        in ->
+            Embedding(vocab_size, 768)
+            embedded
+
+        # Positional encoding
+        embedded ->
+            PositionalEncoding(768, max_len=1024)
+            positioned
+
+        # Single transformer block
+        positioned ->
+            GPTTransformerBlock(768, 12, 3072)
+            transformed
+
+        # Final layer norm
+        transformed ->
+            LayerNorm(768)
+            normalized
+
+        # Language model head
+        normalized ->
+            Linear(768, vocab_size)
+            out
+
+
+
+
+
+# Feed-forward network with expansion
+neuron FFN(dim, expansion):
+    in: [*, seq_len, dim]
+    out: [*, seq_len, dim]
+    graph:
+        in ->
+            Linear(dim, expansion)
+            GELU()
+            Linear(expansion, dim)
+            out

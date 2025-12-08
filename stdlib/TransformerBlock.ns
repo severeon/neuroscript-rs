@@ -18,3 +18,33 @@ neuron SimpleTransformerBlock(dim):
             Linear(dim, dim)
             Dropout(0.1)
             out
+
+
+# Complete Transformer Block with proper residual connections
+neuron TransformerBlock(dim, num_heads, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # First residual-attention with pre-norm
+        in -> Fork() -> (skip1, attn_path)
+
+        attn_path ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            Dropout(0.1)
+            attn_out
+
+        # Add residual
+        (skip1, attn_out) -> Add() -> attn_residual
+
+        # Second residual-forward with pre-norm
+        attn_residual -> Fork() -> (skip2, ffn_path)
+
+        ffn_path ->
+            LayerNorm(dim)
+            FFN(dim, d_ff)
+            Dropout(0.1)
+            ffn_out
+
+        # Add residual
+        (skip2, ffn_out) -> Add() -> out
