@@ -311,7 +311,7 @@
 
  ✅ Compile-time shape checking: Catches shape mismatches before codegen
  ✅ Pattern matching: Routes based on shapes at compile-time when possible
- ⏳ Working GPT-2: Generates and runs a complete GPT-2 Small model (Phase 6)
+ ✅ Working GPT-2: Generates and runs a complete GPT-2 Small model
  ✅ Stdlib integration: All stdlib composites load and validate
  ✅ Killer demo: Show shape inference catching errors and routing efficiently
 
