@@ -1,0 +1,22 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron TestSequential:
+  inputs:
+    default: [*, 256]
+  outputs:
+    default: [*, 256]
+  graph:
+    in -> Sequential#0(3, LayerNorm)
+    Sequential#0(3, LayerNorm) -> out
