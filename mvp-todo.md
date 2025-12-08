@@ -22,26 +22,6 @@
 
 ---
 
-## Current Status Summary (Dec 2024)
-
-**Completed:**
-- ✅ Phase 1: Core Primitives (Fork, Add, Concat, Attention)
-- ✅ Phase 2: Shape Inference System
-- ✅ Phase 2.5: Match Expression Codegen Fixes  
-- ✅ Phase 3: Pattern Matching System (mostly complete, 1 item remaining)
-- ✅ Phase 4: Stdlib Composites (mostly complete, 1 item remaining)
-- ✅ Phase 5: Enhanced Codegen (complete)
-- ✅ Phase 7.1-7.4: Basic let/set bindings (parsing, IR, validation, basic codegen)
-
-**In Progress:**
-- Phase 6: End-to-End Validation (GPT-2 test)
-- Phase 7.5+: Recursion support for let/set
-
-**New Work:**
-- Phase 8: Pest Grammar Migration (grammar written, needs AST builder)
-
----
-
 ## MVP Phase 1: Core Primitives
 
     Note: Phase 1 and Phase 2 can be developed concurrently. Shape inference can be built and tested using existing primitives, then validated with new primitives as they're added.
@@ -235,7 +215,7 @@
 ### 7.2 IR Extensions for Bindings ✅
 
   - [x] Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`
-  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`
+  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBo dy::Graph`
   - [x] Define `Binding` struct with name + neuron call
   - [x] Update IR Display traits for bindings
   - [x] Test IR correctly represents bindings
@@ -331,7 +311,7 @@
 
  ✅ Compile-time shape checking: Catches shape mismatches before codegen
  ✅ Pattern matching: Routes based on shapes at compile-time when possible
- ✅ Working GPT-2: Generates and runs a complete GPT-2 Small model
+ ⏳ Working GPT-2: Generates and runs a complete GPT-2 Small model (Phase 6)
  ✅ Stdlib integration: All stdlib composites load and validate
  ✅ Killer demo: Show shape inference catching errors and routing efficiently
 
