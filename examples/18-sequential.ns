@@ -1,0 +1,14 @@
+# Sequential Meta-Neuron Test
+# Tests the basic Sequential detection (expansion not yet implemented)
+
+neuron TestSequential():
+    in: [*, 256]
+    out: [*, 256]
+    graph:
+        # Direct use of Sequential - should be detected and report "not yet implemented"
+        in -> Sequential(3, LayerNorm) -> out
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,nn/LayerNorm

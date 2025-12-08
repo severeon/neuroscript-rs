@@ -4,6 +4,10 @@ version = "0.2.0"
 edition = "2021"
 description = "Neural architecture composition language"
 
+[features]
+default = []
+pest-parser = []  # Use new pest-based parser instead of handwritten lexer/parser
+
 [dependencies]
 thiserror = "1.0"      # Clean error types
 miette = { version = "7", features = ["fancy"] }  # Beautiful error reporting
@@ -11,6 +15,8 @@ num-bigint = "0.4"     # Arbitrary precision integers for shape algebra
 num-integer = "0.1"    # Integer traits (gcd, lcm)
 num-traits = "0.2"     # Numeric traits (Zero, One)
 clap = { version = "4", features = ["derive"] }  # CLI argument parsing
+pest = "2.7"           # PEG parser generator
+pest_derive = "2.7"    # Derive macro for pest
 
 [dev-dependencies]
 pretty_assertions = "1.4"
