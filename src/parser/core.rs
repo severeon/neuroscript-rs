@@ -357,12 +357,21 @@ impl Parser {
             }
         };
 
+        // Set max_cycle_depth based on body type
+        // Graph neurons get a default depth of 10 to allow unrolled loops
+        // Primitive neurons don't allow cycles by default
+        let max_cycle_depth = match &body {
+            NeuronBody::Graph { .. } => Some(10),
+            NeuronBody::Primitive(_) => None,
+        };
+
         Ok(NeuronDef {
             name,
             params,
             inputs,
             outputs,
             body,
+            max_cycle_depth,
         })
     }
 

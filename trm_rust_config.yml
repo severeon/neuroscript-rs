@@ -1,0 +1,132 @@
+# TRM Training Configuration for Rust Autocompletion
+# Based on "Less is More: Recursive Reasoning with Tiny Networks"
+
+model:
+  name: "TRM_RustAutocomplete"
+  architecture: "trm_rust_autocomplete.ns"
+  
+  # TRM hyperparameters matching paper
+  vocab_size: 32000  # Rust tokenizer vocabulary
+  hidden_size: 512
+  seq_len: 512       # Context window for code
+  n_recursions: 6    # Latent updates per cycle
+  T: 3               # Recursion cycles (effective depth = 42 layers)
+  n_supervision: 16  # Max deep supervision steps
+  
+  # Network architecture (2 layers optimal per paper)
+  num_layers: 2
+  intermediate_size: 2048  # 4x hidden_size
+  
+training:
+  # Optimizer settings from paper
+  optimizer: "AdamW"
+  learning_rate: 1.0e-4
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  
+  # Learning rate schedule
+  warmup_iterations: 2000
+  lr_scheduler: "cosine"
+  
+  # Training dynamics
+  batch_size: 768  # As per paper (may need adjustment for available GPU memory)
+  max_epochs: 100000
+  gradient_clip: 1.0
+  
+  # Deep supervision
+  max_supervision_steps: 16
+  
+  # Adaptive Computational Time (ACT) for early stopping
+  use_act: true
+  act_threshold: 0.5  # Halt if Q(halt) > 0.5
+  
+  # Exponential Moving Average (critical for stability)
+  use_ema: true
+  ema_decay: 0.999
+  
+  # Loss function
+  loss: "stable_max_crossentropy"  # From paper for numerical stability
+  
+data:
+  # Rust code dataset
+  train_data: "data/rust_train.jsonl"
+  val_data: "data/rust_val.jsonl"
+  
+  # Data augmentation (important for small datasets)
+  augmentation:
+    enabled: true
+    # For code, we can't rotate/flip like images, but we can:
+    # - Randomly mask tokens for prediction
+    # - Shuffle independent statements
+    # - Add noise to embeddings
+    strategies:
+      - "random_masking"
+      - "token_dropout: 0.1"
+  
+  # Tokenization
+  tokenizer: "rust_bpe"  # Byte-pair encoding for Rust
+  max_seq_length: 512
+  
+  # Next-token prediction task
+  task: "causal_lm"
+  prediction_window: 128  # Predict next 128 tokens
+  
+evaluation:
+  # Evaluation metrics
+  metrics:
+    - "perplexity"
+    - "accuracy"
+    - "token_accuracy"
+    - "completion_quality"
+  
+  eval_interval: 1000  # Steps between evaluations
+  save_interval: 5000  # Steps between checkpoints
+  
+  # Test-time settings (use full supervision unlike training)
+  test_supervision_steps: 16  # Use max depth at inference
+  
+hardware:
+  # GPU settings
+  device: "cuda"
+  mixed_precision: true  # Use FP16 for memory efficiency
+  gradient_accumulation_steps: 1
+  
+  # Memory optimization
+  checkpoint_gradients: true  # Trade compute for memory
+  
+logging:
+  wandb: true
+  project: "trm-rust-autocomplete"
+  log_interval: 100
+  
+checkpointing:
+  save_dir: "checkpoints/trm_rust"
+  keep_last_n: 3
+  save_best: true
+  metric: "val_perplexity"
+  
+# Experiment variants to compare recursion depths
+experiments:
+  - name: "TRM_T1_shallow"
+    model:
+      T: 1  # 14 effective layers
+      
+  - name: "TRM_T2_medium"
+    model:
+      T: 2  # 28 effective layers
+      
+  - name: "TRM_T3_deep"
+    model:
+      T: 3  # 42 effective layers (paper's optimal)
+      
+  - name: "TRM_T4_deeper"
+    model:
+      T: 4  # 56 effective layers (may overfit)
+
+# Notes from paper:
+# - 2 layers is optimal (less overfitting than 4 layers)
+# - Single network works better than separate networks
+# - EMA is critical for stability on small data
+# - ACT saves ~50% training time
+# - T=3, n=6 is optimal balance for most tasks

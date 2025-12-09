@@ -77,7 +77,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
@@ -110,7 +110,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
@@ -168,7 +168,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Call { name: "TwoOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -200,7 +200,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Call { name: "OneOut".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -252,7 +252,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![
                 // Fork creates (a, b)
@@ -296,7 +296,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -324,7 +324,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -352,7 +352,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Call { name: "Out512".to_string(), args: vec![], kwargs: vec![], id: 0 },
@@ -380,7 +380,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![
                 Connection {
@@ -420,7 +420,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![
                 Connection {
@@ -479,7 +479,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![
                 Connection {
@@ -525,7 +525,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![],
             },
@@ -545,7 +545,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
@@ -571,7 +571,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             outputs: vec![Port { name: "default".to_string(), shape: wildcard() }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![
                 Connection {
@@ -605,7 +605,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
@@ -644,7 +644,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
@@ -686,7 +686,7 @@ mod tests {
             inputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]) }],
             outputs: vec![Port { name: "default".to_string(), shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]) }],
             body: NeuronBody::Graph {
-                max_cycle_depth: Some(10),                let_bindings: vec![],
+                let_bindings: vec![],
                 set_bindings: vec![],
                 connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),

@@ -240,6 +240,9 @@ pub struct NeuronDef {
     pub inputs: Vec<Port>,
     pub outputs: Vec<Port>,
     pub body: NeuronBody,
+    /// Allow cycles up to this depth (for unrolled loops/recursion)
+    /// None means no cycles allowed, Some(n) allows cycles up to depth n
+    pub max_cycle_depth: Option<usize>,
 }
 
 /// An import statement: use core,nn/*

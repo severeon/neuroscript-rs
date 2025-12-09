@@ -214,8 +214,8 @@ impl Validator {
             }
         }
 
-        // Check for cycles
-        errors.extend(Self::detect_cycles(connections, &neuron.name, &symbol_table, program));
+        // Check for cycles (respecting max_cycle_depth if set)
+        errors.extend(Self::detect_cycles(connections, neuron, &symbol_table, program));
 
         errors
     }
@@ -695,12 +695,14 @@ impl Validator {
 
     /// Detect cycles in the connection graph
     /// Uses neuron names + symbol table nodes, allows self-edges within a single connection
+    /// Respects max_cycle_depth if set on the neuron
     fn detect_cycles(
         connections: &[Connection],
-        context_neuron: &str,
+        neuron: &NeuronDef,
         symbol_table: &SymbolTable,
         _program: &Program,
     ) -> Vec<ValidationError> {
+        let context_neuron = &neuron.name;
         // Build dependency graph: which nodes flow to which others
         let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
 
@@ -763,6 +765,16 @@ impl Validator {
                     &mut rec_stack,
                     Vec::new(),
                 ) {
+                    // Check if this cycle is allowed by max_cycle_depth
+                    let cycle_depth = cycle.len() - 1; // Subtract 1 because cycle includes start node twice
+                    
+                    if let Some(max_depth) = neuron.max_cycle_depth {
+                        if cycle_depth <= max_depth {
+                            // Cycle is within allowed depth, skip error
+                            continue;
+                        }
+                    }
+                    
                     errors.push(ValidationError::CycleDetected {
                         cycle,
                         context: context_neuron.to_string(),

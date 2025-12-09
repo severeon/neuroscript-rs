@@ -1,0 +1,32 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron IsPalindromeAttention(vocab_size, max_len):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, 1]
+  graph:
+    in -> Embedding#2(vocab_size, 32)
+    Embedding#2(vocab_size, 32) -> embedded
+    embedded -> PositionalEncoding#3(32, max_len=max_len)
+    PositionalEncoding#3(32, max_len=max_len) -> positioned
+    positioned -> MultiHeadSelfAttention#4(32, 4)
+    MultiHeadSelfAttention#4(32, 4) -> attended
+    attended -> Linear#5(32, 1)
+    Linear#5(32, 1) -> Sigmoid#6()
+    Sigmoid#6() -> out
+
+neuron IsPalindromeNaive(vocab_size):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, 1]
+  graph:
+    in -> Embedding#0(vocab_size, 16)

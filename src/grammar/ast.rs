@@ -154,12 +154,19 @@ impl AstBuilder {
             }
         };
 
+        // Set max_cycle_depth based on body type
+        let max_cycle_depth = match &body {
+            NeuronBody::Graph { .. } => Some(10),
+            NeuronBody::Primitive(_) => None,
+        };
+
         Ok(NeuronDef {
             name,
             params,
             inputs,
             outputs,
             body,
+            max_cycle_depth,
         })
     }
 

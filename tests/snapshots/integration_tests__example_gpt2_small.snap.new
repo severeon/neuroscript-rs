@@ -1,0 +1,96 @@
+---
+source: tests/integration_tests.rs
+assertion_line: 554
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron Embedding(vocab_size, d_model):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, d_model]
+  impl:
+    Source: core,nn/Embedding
+
+neuron FFN(dim, expansion):
+  inputs:
+    default: [*, seq_len, dim]
+  outputs:
+    default: [*, seq_len, dim]
+  graph:
+    in -> Linear#8(dim, expansion)
+    Linear#8(dim, expansion) -> GELU#9()
+    GELU#9() -> Linear#10(expansion, dim)
+    Linear#10(expansion, dim) -> out
+
+neuron GELU:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,activations/GELU
+
+neuron GPT2Small(vocab_size):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#3(vocab_size, 768)
+    Embedding#3(vocab_size, 768) -> embedded
+    embedded -> PositionalEncoding#4(768, max_len=1024)
+    PositionalEncoding#4(768, max_len=1024) -> positioned
+    positioned -> GPTTransformerBlock#5(768, 12, 3072)
+    GPTTransformerBlock#5(768, 12, 3072) -> transformed
+    transformed -> LayerNorm#6(768)
+    LayerNorm#6(768) -> normalized
+    normalized -> Linear#7(768, vocab_size)
+    Linear#7(768, vocab_size) -> out
+
+neuron GPTTransformerBlock(dim, num_heads, d_ff):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
+    MultiHeadSelfAttention#1(dim, num_heads) -> FFN#2(dim, d_ff)
+    FFN#2(dim, d_ff) -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [batch, seq, in_dim]
+  outputs:
+    default: [batch, seq, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention
+
+neuron PositionalEncoding(d_model, max_len):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, d_model]
+  impl:
+    Source: core,nn/PositionalEncoding
