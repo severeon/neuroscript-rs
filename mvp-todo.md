@@ -201,7 +201,13 @@
 
 **Deliverable**: Fully functional GPT-2 generated from NeuroScript ✅
 
-## MVP Phase 7: `let`/`set` Bindings & Structural Recursion ⭐ KILLER FEATURE
+## MVP Phase 7: `let`/`set` Bindings, Scopes & Recursion ⭐ KILLER FEATURE
+
+**UPDATED DESIGN DECISIONS (2026-01-01):**
+- ✅ First-order neurons only (no neuron-as-parameter support needed)
+- ✅ Recursive calls unrolled at compile time (simple approach)
+- ✅ Three scopes for data: model/global, neuron/static, node/instance
+- ✅ Lazy loading via keyword/operator (syntax TBD)
 
 ### 7.1 Lexer & Parser Extensions ✅
 
@@ -215,7 +221,7 @@
 ### 7.2 IR Extensions for Bindings ✅
 
   - [x] Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`
-  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBo dy::Graph`
+  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`
   - [x] Define `Binding` struct with name + neuron call
   - [x] Update IR Display traits for bindings
   - [x] Test IR correctly represents bindings
@@ -240,72 +246,88 @@
   - [x] Test basic let bindings generate correctly with lazy instantiation
   - [x] Create examples/let_set_basic.ns
 
-### 7.5 Recursion Detection & Analysis
+### 7.5 Three-Scope Data Model (NEW)
 
+**Design:** Three distinct scopes for neuron data/weights:
+
+1. **model/global scope**: Shared across ALL instances of ALL neurons
+   - Use case: Global statistics, shared embeddings, vocabulary
+   - Syntax TBD (e.g., `global:` block or `@global` annotation)
+
+2. **neuron/static scope**: Shared across all instances of a SPECIFIC neuron type
+   - Use case: Weight-shared layers (Universal Transformer)
+   - Syntax TBD (e.g., `static:` block or `@static` annotation)
+
+3. **node/instance scope**: Per-instance data (current default)
+   - Use case: Regular neural network weights
+   - Current `set:` and `let:` blocks map here
+
+**Implementation tasks:**
+  - [ ] Design syntax for three scopes
+  - [ ] Extend IR to track scope annotations
+  - [ ] Update parser to handle new scope keywords/annotations
+  - [ ] Implement scope validation (e.g., global can't reference instance data)
+  - [ ] Codegen for model/global scope (module-level variables)
+  - [ ] Codegen for neuron/static scope (class-level variables)
+  - [ ] Test all three scopes work correctly
+  - [ ] Create example demonstrating all three scopes
+
+**Open questions:**
+  - How does model/global interact with multiple top-level neurons?
+  - Should lazy loading apply to all three scopes?
+  - How does this interact with shape inference?
+
+### 7.6 Compile-Time Recursion Unrolling (SIMPLIFIED)
+
+**Design:** Simple unrolling approach - no complex termination analysis
+
+**Requirements:**
+  - Recursion depth MUST be known at compile time
+  - Error if depth is runtime-determined
+  - Configurable max unroll depth (default: 100)
+  - Generate flat unrolled structure (no runtime recursion)
+
+**Implementation tasks:**
   - [ ] Detect self-referential neurons in `let:` bindings
-  - [ ] Identify recursion control parameter (e.g., depth)
-  - [ ] Detect parameter decrease pattern (depth - 1, n - 2)
-  - [ ] Identify base case (match arm without recursive call)
-  - [ ] Test recursion detection on simple examples
+  - [ ] Implement compile-time guard evaluator (only for recursion control)
+  - [ ] Unroll recursive calls by substituting parameters
+  - [ ] Track unroll depth, error if exceeds limit
+  - [ ] Generate flat structure in codegen (no recursive __init__)
+  - [ ] Test unrolling with simple countdown pattern
+  - [ ] Verify examples/16-recursion.ns unrolls correctly
+  - [ ] Error gracefully on runtime-dependent depth
 
-### 7.6 Compile-Time Guard Evaluator
+**Limitations (accepted for simplicity):**
+  - No termination checking (user responsible for valid patterns)
+  - No support for runtime-variable depth
+  - No optimization for identical unrolled layers
 
-  - [ ] Implement expression evaluator for guard conditions
-  - [ ] Support arithmetic: +, -, *, /
-  - [ ] Support comparisons: <, >, <=, >=, ==, !=
-  - [ ] Support parameter substitution in expressions
-  - [ ] Test guard evaluation with various expressions
-  - [ ] Handle evaluation errors gracefully
-
-### 7.7 Recursive Expansion Algorithm
-
-  - [ ] Implement compile-time expansion for recursive neurons
-  - [ ] Evaluate guards with parameter substitution
-  - [ ] Instantiate lazy bindings only in active code paths
-  - [ ] Track expansion depth with configurable limit (default: 100)
-  - [ ] Generate detailed error on expansion limit
-  - [ ] Test expansion on countdown pattern
-
-### 7.8 Termination Checking
-
-  - [ ] Implement simple termination checker:
-    - Single parameter decreases by constant
-    - Guard is simple comparison (>, >=, etc.)
-    - Base case exists (non-recursive arm)
-  - [ ] Error on non-terminating patterns with helpful message
-  - [ ] Error on complex patterns (multiple params, non-linear)
-  - [ ] Test termination checker catches infinite recursion
-  - [ ] Test termination checker allows valid patterns
-
-### 7.9 Recursive Codegen
-
-  - [ ] Generate conditional instantiation for `let:` bindings
-  - [ ] Emit recursive module creation in `__init__`
-  - [ ] Add depth/parameter tracking for termination
-  - [ ] Generate proper forward pass routing
-  - [ ] Test generated recursive code works
-  - [ ] Verify examples/16-recursion.ns generates correctly
-
-### 7.10 Integration & Examples
+### 7.7 Integration & Examples
 
   - [ ] Integrate bindings with shape inference
   - [ ] Test let/set with pattern matching (guards)
-  - [ ] Create examples/18-weight-sharing.ns (Universal Transformer)
-  - [ ] Create examples/19-recursive-stack.ns (GPT-2 style depth)
+  - [ ] Create examples/18-scopes.ns (demonstrate 3 scopes)
+  - [ ] Create examples/19-recursive-stack.ns (GPT-2 style depth unrolling)
   - [ ] Test full integration end-to-end
   - [ ] Verify generated PyTorch code runs
 
-**Context**: Implements full `let`/`set` specification from `notes/neuroscript_let_set_spec.md`
+**Context**: Simplified from full `let`/`set` specification in `notes/neuroscript_let_set_spec.md`
 
 **Key Concepts**:
 - `set:` = eager instantiation (always created in __init__)
 - `let:` = lazy instantiation (only if referenced in active path)
 - Bound names enable weight sharing (same instance reused)
 - Inline calls create independent instances
-- Structural recursion via self-reference + guards
-- Compile-time expansion (no runtime recursion)
+- Simple recursion unrolling (compile-time depth only)
+- Three scopes: model/global, neuron/static, node/instance
+- **NO higher-order neurons** (first-order only)
 
-**Deliverable**: Full support for weight sharing and recursive neuron definitions
+**Deliverable**: Weight sharing, scoped data, and simple recursion unrolling
+
+**Known Limitations (accepted tradeoffs):**
+- Cannot pass neurons as parameters (blocks Universal Transformer pattern from spec)
+- Recursion depth must be compile-time constant
+- No automatic termination checking
 
 ## MVP Success Criteria
 
@@ -328,22 +350,32 @@
 
 ### Recommended Next Steps
 
-**Option A: Complete MVP (Phases 6 + 7.5-7.10)**
-- Finish GPT-2 end-to-end test
-- Implement recursion detection and expansion
-- Full structural recursion support
+**Option A: Complete Scopes & Recursion (Phase 7.5-7.7)**
+- Design and implement three-scope data model
+- Implement simple compile-time recursion unrolling
+- Create examples demonstrating scopes and recursion
 
 **Option B: Pest Grammar Migration First (Phase 8.2-8.3)**
 - Build AST converter for pest grammar
 - Replace handwritten lexer/parser
-- Cleaner foundation for future work
+- Cleaner foundation before adding scopes/recursion
+
+**Recommendation:** Option B (Pest grammar) provides cleaner foundation for adding scopes
 
 ### Nice-to-have (post-MVP)
 
-* Optimization passes
-* Better error messages
+* Optimization passes (identical layer deduplication, dead code elimination)
+* Better error messages (especially for scope violations)
 * Pre-compiled stdlib
 * Training examples
+* Runtime-variable recursion depth (with explicit unroll limits)
+
+### Explicitly NOT in Scope (Design Decisions)
+
+* ❌ Higher-order neurons (neurons as parameters) - first-order only
+* ❌ Complex termination analysis - user responsible for valid recursion
+* ❌ Port references in bindings - future work
+* ❌ Iteration count annotations - future work
 
 ---
 
