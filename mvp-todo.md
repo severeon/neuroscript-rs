@@ -204,130 +204,205 @@
 ## MVP Phase 7: `let`/`set` Bindings, Scopes & Recursion ⭐ KILLER FEATURE
 
 **UPDATED DESIGN DECISIONS (2026-01-01):**
-- ✅ First-order neurons only (no neuron-as-parameter support needed)
-- ✅ Recursive calls unrolled at compile time (simple approach)
-- ✅ Three scopes for data: model/global, neuron/static, node/instance
-- ✅ Lazy loading via keyword/operator (syntax TBD)
+- ✅ Higher-order neurons (neurons as parameters) - REQUIRED for Universal Transformer
+- ✅ Recursive calls unrolled at compile time (simple approach, max depth: 100)
+- ✅ Three scopes for data: global, static, instance
+- ✅ Single `context:` block with annotations: `@static`, `@global`, `@lazy`
+- ✅ Explicit dependencies: All cross-scope references declared in context block
+- ✅ No scope crossing in graph: Can't use `@global.var` or `@static.var` in pipelines
 
-### 7.1 Lexer & Parser Extensions ✅
+### 7.1 Lexer & Parser Extensions
+
+**Status:** Partially complete (set/let blocks exist, need `context:` migration)
 
   - [x] Add `set` keyword to lexer (`let` already reserved)
-  - [x] Implement `parse_set_block()` for eager bindings
-  - [x] Implement `parse_let_block()` for lazy bindings
-  - [x] Parse binding syntax: `name = NeuronCall(args)`
+  - [ ] Add `context` keyword to lexer
+  - [ ] Add annotation tokens: `@static`, `@global`, `@lazy`
+  - [ ] Implement `parse_context_block()` to replace set/let blocks
+  - [ ] Parse binding syntax: `name = NeuronCall(args)` with optional annotations
+  - [ ] Parse module-level `@global` declarations
   - [ ] Support `Freeze(neuron)` meta-neuron syntax
-  - [x] Test parsing of let/set blocks
+  - [ ] Migrate existing set/let tests to context block
 
-### 7.2 IR Extensions for Bindings ✅
+### 7.2 IR Extensions for Context & Scopes
 
-  - [x] Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`
-  - [x] Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`
-  - [x] Define `Binding` struct with name + neuron call
-  - [x] Update IR Display traits for bindings
-  - [x] Test IR correctly represents bindings
+**Status:** Needs refactor from set/let bindings to context model
 
-### 7.3 Validation Rules for Bindings ✅
+  - [x] ~~Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
+  - [x] ~~Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
+  - [ ] Add `context: Vec<ContextBinding>` to `NeuronBody::Graph`
+  - [ ] Define `ContextBinding` struct with name, neuron call, and scope annotation
+  - [ ] Add `Scope` enum: `Instance`, `Static`, `Global` (with `Lazy` flag)
+  - [ ] Add `global_bindings: Vec<GlobalBinding>` to `Program`
+  - [ ] Update IR Display traits for context bindings
+  - [ ] Test IR correctly represents all three scopes
 
-  - [x] Check no forward references in bindings
-  - [x] Validate binding names don't conflict (duplicate binding check)
-  - [x] Validate bound neuron names exist
-  - [x] Check for recursive set: bindings (not allowed)
-  - [x] Check for let: bindings with parameters (recursion control)
-  - [x] Test validation catches binding errors
+### 7.3 Validation Rules for Context & Scopes
 
-### 7.4 Basic Codegen (Weight Sharing, No Recursion) ✅
+**Status:** Needs extension for scope validation
 
-  - [x] Generate `set:` bindings in `__init__` (eager instantiation)
-  - [x] Generate `let:` bindings with lazy instantiation markers
-  - [x] Track bound names → module instance mapping
-  - [x] Reference bound names in graph connections
-  - [x] Support weight sharing (same instance multiple uses)
-  - [x] Test basic set bindings generate correctly
-  - [x] Test basic let bindings generate correctly with lazy instantiation
-  - [x] Create examples/let_set_basic.ns
+  - [x] Check no forward references in bindings (existing)
+  - [x] Validate binding names don't conflict (existing)
+  - [x] Validate bound neuron names exist (existing)
+  - [ ] **NEW:** Validate `@global` only appears at module level (not in neurons)
+  - [ ] **NEW:** Validate `@static`/`@lazy` only appear in `context:` blocks
+  - [ ] **NEW:** Validate graph connections only reference context-bound names (no `@global.x`)
+  - [ ] **NEW:** Validate instance bindings can't reference static bindings of same neuron
+  - [ ] **NEW:** Validate static bindings can reference globals and other statics
+  - [ ] Test validation catches scope violations
 
-### 7.5 Three-Scope Data Model (NEW)
+### 7.4 Basic Codegen (Context Block, No Recursion)
 
-**Design:** Three distinct scopes for neuron data/weights:
+**Status:** Needs refactor from set/let to context model
 
-1. **model/global scope**: Shared across ALL instances of ALL neurons
-   - Use case: Global statistics, shared embeddings, vocabulary
-   - Syntax TBD (e.g., `global:` block or `@global` annotation)
+  - [ ] Generate module-level `@global` bindings (Python module variables)
+  - [ ] Generate `@static` bindings as class variables
+  - [ ] Generate instance bindings in `__init__` (eager instantiation)
+  - [ ] Generate `@lazy` bindings with conditional instantiation
+  - [ ] Track bound names → scope + module instance mapping
+  - [ ] Reference bound names in graph connections
+  - [ ] Support weight sharing within scope boundaries
+  - [ ] Test all three scopes generate correctly
+  - [ ] Create examples/context_scopes_basic.ns
 
-2. **neuron/static scope**: Shared across all instances of a SPECIFIC neuron type
-   - Use case: Weight-shared layers (Universal Transformer)
-   - Syntax TBD (e.g., `static:` block or `@static` annotation)
+### 7.5 Three-Scope Data Model with Context Block
 
-3. **node/instance scope**: Per-instance data (current default)
-   - Use case: Regular neural network weights
-   - Current `set:` and `let:` blocks map here
+**Design:** Single `context:` block with three scopes via annotations
+
+**Syntax:**
+```neuroscript
+# Module level - only place for @global definitions
+@global vocab_table = Embedding(50257, 768)
+@global num_heads = 12
+
+neuron TransformerBlock(d_model):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+
+  context:
+    @static shared_norm = LayerNorm(d_model)              # Class-level (shared)
+    attn = MultiHeadAttention(d_model, @global num_heads) # Instance (references global)
+    @lazy ffn = FFN(d_model)                              # Instance, lazy-loaded
+
+  graph:
+    in -> shared_norm -> attn -> ffn -> out  # Only bound names, no @global.x
+```
+
+**Scope Rules:**
+1. **global scope**: Module-level only, `@global name = ...`
+   - Shared across ALL neurons in the module
+   - Cannot be defined inside neurons
+   - Referenced in context blocks via `@global name`
+
+2. **static scope**: Class-level, `@static name = ...` in `context:`
+   - Shared across all instances of THIS neuron type
+   - One copy per neuron class, not per instance
+   - Can reference `@global` bindings
+
+3. **instance scope**: Instance-level, `name = ...` in `context:` (default)
+   - Per-instance data (standard neural network weights)
+   - Can reference `@global` and `@static` bindings
+   - Can be marked `@lazy` for conditional instantiation
+
+**Strict Boundaries:**
+- Graph block can ONLY reference names bound in `context:` block
+- No direct `@global.x` or `@static.x` access in pipelines
+- All cross-scope dependencies explicit in `context:` declarations
 
 **Implementation tasks:**
-  - [ ] Design syntax for three scopes
-  - [ ] Extend IR to track scope annotations
-  - [ ] Update parser to handle new scope keywords/annotations
-  - [ ] Implement scope validation (e.g., global can't reference instance data)
-  - [ ] Codegen for model/global scope (module-level variables)
-  - [ ] Codegen for neuron/static scope (class-level variables)
+  - [ ] Define `@global` syntax at module level (outside neurons)
+  - [ ] Define `context:` block syntax (replaces set:/let:)
+  - [ ] Implement annotation parsing: `@static`, `@global`, `@lazy`
+  - [ ] Validate scope rules (global only at module level, etc.)
+  - [ ] Codegen for module-level globals (Python module variables)
+  - [ ] Codegen for static bindings (Python class variables)
+  - [ ] Codegen for instance bindings (Python instance variables)
   - [ ] Test all three scopes work correctly
-  - [ ] Create example demonstrating all three scopes
+  - [ ] Create examples/context_scopes.ns demonstrating all scopes
 
-**Open questions:**
-  - How does model/global interact with multiple top-level neurons?
-  - Should lazy loading apply to all three scopes?
-  - How does this interact with shape inference?
+### 7.6 Compile-Time Recursion Unrolling & Higher-Order Neurons
 
-### 7.6 Compile-Time Recursion Unrolling (SIMPLIFIED)
+**Design:** Simple unrolling approach with first-class neuron parameters
 
-**Design:** Simple unrolling approach - no complex termination analysis
-
-**Requirements:**
+**Recursion Requirements:**
   - Recursion depth MUST be known at compile time
   - Error if depth is runtime-determined
-  - Configurable max unroll depth (default: 100)
+  - Max unroll depth: **100** (prevents accidental runaway compilation)
   - Generate flat unrolled structure (no runtime recursion)
 
+**Higher-Order Neurons:**
+  - Neurons can accept other neurons as parameters (first-class)
+  - Enables Universal Transformer pattern (pass shared block instance)
+  - Type checking for neuron parameters via shape inference
+
 **Implementation tasks:**
-  - [ ] Detect self-referential neurons in `let:` bindings
-  - [ ] Implement compile-time guard evaluator (only for recursion control)
+  - [ ] Support neuron-typed parameters in neuron signatures
+  - [ ] Implement type checking for neuron parameters (shape compatibility)
+  - [ ] Detect self-referential neurons in `context:` bindings
+  - [ ] Implement compile-time guard evaluator (for recursion control)
   - [ ] Unroll recursive calls by substituting parameters
-  - [ ] Track unroll depth, error if exceeds limit
+  - [ ] Track unroll depth, error if exceeds 100
   - [ ] Generate flat structure in codegen (no recursive __init__)
+  - [ ] Test higher-order neurons (Universal Transformer example)
   - [ ] Test unrolling with simple countdown pattern
   - [ ] Verify examples/16-recursion.ns unrolls correctly
   - [ ] Error gracefully on runtime-dependent depth
+
+**Example - Higher-Order Neuron:**
+```neuroscript
+neuron ApplyNTimes(block: Neuron, depth: int):
+  in: [*]
+  out: [*]
+  context:
+    @lazy next = ApplyNTimes(block, depth - 1)
+  graph:
+    in -> match:
+      [*] where depth > 0: block -> next -> out
+      [*]: out
+
+neuron UniversalTransformer(d_model, num_heads, depth):
+  context:
+    @static shared_block = TransformerBlock(d_model, num_heads)
+  graph:
+    in -> ApplyNTimes(shared_block, depth) -> out
+```
 
 **Limitations (accepted for simplicity):**
   - No termination checking (user responsible for valid patterns)
   - No support for runtime-variable depth
   - No optimization for identical unrolled layers
+  - Max recursion depth fixed at 100
 
 ### 7.7 Integration & Examples
 
-  - [ ] Integrate bindings with shape inference
-  - [ ] Test let/set with pattern matching (guards)
-  - [ ] Create examples/18-scopes.ns (demonstrate 3 scopes)
-  - [ ] Create examples/19-recursive-stack.ns (GPT-2 style depth unrolling)
+  - [ ] Integrate context bindings with shape inference
+  - [ ] Test context blocks with pattern matching (guards)
+  - [ ] Create examples/18-context-scopes.ns (demonstrate all 3 scopes)
+  - [ ] Create examples/19-universal-transformer.ns (higher-order + @static)
+  - [ ] Create examples/20-recursive-stack.ns (GPT-2 style depth unrolling)
   - [ ] Test full integration end-to-end
-  - [ ] Verify generated PyTorch code runs
+  - [ ] Verify generated PyTorch code runs correctly for all examples
 
-**Context**: Simplified from full `let`/`set` specification in `notes/neuroscript_let_set_spec.md`
+**Context**: Evolution from `let`/`set` specification in `notes/neuroscript_let_set_spec.md`
 
 **Key Concepts**:
-- `set:` = eager instantiation (always created in __init__)
-- `let:` = lazy instantiation (only if referenced in active path)
-- Bound names enable weight sharing (same instance reused)
+- `context:` block = single place for all dependency declarations
+- Annotations: `@global` (module-level), `@static` (class-level), `@lazy` (conditional)
+- Default (no annotation) = instance scope, eager instantiation
+- Bound names enable weight sharing within scope boundaries
 - Inline calls create independent instances
-- Simple recursion unrolling (compile-time depth only)
-- Three scopes: model/global, neuron/static, node/instance
-- **NO higher-order neurons** (first-order only)
+- Simple recursion unrolling (compile-time depth only, max 100)
+- Three scopes: global, static, instance
+- **Higher-order neurons** (neurons as first-class parameters)
+- Strict scope boundaries (no `@global.x` in graph block)
 
-**Deliverable**: Weight sharing, scoped data, and simple recursion unrolling
+**Deliverable**: Weight sharing, scoped data, higher-order neurons, and recursion unrolling
 
 **Known Limitations (accepted tradeoffs):**
-- Cannot pass neurons as parameters (blocks Universal Transformer pattern from spec)
-- Recursion depth must be compile-time constant
-- No automatic termination checking
+- Recursion depth must be compile-time constant (max 100)
+- No automatic termination checking (user responsible)
+- No runtime-variable depth (compile-time only)
+- No optimization for identical unrolled layers
 
 ## MVP Success Criteria
 
@@ -372,10 +447,12 @@
 
 ### Explicitly NOT in Scope (Design Decisions)
 
-* ❌ Higher-order neurons (neurons as parameters) - first-order only
-* ❌ Complex termination analysis - user responsible for valid recursion
+* ❌ Complex termination analysis - user responsible for valid recursion patterns
+* ❌ Runtime-variable recursion depth - compile-time only (max 100)
+* ❌ Automatic layer deduplication in unrolled recursion - user must optimize manually
+* ❌ Direct scope crossing in graph (`@global.x` in pipelines) - must use `context:` bindings
 * ❌ Port references in bindings - future work
-* ❌ Iteration count annotations - future work
+* ❌ Iteration count annotations (`@iterate(3)`) - future work
 
 ---
 
