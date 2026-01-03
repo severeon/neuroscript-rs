@@ -73,9 +73,13 @@ pub(super) fn snake_case_impl(name: &str) -> String {
 }
 
 /// Generate a unique key for an endpoint (for call deduplication)
+///
+/// Each call is uniquely identified by its id, so modules with learnable
+/// parameters get separate instances (e.g., 12 transformer layers should
+/// each have their own weights).
 pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
     match endpoint {
-        Endpoint::Call { name, args, kwargs, .. } => {
+        Endpoint::Call { name, args, kwargs, id } => {
             let args_str = args.iter()
                 .map(|v| format!("{:?}", v))
                 .collect::<Vec<_>>()
@@ -84,7 +88,8 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
                 .map(|(k, v)| format!("{}={:?}", k, v))
                 .collect::<Vec<_>>()
                 .join(",");
-            format!("{}({};{})", name, args_str, kwargs_str)
+            // Include id to ensure each call gets its own module instance
+            format!("{}({};{})@{}", name, args_str, kwargs_str, id)
         }
         _ => format!("{:?}", endpoint),
     }
@@ -372,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn test_endpoint_key_deduplication() {
+    fn test_endpoint_key_unique_per_call() {
         let call1 = Endpoint::Call {
             name: "Linear".to_string(),
             args: vec![Value::Int(512), Value::Int(256)],
@@ -387,7 +392,16 @@ mod tests {
             id: 1,
         };
 
-        // Same signature should have same key (id doesn't matter)
-        assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call2));
+        // Different ids should produce different keys (each call gets its own module)
+        assert_ne!(endpoint_key_impl(&call1), endpoint_key_impl(&call2));
+
+        // Same id should produce same key
+        let call3 = Endpoint::Call {
+            name: "Linear".to_string(),
+            args: vec![Value::Int(512), Value::Int(256)],
+            kwargs: vec![],
+            id: 0,
+        };
+        assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call3));
     }
 }

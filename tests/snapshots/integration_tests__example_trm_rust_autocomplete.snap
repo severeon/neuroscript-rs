@@ -1,0 +1,197 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+use activations::* (source: core)
+
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    main: [*shape]
+    skip: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,structural/Add
+
+neuron AddThree(dim):
+  inputs:
+    x: [*batch, seq, dim]
+    y: [*batch, seq, dim]
+    z: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,structural/AddThree
+
+neuron AddTwo(dim):
+  inputs:
+    a: [*batch, seq, dim]
+    b: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,structural/Add
+
+neuron AnswerUpdate(dim):
+  inputs:
+    y: [*batch, seq, dim]
+    z: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  graph:
+    (y, z) -> AddTwo#6(dim)
+    AddTwo#6(dim) -> combined
+    combined -> TinyNet2Layer#7(dim)
+    TinyNet2Layer#7(dim) -> out
+
+neuron Embedding(vocab, dim):
+  inputs:
+    default: [*batch, seq]
+  outputs:
+    default: [*batch, seq, dim]
+  impl:
+    Source: core,nn/Embedding
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron Fork3:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+    c: [*shape]
+  impl:
+    Source: core,builtin/Fork3
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron LatentUpdate(dim):
+  inputs:
+    x: [*batch, seq, dim]
+    y: [*batch, seq, dim]
+    z: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  graph:
+    (x, y, z) -> AddThree#4(dim)
+    AddThree#4(dim) -> combined
+    combined -> TinyNet2Layer#5(dim)
+    TinyNet2Layer#5(dim) -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron RecursionStep(dim):
+  inputs:
+    x: [*batch, seq, dim]
+    y: [*batch, seq, dim]
+    z: [*batch, seq, dim]
+  outputs:
+    y_new: [*batch, seq, dim]
+    z_new: [*batch, seq, dim]
+  graph:
+    (x, y, z) -> LatentUpdate#8(dim)
+    LatentUpdate#8(dim) -> z_upd
+    (y, z_upd) -> AnswerUpdate#9(dim)
+    AnswerUpdate#9(dim) -> y_upd
+    y_upd -> y_new
+    z_upd -> z_new
+
+neuron RustAutocompleteTRM:
+  inputs:
+    default: [batch, 512]
+  outputs:
+    default: [batch, 512, 32000]
+  graph:
+    in -> TRM_Simple#17(32000, 512, 512)
+    TRM_Simple#17(32000, 512, 512) -> out
+
+neuron RustAutocompleteTRM_Medium:
+  inputs:
+    default: [batch, 256]
+  outputs:
+    default: [batch, 256, 16000]
+  graph:
+    in -> TRM_Simple#18(16000, 384, 256)
+    TRM_Simple#18(16000, 384, 256) -> out
+
+neuron RustAutocompleteTRM_Small:
+  inputs:
+    default: [batch, 128]
+  outputs:
+    default: [batch, 128, 8000]
+  graph:
+    in -> TRM_Simple#19(8000, 256, 128)
+    TRM_Simple#19(8000, 256, 128) -> out
+
+neuron RustAutocompleteTRM_Tiny:
+  inputs:
+    default: [batch, 64]
+  outputs:
+    default: [batch, 64, 1000]
+  graph:
+    in -> TRM_Simple#20(1000, 128, 64)
+    TRM_Simple#20(1000, 128, 64) -> out
+
+neuron TRM_Simple(vocab_size, dim, seq_len):
+  inputs:
+    default: [*batch, seq_len]
+  outputs:
+    default: [*batch, seq_len, vocab_size]
+  graph:
+    in -> Fork3#10()
+    Fork3#10() -> (tok_x, tok_y, tok_z)
+    tok_x -> Embedding#11(vocab_size, dim)
+    Embedding#11(vocab_size, dim) -> x
+    tok_y -> Embedding#12(vocab_size, dim)
+    Embedding#12(vocab_size, dim) -> y_init
+    tok_z -> Embedding#13(vocab_size, dim)
+    Embedding#13(vocab_size, dim) -> z_init
+    (x, y_init, z_init) -> RecursionStep#14(dim)
+    RecursionStep#14(dim) -> (y_out, z_out)
+    y_out -> LayerNorm#15(dim)
+    LayerNorm#15(dim) -> Linear#16(dim, vocab_size)
+    Linear#16(dim, vocab_size) -> out
+
+neuron TinyNet2Layer(dim):
+  inputs:
+    default: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  graph:
+    in -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> Linear#1(dim, (dim * 4))
+    Linear#1(dim, (dim * 4)) -> GELU#2()
+    GELU#2() -> Linear#3((dim * 4), dim)
+    Linear#3((dim * 4), dim) -> out

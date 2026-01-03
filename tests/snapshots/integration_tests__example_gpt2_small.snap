@@ -1,6 +1,5 @@
 ---
 source: tests/integration_tests.rs
-assertion_line: 554
 expression: formatted
 ---
 === Uses ===
@@ -22,10 +21,10 @@ neuron FFN(dim, expansion):
   outputs:
     default: [*, seq_len, dim]
   graph:
-    in -> Linear#8(dim, expansion)
-    Linear#8(dim, expansion) -> GELU#9()
-    GELU#9() -> Linear#10(expansion, dim)
-    Linear#10(expansion, dim) -> out
+    in -> Linear#19(dim, expansion)
+    Linear#19(dim, expansion) -> GELU#20()
+    GELU#20() -> Linear#21(expansion, dim)
+    Linear#21(expansion, dim) -> out
 
 neuron GELU:
   inputs:
@@ -46,11 +45,22 @@ neuron GPT2Small(vocab_size):
     embedded -> PositionalEncoding#4(768, max_len=1024)
     PositionalEncoding#4(768, max_len=1024) -> positioned
     positioned -> GPTTransformerBlock#5(768, 12, 3072)
-    GPTTransformerBlock#5(768, 12, 3072) -> transformed
-    transformed -> LayerNorm#6(768)
-    LayerNorm#6(768) -> normalized
-    normalized -> Linear#7(768, vocab_size)
-    Linear#7(768, vocab_size) -> out
+    GPTTransformerBlock#5(768, 12, 3072) -> GPTTransformerBlock#6(768, 12, 3072)
+    GPTTransformerBlock#6(768, 12, 3072) -> GPTTransformerBlock#7(768, 12, 3072)
+    GPTTransformerBlock#7(768, 12, 3072) -> GPTTransformerBlock#8(768, 12, 3072)
+    GPTTransformerBlock#8(768, 12, 3072) -> GPTTransformerBlock#9(768, 12, 3072)
+    GPTTransformerBlock#9(768, 12, 3072) -> GPTTransformerBlock#10(768, 12, 3072)
+    GPTTransformerBlock#10(768, 12, 3072) -> GPTTransformerBlock#11(768, 12, 3072)
+    GPTTransformerBlock#11(768, 12, 3072) -> GPTTransformerBlock#12(768, 12, 3072)
+    GPTTransformerBlock#12(768, 12, 3072) -> GPTTransformerBlock#13(768, 12, 3072)
+    GPTTransformerBlock#13(768, 12, 3072) -> GPTTransformerBlock#14(768, 12, 3072)
+    GPTTransformerBlock#14(768, 12, 3072) -> GPTTransformerBlock#15(768, 12, 3072)
+    GPTTransformerBlock#15(768, 12, 3072) -> GPTTransformerBlock#16(768, 12, 3072)
+    GPTTransformerBlock#16(768, 12, 3072) -> transformed
+    transformed -> LayerNorm#17(768)
+    LayerNorm#17(768) -> normalized
+    normalized -> Linear#18(768, vocab_size)
+    Linear#18(768, vocab_size) -> out
 
 neuron GPTTransformerBlock(dim, num_heads, d_ff):
   inputs:
