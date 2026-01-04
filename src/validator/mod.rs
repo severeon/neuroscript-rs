@@ -5,6 +5,10 @@
 //! 2. Connection endpoints match (tuple arity, port names, shapes)
 //! 3. No cycles in the dependency graph
 
+mod symbol_table;
+mod shapes;
+mod cycles;
+mod bindings;
 pub mod core;
 
 // Re-export public API
