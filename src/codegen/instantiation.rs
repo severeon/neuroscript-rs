@@ -4,10 +4,10 @@
 //! including deduplication of calls and lazy instantiation for modules with
 //! captured dimensions.
 
+use super::utils::*;
+use crate::interfaces::*;
 use std::collections::HashMap;
 use std::fmt::Write;
-use crate::interfaces::*;
-use super::utils::*;
 
 /// Generate module instantiations in __init__
 pub(super) fn generate_module_instantiations(
@@ -15,7 +15,7 @@ pub(super) fn generate_module_instantiations(
     output: &mut String,
     let_bindings: &[Binding],
     set_bindings: &[Binding],
-    connections: &[Connection]
+    connections: &[Connection],
 ) -> Result<(), CodegenError> {
     // First, generate set: bindings (eager instantiation)
     for binding in set_bindings {
@@ -28,7 +28,7 @@ pub(super) fn generate_module_instantiations(
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
             neuron.is_primitive()
         } else {
-            true  // Assume primitive if not in program
+            true // Assume primitive if not in program
         };
 
         if is_primitive {
@@ -36,7 +36,8 @@ pub(super) fn generate_module_instantiations(
         }
 
         // Generate instantiation for set binding
-        let args_str = args.iter()
+        let args_str = args
+            .iter()
             .map(|v| value_to_python_impl(v))
             .collect::<Vec<_>>()
             .join(", ");
@@ -44,7 +45,8 @@ pub(super) fn generate_module_instantiations(
         let kwargs_str = if kwargs.is_empty() {
             String::new()
         } else {
-            let kw: Vec<String> = kwargs.iter()
+            let kw: Vec<String> = kwargs
+                .iter()
                 .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
                 .collect();
             if args.is_empty() {
@@ -54,11 +56,16 @@ pub(super) fn generate_module_instantiations(
             }
         };
 
-        writeln!(output, "        self.{} = {}({}{})",
-                 module_name, name, args_str, kwargs_str).unwrap();
+        writeln!(
+            output,
+            "        self.{} = {}({}{})",
+            module_name, name, args_str, kwargs_str
+        )
+        .unwrap();
 
         // Register the binding name as a variable for use in graph
-        gen.var_names.insert(module_name.clone(), format!("self.{}", module_name));
+        gen.var_names
+            .insert(module_name.clone(), format!("self.{}", module_name));
     }
 
     // TODO: Handle let: bindings - these need lazy instantiation
@@ -71,7 +78,7 @@ pub(super) fn generate_module_instantiations(
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
             neuron.is_primitive()
         } else {
-            true  // Assume primitive if not in program
+            true // Assume primitive if not in program
         };
 
         if is_primitive {
@@ -79,49 +86,71 @@ pub(super) fn generate_module_instantiations(
         }
 
         // Initialize as None for lazy instantiation
-        writeln!(output, "        self._{} = None  # Lazy instantiation (let binding)", binding.name).unwrap();
+        writeln!(
+            output,
+            "        self._{} = None  # Lazy instantiation (let binding)",
+            binding.name
+        )
+        .unwrap();
 
         // Store binding info for lazy instantiation in forward()
         gen.lazy_bindings.insert(
             module_name.clone(),
-            (name.clone(), binding.args.clone(), binding.kwargs.clone())
+            (name.clone(), binding.args.clone(), binding.kwargs.clone()),
         );
-        gen.var_names.insert(module_name.clone(), format!("self._{}", module_name));
+        gen.var_names
+            .insert(module_name.clone(), format!("self._{}", module_name));
     }
 
     // Collect all unique Call endpoints and assign them IDs
-    let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<(String, Value)>)> = HashMap::new();
+    let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<(String, Value)>)> =
+        HashMap::new();
     let mut all_endpoints = Vec::new();
     collect_calls_impl(connections, &mut all_endpoints);
 
     for endpoint in &all_endpoints {
-        if let Endpoint::Call { name, args, kwargs, .. } = endpoint {
+        if let Endpoint::Call {
+            name, args, kwargs, ..
+        } = endpoint
+        {
             let key = endpoint_key_impl(&endpoint);
             if !seen_calls.contains_key(&key) {
                 let id = gen.next_node_id();
                 let module_name = format!("{}_{}", snake_case_impl(&name), id);
                 // Store the mapping for use in forward generation
                 gen.call_to_module.insert(key.clone(), module_name.clone());
-                seen_calls.insert(key, (name.clone(), module_name, args.clone(), kwargs.clone()));
+                seen_calls.insert(
+                    key,
+                    (name.clone(), module_name, args.clone(), kwargs.clone()),
+                );
             }
         }
     }
 
     // Generate instantiations in deterministic order
     let mut calls: Vec<_> = seen_calls.into_iter().collect();
-    calls.sort_by(|a, b| a.1.1.cmp(&b.1.1)); // Sort by module_name for determinism
+    calls.sort_by(|a, b| a.1 .1.cmp(&b.1 .1)); // Sort by module_name for determinism
 
     let mut instantiated_count = 0;
     for (_key, (name, module_name, args, kwargs)) in &calls {
         // Check if any arguments contain captured dimensions
-        let has_captured = args.iter().any(|v| has_captured_dimensions_impl(v, &gen.current_neuron_params)) ||
-                           kwargs.iter().any(|(_, v)| has_captured_dimensions_impl(v, &gen.current_neuron_params));
+        let has_captured = args
+            .iter()
+            .any(|v| has_captured_dimensions_impl(v, &gen.current_neuron_params))
+            || kwargs
+                .iter()
+                .any(|(_, v)| has_captured_dimensions_impl(v, &gen.current_neuron_params));
 
         if has_captured {
             // Skip instantiation in __init__ for modules with captured dimensions
             // They will be instantiated lazily in forward()
             // Initialize cache variable to None
-            writeln!(output, "        self._{} = None  # Lazy instantiation (has captured dimensions)", module_name).unwrap();
+            writeln!(
+                output,
+                "        self._{} = None  # Lazy instantiation (has captured dimensions)",
+                module_name
+            )
+            .unwrap();
             instantiated_count += 1;
             continue;
         }
@@ -139,7 +168,8 @@ pub(super) fn generate_module_instantiations(
         }
 
         // Generate instantiation
-        let args_str = args.iter()
+        let args_str = args
+            .iter()
             .map(|v| value_to_python_impl(v))
             .collect::<Vec<_>>()
             .join(", ");
@@ -147,7 +177,8 @@ pub(super) fn generate_module_instantiations(
         let kwargs_str = if kwargs.is_empty() {
             String::new()
         } else {
-            let kw: Vec<String> = kwargs.iter()
+            let kw: Vec<String> = kwargs
+                .iter()
                 .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
                 .collect();
             if args.is_empty() {
@@ -157,7 +188,12 @@ pub(super) fn generate_module_instantiations(
             }
         };
 
-        writeln!(output, "        self.{} = {}({}{})", module_name, name, args_str, kwargs_str).unwrap();
+        writeln!(
+            output,
+            "        self.{} = {}({}{})",
+            module_name, name, args_str, kwargs_str
+        )
+        .unwrap();
         instantiated_count += 1;
     }
 
@@ -180,17 +216,15 @@ mod tests {
         let mut gen = CodeGenerator::new(&program, ctx);
 
         // Simple connection with a Call
-        let connections = vec![
-            Connection {
-                source: Endpoint::Ref(PortRef::new("in")),
-                destination: Endpoint::Call {
-                    name: "Linear".to_string(),
-                    args: vec![Value::Int(512), Value::Int(256)],
-                    kwargs: vec![],
-                    id: 0,
-                },
+        let connections = vec![Connection {
+            source: Endpoint::Ref(PortRef::new("in")),
+            destination: Endpoint::Call {
+                name: "Linear".to_string(),
+                args: vec![Value::Int(512), Value::Int(256)],
+                kwargs: vec![],
+                id: 0,
             },
-        ];
+        }];
 
         let mut output = String::new();
         generate_module_instantiations(&mut gen, &mut output, &[], &[], &connections).unwrap();
@@ -221,7 +255,7 @@ mod tests {
                     name: "Linear".to_string(),
                     args: vec![Value::Int(512), Value::Int(256)],
                     kwargs: vec![],
-                    id: 1,
+                    id: 0,
                 },
             },
         ];
@@ -240,17 +274,15 @@ mod tests {
         let mut gen = CodeGenerator::new(&program, ctx);
 
         // Call with captured dimension
-        let connections = vec![
-            Connection {
-                source: Endpoint::Ref(PortRef::new("in")),
-                destination: Endpoint::Call {
-                    name: "Linear".to_string(),
-                    args: vec![Value::Name("d".to_string()), Value::Int(512)],
-                    kwargs: vec![],
-                    id: 0,
-                },
+        let connections = vec![Connection {
+            source: Endpoint::Ref(PortRef::new("in")),
+            destination: Endpoint::Call {
+                name: "Linear".to_string(),
+                args: vec![Value::Name("d".to_string()), Value::Int(512)],
+                kwargs: vec![],
+                id: 0,
             },
-        ];
+        }];
 
         let mut output = String::new();
         generate_module_instantiations(&mut gen, &mut output, &[], &[], &connections).unwrap();

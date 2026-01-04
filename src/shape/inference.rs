@@ -41,7 +41,10 @@ impl InferenceContext {
 
                     if let (Some(val1), Some(val2)) = (v1, v2) {
                         if val1 != val2 {
-                            return Err(format!("Variable mismatch: {}={} != {}={}", n1, val1, n2, val2));
+                            return Err(format!(
+                                "Variable mismatch: {}={} != {}={}",
+                                n1, val1, n2, val2
+                            ));
                         }
                     } else if let Some(val) = v1 {
                         self.resolved_dims.insert(n2.clone(), *val);
@@ -53,7 +56,10 @@ impl InferenceContext {
             (Dim::Named(n), Dim::Literal(v)) | (Dim::Literal(v), Dim::Named(n)) => {
                 if let Some(current) = self.resolved_dims.get(n) {
                     if *current != *v as usize {
-                        return Err(format!("Variable {} already bound to {}, cannot bind to {}", n, current, v));
+                        return Err(format!(
+                            "Variable {} already bound to {}, cannot bind to {}",
+                            n, current, v
+                        ));
                     }
                 } else {
                     self.resolved_dims.insert(n.clone(), *v as usize);
@@ -76,8 +82,13 @@ impl InferenceContext {
                 let v2 = self.evaluate_expr(e2);
                 if let (Some(val1), Some(val2)) = (v1, v2) {
                     if val1 != val2 {
-                        return Err(format!("Expression mismatch: {} = {} != {} = {}",
-                            self.format_expr(e1), val1, self.format_expr(e2), val2));
+                        return Err(format!(
+                            "Expression mismatch: {} = {} != {} = {}",
+                            self.format_expr(e1),
+                            val1,
+                            self.format_expr(e2),
+                            val2
+                        ));
                     }
                 }
                 // Otherwise, we can't unify them yet
@@ -89,7 +100,11 @@ impl InferenceContext {
 
     /// Attempt to solve an expression for an unknown variable
     /// For example: if expr is "dim * 4" and target is 2048, solve for dim = 512
-    pub(crate) fn solve_expr_for_unknown(&mut self, expr: &DimExpr, target: usize) -> Result<(), String> {
+    pub(crate) fn solve_expr_for_unknown(
+        &mut self,
+        expr: &DimExpr,
+        target: usize,
+    ) -> Result<(), String> {
         // Try to solve for the left operand
         if let Dim::Named(left_name) = &expr.left {
             if !self.resolved_dims.contains_key(left_name) {
@@ -178,7 +193,8 @@ impl InferenceContext {
     }
 
     fn format_expr(&self, expr: &DimExpr) -> String {
-        format!("{} {} {}",
+        format!(
+            "{} {} {}",
             expr.left,
             match expr.op {
                 BinOp::Add => "+",
@@ -231,12 +247,14 @@ impl ShapeInferenceEngine {
         // 2. Register input shapes
         // "in" node outputs = neuron inputs
         let input_shapes: Vec<Shape> = neuron.inputs.iter().map(|p| p.shape.clone()).collect();
-        ctx.node_outputs.insert("in".to_string(), input_shapes.clone());
+        ctx.node_outputs
+            .insert("in".to_string(), input_shapes.clone());
 
         // Also register individual input ports if they are named
         for (_i, port) in neuron.inputs.iter().enumerate() {
             if port.name != "default" {
-                ctx.node_outputs.insert(port.name.clone(), vec![port.shape.clone()]);
+                ctx.node_outputs
+                    .insert(port.name.clone(), vec![port.shape.clone()]);
             }
         }
 
@@ -250,41 +268,55 @@ impl ShapeInferenceEngine {
         Ok(())
     }
 
-    pub fn check_connection(&self, conn: &Connection, ctx: &mut InferenceContext, program: &Program) -> Result<(), ShapeError> {
+    pub fn check_connection(
+        &self,
+        conn: &Connection,
+        ctx: &mut InferenceContext,
+        program: &Program,
+    ) -> Result<(), ShapeError> {
         // Build connection context for better error messages
-        let conn_context = format!("{} -> {}",
+        let conn_context = format!(
+            "{} -> {}",
             self.format_endpoint(&conn.source),
             self.format_endpoint(&conn.destination)
         );
 
         // 1. Resolve source shapes
-        let source_shapes = self.resolve_endpoint_shape(&conn.source, ctx, program)
+        let source_shapes = self
+            .resolve_endpoint_shape(&conn.source, ctx, program)
             .map_err(|e| {
                 // Add connection context to error
                 match e {
-                    ShapeError::UnknownNode(node) => ShapeError::UnknownNode(
-                        format!("{} (in connection: {})", node, conn_context)
-                    ),
-                    ShapeError::NodeInferenceFailed { node, message } => ShapeError::NodeInferenceFailed {
-                        node,
-                        message: format!("{} (in connection: {})", message, conn_context),
-                    },
-                    _ => e
+                    ShapeError::UnknownNode(node) => ShapeError::UnknownNode(format!(
+                        "{} (in connection: {})",
+                        node, conn_context
+                    )),
+                    ShapeError::NodeInferenceFailed { node, message } => {
+                        ShapeError::NodeInferenceFailed {
+                            node,
+                            message: format!("{} (in connection: {})", message, conn_context),
+                        }
+                    }
+                    _ => e,
                 }
             })?;
 
         // 2. Validate and process destination
         match &conn.destination {
-            Endpoint::Call { name, args: _, kwargs: _, id } => {
+            Endpoint::Call {
+                name,
+                args: _,
+                kwargs: _,
+                id,
+            } => {
                 // Validate call destination
-                let called_neuron = program.neurons.get(name)
-                    .ok_or_else(|| ShapeError::UnknownNode(
-                        format!("{} (called in connection)", name)
-                    ))?;
+                let called_neuron = program.neurons.get(name).ok_or_else(|| {
+                    ShapeError::UnknownNode(format!("{} (called in connection)", name))
+                })?;
 
                 // Validate input arity
                 if source_shapes.len() != called_neuron.inputs.len() {
-                     return Err(ShapeError::Mismatch {
+                    return Err(ShapeError::Mismatch {
                          expected: Shape { dims: vec![] },
                          got: Shape { dims: vec![] },
                          context: format!(
@@ -298,12 +330,18 @@ impl ShapeInferenceEngine {
                      });
                 }
 
-                // Validate each input shape with full compatibility checking
-                for (i, (src_shape, input_port)) in source_shapes.iter()
-                    .zip(called_neuron.inputs.iter()).enumerate() {
+                // Create call context to isolate variadic bindings
+                let mut call_ctx = ctx.clone();
 
+                // Validate each input shape with full compatibility checking
+                // Use call_ctx to capture variadics
+                for (i, (src_shape, input_port)) in source_shapes
+                    .iter()
+                    .zip(called_neuron.inputs.iter())
+                    .enumerate()
+                {
                     // Check shape compatibility
-                    self.validate_connection_shapes(src_shape, &input_port.shape, ctx, &format!(
+                    self.validate_connection_shapes(src_shape, &input_port.shape, &mut call_ctx, &format!(
                         "Connection: {} -> {}() input {} ({})",
                         self.format_endpoint(&conn.source),
                         name,
@@ -318,17 +356,19 @@ impl ShapeInferenceEngine {
                             name,
                             src_shape,
                             input_port.shape,
-                            ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
+                            call_ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
                         ),
                         }
                     })?;
                 }
 
                 // Compute output shapes
-                // TODO: For full implementation, substitute parameter values from args
-                // For MVP, use declared output shapes as-is
-                let output_shapes = called_neuron.outputs.iter()
-                    .map(|p| p.shape.clone())
+                // Substitute variadics captured during input validation
+                // Also substitute parameter values from args (TODO)
+                let output_shapes = called_neuron
+                    .outputs
+                    .iter()
+                    .map(|p| self.substitute_variadics(&p.shape, &call_ctx))
                     .collect();
 
                 ctx.call_outputs.insert(*id, output_shapes);
@@ -346,10 +386,12 @@ impl ShapeInferenceEngine {
                     if port_ref.port != "default" {
                         // Named port access - validate it exists
                         // For now, just store with the node name
-                        ctx.node_outputs.insert(port_ref.node.clone(), source_shapes);
+                        ctx.node_outputs
+                            .insert(port_ref.node.clone(), source_shapes);
                     } else {
                         // Default port
-                        ctx.node_outputs.insert(port_ref.node.clone(), source_shapes);
+                        ctx.node_outputs
+                            .insert(port_ref.node.clone(), source_shapes);
                     }
                 }
             }
@@ -375,13 +417,20 @@ impl ShapeInferenceEngine {
                     // Validate the port reference is valid
                     if port_ref.port != "default" {
                         return Err(ShapeError::ConstraintViolation {
-                            message: format!("Cannot use port access in tuple unpacking position {}", i),
-                            context: format!("Tuple binding {} should be a simple name, not {}",
-                                i, self.format_port_ref(port_ref))
+                            message: format!(
+                                "Cannot use port access in tuple unpacking position {}",
+                                i
+                            ),
+                            context: format!(
+                                "Tuple binding {} should be a simple name, not {}",
+                                i,
+                                self.format_port_ref(port_ref)
+                            ),
                         });
                     }
 
-                    ctx.node_outputs.insert(port_ref.node.clone(), vec![shape.clone()]);
+                    ctx.node_outputs
+                        .insert(port_ref.node.clone(), vec![shape.clone()]);
                 }
             }
 
@@ -394,8 +443,13 @@ impl ShapeInferenceEngine {
         Ok(())
     }
 
-    fn validate_port_ref_destination(&self, port_ref: &PortRef, _source_shapes: &[Shape],
-                                     _ctx: &mut InferenceContext, _program: &Program) -> Result<(), ShapeError> {
+    fn validate_port_ref_destination(
+        &self,
+        port_ref: &PortRef,
+        _source_shapes: &[Shape],
+        _ctx: &mut InferenceContext,
+        _program: &Program,
+    ) -> Result<(), ShapeError> {
         // For now, basic validation
         // TODO: Check that if port_ref.port is not "default", the port actually exists on the neuron
 
@@ -409,11 +463,19 @@ impl ShapeInferenceEngine {
         Ok(())
     }
 
-    fn validate_match_destination(&self, arms: &[MatchArm], source_shapes: &[Shape],
-                                  ctx: &mut InferenceContext, program: &Program) -> Result<(), ShapeError> {
+    fn validate_match_destination(
+        &self,
+        arms: &[MatchArm],
+        source_shapes: &[Shape],
+        ctx: &mut InferenceContext,
+        program: &Program,
+    ) -> Result<(), ShapeError> {
         if source_shapes.len() != 1 {
             return Err(ShapeError::ConstraintViolation {
-                message: format!("Match expression requires exactly one input, got {}", source_shapes.len()),
+                message: format!(
+                    "Match expression requires exactly one input, got {}",
+                    source_shapes.len()
+                ),
                 context: "Match expression validation".to_string(),
             });
         }
@@ -435,11 +497,12 @@ impl ShapeInferenceEngine {
 
             // Validate guard expression if present
             if let Some(guard) = &arm.guard {
-                self.validate_guard_expr(guard, &arm_ctx)
-                    .map_err(|e| ShapeError::ConstraintViolation {
+                self.validate_guard_expr(guard, &arm_ctx).map_err(|e| {
+                    ShapeError::ConstraintViolation {
                         message: format!("Match arm {} guard error: {}", arm_idx, e),
                         context: format!("Guard in pattern: {}", arm.pattern),
-                    })?;
+                    }
+                })?;
             }
 
             // Validate each endpoint in the pipeline with the forked context
@@ -458,9 +521,13 @@ impl ShapeInferenceEngine {
 
                 // Register current shapes in context
                 if ep_idx == 0 {
-                    arm_ctx.node_outputs.insert("in".to_string(), current_shapes.clone());
+                    arm_ctx
+                        .node_outputs
+                        .insert("in".to_string(), current_shapes.clone());
                 } else {
-                    arm_ctx.node_outputs.insert("_temp".to_string(), current_shapes.clone());
+                    arm_ctx
+                        .node_outputs
+                        .insert("_temp".to_string(), current_shapes.clone());
                 }
 
                 // Validate this connection
@@ -500,12 +567,24 @@ impl ShapeInferenceEngine {
     }
 
     /// Unify a pattern shape with a concrete shape, binding captured dimensions
-    pub(crate) fn unify_pattern_with_shape(&self, pattern: &Shape, concrete: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    pub(crate) fn unify_pattern_with_shape(
+        &self,
+        pattern: &Shape,
+        concrete: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
         // Handle variadic patterns
         if self.has_variadic(pattern) {
-            return self.unify_with_variadic_pattern(pattern,
-                pattern.dims.iter().position(|d| matches!(d, Dim::Variadic(_))).unwrap(),
-                concrete, ctx);
+            return self.unify_with_variadic_pattern(
+                pattern,
+                pattern
+                    .dims
+                    .iter()
+                    .position(|d| matches!(d, Dim::Variadic(_)))
+                    .unwrap(),
+                concrete,
+                ctx,
+            );
         }
 
         // Check rank matches for non-variadic patterns
@@ -559,7 +638,12 @@ impl ShapeInferenceEngine {
     }
 
     /// Resolve the output shapes of a match endpoint
-    fn resolve_match_endpoint(&self, endpoint: &Endpoint, ctx: &InferenceContext, program: &Program) -> Result<Vec<Shape>, ShapeError> {
+    fn resolve_match_endpoint(
+        &self,
+        endpoint: &Endpoint,
+        ctx: &InferenceContext,
+        program: &Program,
+    ) -> Result<Vec<Shape>, ShapeError> {
         match endpoint {
             Endpoint::Ref(port_ref) => {
                 // Look up the output shape for this reference
@@ -596,9 +680,9 @@ impl ShapeInferenceEngine {
                 }
                 Ok(shapes)
             }
-            Endpoint::Match(_) => {
-                Err(ShapeError::UnsupportedFeature("Nested match expressions not yet supported".to_string()))
-            }
+            Endpoint::Match(_) => Err(ShapeError::UnsupportedFeature(
+                "Nested match expressions not yet supported".to_string(),
+            )),
         }
     }
 
@@ -613,8 +697,13 @@ impl ShapeInferenceEngine {
         match ep {
             Endpoint::Ref(r) => self.format_port_ref(r),
             Endpoint::Call { name, .. } => format!("{}()", name),
-            Endpoint::Tuple(refs) => format!("({})",
-                refs.iter().map(|r| r.node.as_str()).collect::<Vec<_>>().join(", ")),
+            Endpoint::Tuple(refs) => format!(
+                "({})",
+                refs.iter()
+                    .map(|r| r.node.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Endpoint::Match(_) => "match".to_string(),
         }
     }
@@ -627,7 +716,12 @@ impl ShapeInferenceEngine {
         }
     }
 
-    fn resolve_endpoint_shape(&self, endpoint: &Endpoint, ctx: &InferenceContext, _program: &Program) -> Result<Vec<Shape>, ShapeError> {
+    fn resolve_endpoint_shape(
+        &self,
+        endpoint: &Endpoint,
+        ctx: &InferenceContext,
+        _program: &Program,
+    ) -> Result<Vec<Shape>, ShapeError> {
         match endpoint {
             Endpoint::Ref(port_ref) => {
                 if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
@@ -653,7 +747,8 @@ impl ShapeInferenceEngine {
             Endpoint::Tuple(refs) => {
                 let mut shapes = Vec::new();
                 for r in refs {
-                    let s = self.resolve_endpoint_shape(&Endpoint::Ref(r.clone()), ctx, _program)?;
+                    let s =
+                        self.resolve_endpoint_shape(&Endpoint::Ref(r.clone()), ctx, _program)?;
                     shapes.extend(s);
                 }
                 Ok(shapes)
@@ -662,7 +757,12 @@ impl ShapeInferenceEngine {
         }
     }
 
-    pub(crate) fn unify_shapes(&self, s1: &Shape, s2: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    pub(crate) fn unify_shapes(
+        &self,
+        s1: &Shape,
+        s2: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
         // Handle variadic dimensions first
         if self.has_variadic(s1) || self.has_variadic(s2) {
             return self.unify_shapes_with_variadic(s1, s2, ctx);
@@ -675,14 +775,22 @@ impl ShapeInferenceEngine {
 
         // No wildcards or variadics - strict rank check
         if s1.dims.len() != s2.dims.len() {
-            return Err(format!("Rank mismatch: {} (rank {}) vs {} (rank {})",
-                s1, s1.dims.len(), s2, s2.dims.len()));
+            return Err(format!(
+                "Rank mismatch: {} (rank {}) vs {} (rank {})",
+                s1,
+                s1.dims.len(),
+                s2,
+                s2.dims.len()
+            ));
         }
 
         // Unify dimension by dimension
         for (i, (d1, d2)) in s1.dims.iter().zip(s2.dims.iter()).enumerate() {
             ctx.unify(d1, d2).map_err(|e| {
-                format!("Dimension {} mismatch: {} - in shapes {} vs {}", i, e, s1, s2)
+                format!(
+                    "Dimension {} mismatch: {} - in shapes {} vs {}",
+                    i, e, s1, s2
+                )
             })?;
         }
         Ok(())
@@ -696,29 +804,44 @@ impl ShapeInferenceEngine {
         shape.dims.iter().any(|d| matches!(d, Dim::Variadic(_)))
     }
 
-    fn unify_shapes_with_wildcard(&self, s1: &Shape, s2: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    fn unify_shapes_with_wildcard(
+        &self,
+        s1: &Shape,
+        s2: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
         if s1.dims.len() != s2.dims.len() {
-            return Err(format!("Rank mismatch even with wildcards: {} (rank {}) vs {} (rank {})",
-                s1, s1.dims.len(), s2, s2.dims.len()));
+            return Err(format!(
+                "Rank mismatch even with wildcards: {} (rank {}) vs {} (rank {})",
+                s1,
+                s1.dims.len(),
+                s2,
+                s2.dims.len()
+            ));
         }
 
         for (i, (d1, d2)) in s1.dims.iter().zip(s2.dims.iter()).enumerate() {
-            match (d1, d2) {
-                (Dim::Wildcard, _) | (_, Dim::Wildcard) => {
-                    // Wildcard matches anything - no constraint
-                    continue;
-                }
-                _ => {
-                    ctx.unify(d1, d2).map_err(|e| {
-                        format!("Dimension {} mismatch: {} - in shapes {} vs {}", i, e, s1, s2)
-                    })?;
-                }
+            if matches!(d1, Dim::Wildcard) || matches!(d2, Dim::Wildcard) {
+                continue;
             }
+
+            ctx.unify(d1, d2).map_err(|e| {
+                format!(
+                    "Dimension {} mismatch: {} - in shapes {} vs {}",
+                    i, e, s1, s2
+                )
+            })?;
         }
+
         Ok(())
     }
 
-    fn unify_shapes_with_variadic(&self, s1: &Shape, s2: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    fn unify_shapes_with_variadic(
+        &self,
+        s1: &Shape,
+        s2: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
         // Find variadic positions
         let s1_variadic_pos = s1.dims.iter().position(|d| matches!(d, Dim::Variadic(_)));
         let s2_variadic_pos = s2.dims.iter().position(|d| matches!(d, Dim::Variadic(_)));
@@ -734,20 +857,51 @@ impl ShapeInferenceEngine {
             }
             (Some(pos1), Some(pos2)) => {
                 // Both have variadics - complex case
-                // For MVP, just check they're compatible structurally
-                if s1.dims.len() != s2.dims.len() || pos1 != pos2 {
-                    return Err(format!("Incompatible variadic patterns: {} vs {}", s1, s2));
-                }
-                // Unify non-variadic parts
-                for (i, (d1, d2)) in s1.dims.iter().zip(s2.dims.iter()).enumerate() {
-                    if i == pos1 {
-                        // Both variadic - they match
-                        continue;
-                    }
+                // Instead of strict equality, check structural compatibility:
+                // 1. Match constant prefixes
+                // 2. Match constant suffixes
+                // 3. Assume variadics absorb the difference
+
+                // 1. Unify common prefix
+                let common_prefix_len = std::cmp::min(pos1, pos2);
+                for (i, (d1, d2)) in s1.dims[..common_prefix_len]
+                    .iter()
+                    .zip(s2.dims[..common_prefix_len].iter())
+                    .enumerate()
+                {
                     ctx.unify(d1, d2).map_err(|e| {
-                        format!("Dimension {} mismatch: {} - in shapes {} vs {}", i, e, s1, s2)
+                        format!(
+                            "Prefix dimension {} mismatch in variadic unification: {}",
+                            i, e
+                        )
                     })?;
                 }
+
+                // 2. Unify common suffix
+                let tail1_len = s1.dims.len() - 1 - pos1;
+                let tail2_len = s2.dims.len() - 1 - pos2;
+                let common_suffix_len = std::cmp::min(tail1_len, tail2_len);
+
+                let suffix1_start = s1.dims.len() - common_suffix_len;
+                let suffix2_start = s2.dims.len() - common_suffix_len;
+
+                for (i, (d1, d2)) in s1.dims[suffix1_start..]
+                    .iter()
+                    .zip(s2.dims[suffix2_start..].iter())
+                    .enumerate()
+                {
+                    ctx.unify(d1, d2).map_err(|e| {
+                        format!(
+                            "Suffix dimension {} mismatch in variadic unification: {}",
+                            i, e
+                        )
+                    })?;
+                }
+
+                // 3. Check for obvious conflicts (e.g. constant vs constant) in the middle?
+                // For MVP, we assume variadics are flexible enough to handle the rest.
+                // TODO: More rigorous overlap check
+
                 Ok(())
             }
             (None, None) => {
@@ -756,43 +910,109 @@ impl ShapeInferenceEngine {
         }
     }
 
-    fn unify_with_variadic_pattern(&self, pattern: &Shape, variadic_pos: usize, concrete: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
+    fn unify_with_variadic_pattern(
+        &self,
+        pattern: &Shape,
+        variadic_pos: usize,
+        concrete: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
         let prefix_len = variadic_pos;
         let suffix_len = pattern.dims.len() - variadic_pos - 1;
 
         if concrete.dims.len() < prefix_len + suffix_len {
             return Err(format!(
                 "Shape {} too short to match pattern {} (needs at least {} dimensions, has {})",
-                concrete, pattern, prefix_len + suffix_len, concrete.dims.len()
+                concrete,
+                pattern,
+                prefix_len + suffix_len,
+                concrete.dims.len()
             ));
         }
 
         // Unify prefix
-        for (i, (pat_dim, conc_dim)) in pattern.dims[..prefix_len].iter()
-            .zip(concrete.dims[..prefix_len].iter()).enumerate() {
-            ctx.unify(pat_dim, conc_dim).map_err(|e| {
-                format!("Prefix dimension {} mismatch: {}", i, e)
-            })?;
+        for (i, (pat_dim, conc_dim)) in pattern.dims[..prefix_len]
+            .iter()
+            .zip(concrete.dims[..prefix_len].iter())
+            .enumerate()
+        {
+            ctx.unify(pat_dim, conc_dim)
+                .map_err(|e| format!("Prefix dimension {} mismatch: {}", i, e))?;
         }
 
         // Unify suffix
         let concrete_suffix_start = concrete.dims.len() - suffix_len;
-        for (i, (pat_dim, conc_dim)) in pattern.dims[variadic_pos + 1..].iter()
-            .zip(concrete.dims[concrete_suffix_start..].iter()).enumerate() {
-            ctx.unify(pat_dim, conc_dim).map_err(|e| {
-                format!("Suffix dimension {} mismatch: {}", i, e)
-            })?;
+        for (i, (pat_dim, conc_dim)) in pattern.dims[variadic_pos + 1..]
+            .iter()
+            .zip(concrete.dims[concrete_suffix_start..].iter())
+            .enumerate()
+        {
+            ctx.unify(pat_dim, conc_dim)
+                .map_err(|e| format!("Suffix dimension {} mismatch: {}", i, e))?;
+        }
+
+        // Capture variadic dimensions
+        if let Some(Dim::Variadic(name)) = pattern.dims.get(variadic_pos) {
+            let captured_dims = concrete.dims[prefix_len..concrete_suffix_start].to_vec();
+
+            // Should check if already bound to ensure consistency
+            // Need to handle borrow checker carefully
+            let existing_dims = ctx.resolved_variadics.get(name).cloned();
+
+            if let Some(existing) = existing_dims {
+                if existing.len() != captured_dims.len() {
+                    return Err(format!(
+                        "Variadic binding mismatch for {}: captured {} dims vs previous {}",
+                        name,
+                        captured_dims.len(),
+                        existing.len()
+                    ));
+                }
+                for (i, (d1, d2)) in existing.iter().zip(captured_dims.iter()).enumerate() {
+                    ctx.unify(d1, d2)
+                        .map_err(|e| format!("Variadic binding dim {} mismatch: {}", i, e))?;
+                }
+            } else {
+                ctx.resolved_variadics.insert(name.clone(), captured_dims);
+            }
         }
 
         Ok(())
     }
 
+    /// Substitute captured variadics into a shape
+    fn substitute_variadics(&self, shape: &Shape, ctx: &InferenceContext) -> Shape {
+        let mut new_dims = Vec::new();
+
+        for dim in &shape.dims {
+            match dim {
+                Dim::Variadic(name) => {
+                    if let Some(captured) = ctx.resolved_variadics.get(name) {
+                        new_dims.extend(captured.clone());
+                    } else {
+                        // Not captured? Keep as is or handle error?
+                        // For now keep as is, it might be resolved later or valid to keep
+                        new_dims.push(dim.clone());
+                    }
+                }
+                _ => new_dims.push(dim.clone()),
+            }
+        }
+
+        Shape { dims: new_dims }
+    }
+
     /// Validate shape compatibility between source and destination with detailed context
-    fn validate_connection_shapes(&self, source: &Shape, dest: &Shape, ctx: &mut InferenceContext, context: &str) -> Result<(), String> {
+    fn validate_connection_shapes(
+        &self,
+        source: &Shape,
+        dest: &Shape,
+        ctx: &mut InferenceContext,
+        context: &str,
+    ) -> Result<(), String> {
         // Try to unify shapes
-        self.unify_shapes(source, dest, ctx).map_err(|e| {
-            format!("{}\n  Context: {}", e, context)
-        })?;
+        self.unify_shapes(source, dest, ctx)
+            .map_err(|e| format!("{}\n  Context: {}", e, context))?;
 
         // Check for expression constraints that need solving
         for dim in &dest.dims {
@@ -805,7 +1025,12 @@ impl ShapeInferenceEngine {
     }
 
     /// Validate that an expression constraint can be satisfied
-    fn validate_expr_constraint(&self, expr: &DimExpr, ctx: &InferenceContext, context: &str) -> Result<(), String> {
+    fn validate_expr_constraint(
+        &self,
+        expr: &DimExpr,
+        ctx: &InferenceContext,
+        context: &str,
+    ) -> Result<(), String> {
         // Check if we can evaluate the expression with current context
         match ctx.evaluate_expr(expr) {
             Some(_value) => {

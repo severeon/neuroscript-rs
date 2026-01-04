@@ -110,9 +110,15 @@ fn format_neuron(neuron: &NeuronDef) -> String {
             if !context_bindings.is_empty() {
                 output.push_str("  context:\n");
                 for binding in context_bindings {
+                    let prefix = match binding.scope {
+                        Scope::Instance { lazy: true } => "@lazy ",
+                        Scope::Static => "@static ",
+                        Scope::Global => "@global ",
+                        _ => "",
+                    };
                     output.push_str(&format!(
-                        "    {} = {}(...)\n",
-                        binding.name, binding.call_name
+                        "    {}{} = {}(...)\n",
+                        prefix, binding.name, binding.call_name
                     ));
                 }
             }

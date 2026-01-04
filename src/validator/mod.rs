@@ -591,7 +591,7 @@ mod tests {
                 name: "default".to_string(),
                 shape: wildcard(),
             }],
-            max_cycle_depth: Some(10),
+            max_cycle_depth: None,
             body: NeuronBody::Graph {
                 let_bindings: vec![],
                 set_bindings: vec![],
@@ -676,7 +676,7 @@ mod tests {
                 name: "default".to_string(),
                 shape: wildcard(),
             }],
-            max_cycle_depth: Some(10),
+            max_cycle_depth: None,
             body: NeuronBody::Graph {
                 let_bindings: vec![],
                 set_bindings: vec![],

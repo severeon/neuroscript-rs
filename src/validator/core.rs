@@ -498,10 +498,13 @@ impl Validator {
             // Check shapes (exact match for now - wildcards/exprs need inference)
             if !Self::shapes_compatible(&src_port.shape, &dst_port.shape) {
                 errors.push(ValidationError::PortMismatch {
-                    source_ports: Self::port_desc(src_port),
-                    dest_ports: Self::port_desc(dst_port),
+                    source_node: Self::extract_node_name(source_endpoint),
+                    source_port: src_port.name.clone(),
+                    source_shape: src_port.shape.clone(),
+                    dest_node: Self::extract_node_name(dest_endpoint),
+                    dest_port: dst_port.name.clone(),
+                    dest_shape: dst_port.shape.clone(),
                     context: context_neuron.to_string(),
-                    details: format!("shape mismatch: {} vs {}", src_port.shape, dst_port.shape),
                 });
             }
         }
@@ -684,12 +687,13 @@ impl Validator {
         }
     }
 
-    /// Get a description of a port for error messages
-    fn port_desc(port: &Port) -> String {
-        if port.name == "default" {
-            format!("{}", port.shape)
-        } else {
-            format!("{}: {}", port.name, port.shape)
+    /// Get the node name from an endpoint for error messages
+    fn extract_node_name(endpoint: &Endpoint) -> String {
+        match endpoint {
+            Endpoint::Call { name, .. } => name.clone(),
+            Endpoint::Ref(port_ref) => port_ref.node.clone(),
+            Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
+            Endpoint::Match(_) => "Match".to_string(),
         }
     }
 

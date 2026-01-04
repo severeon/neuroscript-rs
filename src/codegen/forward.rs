@@ -154,7 +154,7 @@ fn process_destination(
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
-            // Check if this is a reference to a bound module (from let: or set:)
+            // Check if this is a reference to a bound module (from context:)
             // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
             if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
                 if module_ref.starts_with("self.") {

@@ -7,8 +7,8 @@
 # Typical expansion factor: 4x (e.g., 512 → 2048 → 512)
 
 neuron FFN(dim, expansion):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in ->
             Linear(dim, expansion)
@@ -19,8 +19,8 @@ neuron FFN(dim, expansion):
 
 # Variant with explicit hidden dimension
 neuron FFNWithHidden(in_dim, hidden_dim, out_dim):
-    in: [*, in_dim]
-    out: [*, out_dim]
+    in: [*shape, in_dim]
+    out: [*shape, out_dim]
     graph:
         in ->
             Linear(in_dim, hidden_dim)

@@ -1,5 +1,6 @@
 ---
 source: tests/integration_tests.rs
+assertion_line: 542
 expression: code
 ---
 import torch

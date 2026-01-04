@@ -52,8 +52,8 @@ neuron RecursionCycle(d_model):
   outputs:
     y_out: [*batch, seq, d_model]
     z_out: [*batch, seq, d_model]
-  let:
-    step = sequential(...)
+  context:
+    @lazy step = sequential(...)
   graph:
     (x, y, z) -> step#23(d_model)
     step#23(d_model) -> z_out
@@ -86,8 +86,8 @@ neuron TRM(d_model, vocab_size, max_seq):
     default: [batch, seq]
   outputs:
     default: [batch, seq, vocab_size]
-  let:
-    cycle = RecursionCycle(...)
+  context:
+    @lazy cycle = RecursionCycle(...)
   graph:
     in -> Embedding#25(vocab_size, d_model)
     Embedding#25(vocab_size, d_model) -> PositionalEncoding#26(d_model, max_len=max_seq)

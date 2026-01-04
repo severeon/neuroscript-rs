@@ -92,8 +92,8 @@ neuron RecursionCycle(d_model):
   in z: [*batch, seq, d_model]
   out y_out: [*batch, seq, d_model]
   out z_out: [*batch, seq, d_model]
-  let:
-    step = sequential(6, ReasoningStep)
+  context:
+    @lazy step = sequential(6, ReasoningStep)
   graph:
     (x, y, z) -> step(d_model) -> z_out
     (y, z_out) -> AnswerStep(d_model) -> y_out
@@ -103,8 +103,8 @@ neuron RecursionCycle(d_model):
 neuron TRM(d_model, vocab_size, max_seq):
   in: [batch, seq]
   out: [batch, seq, vocab_size]
-  let:
-    cycle = RecursionCycle(d_model)
+  context:
+    @lazy cycle = RecursionCycle(d_model)
   graph:
     # Embed input question
     in ->

@@ -9,7 +9,7 @@ neuron DuplicateBinding(dim):
     default: [*, dim]
   outputs:
     default: [*, dim]
-  set:
+  context:
     layer = Linear(...)
     layer = Linear(...)
   graph:
@@ -21,8 +21,8 @@ neuron MissingInLet(dim):
     default: [*, dim]
   outputs:
     default: [*, dim]
-  let:
-    missing = NonExistentNeuron(...)
+  context:
+    @lazy missing = NonExistentNeuron(...)
   graph:
     in -> missing
     missing -> out
@@ -32,7 +32,7 @@ neuron MissingInSet(dim):
     default: [*, dim]
   outputs:
     default: [*, dim]
-  set:
+  context:
     missing = AnotherNonExistent(...)
   graph:
     in -> missing
@@ -43,7 +43,7 @@ neuron RecursiveSet(dim):
     default: [*, dim]
   outputs:
     default: [*, dim]
-  set:
+  context:
     recurse = RecursiveSet(...)
   graph:
     in -> recurse

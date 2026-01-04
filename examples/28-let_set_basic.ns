@@ -3,7 +3,7 @@
 neuron SimpleNetwork(dim):
   in: [*, dim]
   out: [*, dim]
-  set:
+  context:
     norm = LayerNorm(dim)
     ffn = FFN(dim, dim * 4)
   graph:
@@ -12,9 +12,8 @@ neuron SimpleNetwork(dim):
 neuron ConditionalNetwork(dim, use_extra):
   in: [*, dim]
   out: [*, dim]
-  let:
-    extra = Linear(dim, dim)
-  set:
+  context:
+    @lazy extra = Linear(dim, dim)
     main = Linear(dim, dim)
   graph:
     in -> match:

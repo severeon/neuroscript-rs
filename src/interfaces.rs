@@ -472,6 +472,10 @@ pub struct InferenceContext {
     /// e.g. Linear(512, 256) (id=1) -> [[*, 256]]
     pub call_outputs: HashMap<usize, Vec<Shape>>,
 
+    /// Map from variadic name to the sequence of dimensions it captured
+    /// e.g. "shape" -> [batch, seq]
+    pub resolved_variadics: HashMap<String, Vec<Dim>>,
+
     /// Pending expression constraints to be solved
     /// Format: (result_dim, expression, context)
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
@@ -539,10 +543,13 @@ pub enum ValidationError {
         context: String,
     },
     PortMismatch {
-        source_ports: String,
-        dest_ports: String,
+        source_node: String,
+        source_port: String,
+        source_shape: Shape,
+        dest_node: String,
+        dest_port: String,
+        dest_shape: Shape,
         context: String,
-        details: String,
     },
     CycleDetected {
         cycle: Vec<String>,
@@ -585,15 +592,29 @@ impl std::fmt::Display for ValidationError {
                 write!(f, "Neuron '{}' not found (in {})", name, context)
             }
             ValidationError::PortMismatch {
-                source_ports,
-                dest_ports,
+                source_node,
+                source_port,
+                source_shape,
+                dest_node,
+                dest_port,
+                dest_shape,
                 context,
-                details,
             } => {
+                let source = if source_port == "default" {
+                    source_node.clone()
+                } else {
+                    format!("{}.{}", source_node, source_port)
+                };
+                let dest = if dest_port == "default" {
+                    dest_node.clone()
+                } else {
+                    format!("{}.{}", dest_node, dest_port)
+                };
+
                 write!(
                     f,
-                    "Port mismatch: {} -> {} (in {}: {})",
-                    source_ports, dest_ports, context, details
+                    "Port mismatch: {} {} -> {} {} (in {})\n  Suggestion: check if dimensions match or if a transpose/reshape is needed.",
+                    source, source_shape, dest, dest_shape, context
                 )
             }
             ValidationError::CycleDetected { cycle, context } => {

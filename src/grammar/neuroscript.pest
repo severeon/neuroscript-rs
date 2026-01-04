@@ -29,6 +29,10 @@ keyword_let = @{ "let" ~ !ident_cont }
 keyword_set = @{ "set" ~ !ident_cont }
 keyword_true = @{ "true" ~ !ident_cont }
 keyword_false = @{ "false" ~ !ident_cont }
+keyword_context = @{ "context" ~ !ident_cont }
+keyword_static = @{ "static" ~ !ident_cont }
+keyword_global = @{ "global" ~ !ident_cont }
+keyword_lazy = @{ "lazy" ~ !ident_cont }
 
 // ============================================================================
 // Operators
@@ -49,6 +53,7 @@ le_op = { "<=" }
 ge_op = { ">=" }
 lt_op = { "<" }
 gt_op = { ">" }
+at = { "@" }
 
 lparen = { "(" }
 rparen = { ")" }
@@ -86,6 +91,7 @@ keyword = _{
   | keyword_impl | keyword_graph | keyword_match | keyword_where
   | keyword_external | keyword_and | keyword_or | keyword_let
   | keyword_set | keyword_true | keyword_false
+  | keyword_context | keyword_static | keyword_global | keyword_lazy
 }
 
 // Identifiers: foo, _bar, baz123
@@ -250,8 +256,26 @@ set_section = {
 }
 
 // Binding: name = NeuronCall(args)
+// Binding: name = NeuronCall(args)
 binding = {
     ident ~ assign ~ call_expr
+}
+
+// ============================================================================
+// Context Bindings
+// ============================================================================
+
+// context: always indented
+context_section = {
+    keyword_context ~ colon ~ NEWLINE ~ (NEWLINE* ~ context_binding)+
+}
+
+context_binding = {
+    binding_annotation? ~ binding
+}
+
+binding_annotation = {
+    at ~ (keyword_static | keyword_global | keyword_lazy)
 }
 
 // ============================================================================
@@ -341,6 +365,7 @@ match_pipeline = {
 neuron_section = {
     in_section
   | out_section
+  | context_section
   | impl_section
   | let_section
   | set_section

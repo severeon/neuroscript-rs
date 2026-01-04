@@ -123,7 +123,9 @@ impl AstBuilder {
         let mut inputs = vec![];
         let mut outputs = vec![];
         let mut let_bindings = vec![];
+
         let mut set_bindings = vec![];
+        let mut context_bindings = vec![];
         let mut connections = vec![];
         let mut impl_ref = None;
 
@@ -136,6 +138,7 @@ impl AstBuilder {
                     &mut outputs,
                     &mut let_bindings,
                     &mut set_bindings,
+                    &mut context_bindings,
                     &mut connections,
                     &mut impl_ref,
                 )?;
@@ -150,7 +153,7 @@ impl AstBuilder {
             NeuronBody::Graph {
                 let_bindings,
                 set_bindings,
-                context_bindings: vec![],
+                context_bindings,
                 connections,
             }
         };
@@ -179,6 +182,7 @@ impl AstBuilder {
         outputs: &mut Vec<Port>,
         let_bindings: &mut Vec<Binding>,
         set_bindings: &mut Vec<Binding>,
+        context_bindings: &mut Vec<Binding>,
         connections: &mut Vec<Connection>,
         impl_ref: &mut Option<ImplRef>,
     ) -> Result<(), ParseError> {
@@ -202,6 +206,10 @@ impl AstBuilder {
             Rule::set_section => {
                 let bindings = self.build_set_section(section)?;
                 set_bindings.extend(bindings);
+            }
+            Rule::context_section => {
+                let bindings = self.build_context_section(section)?;
+                context_bindings.extend(bindings);
             }
             Rule::graph_section => {
                 let conns = self.build_graph_section(section)?;
@@ -428,6 +436,61 @@ impl AstBuilder {
         }
 
         Ok(bindings)
+    }
+
+    /// Build bindings from context_section
+    fn build_context_section(&mut self, pair: Pair<Rule>) -> Result<Vec<Binding>, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::context_section);
+
+        let mut bindings = vec![];
+
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::context_binding {
+                bindings.push(self.build_context_binding(inner)?);
+            }
+        }
+
+        Ok(bindings)
+    }
+
+    /// Build a context binding with optional annotation
+    fn build_context_binding(&mut self, pair: Pair<Rule>) -> Result<Binding, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::context_binding);
+
+        let mut inner = pair.into_inner();
+        let mut first = inner.next().unwrap();
+        let mut scope = crate::interfaces::Scope::Instance { lazy: false };
+
+        // Check for annotation
+        if first.as_rule() == Rule::binding_annotation {
+            scope = self.build_binding_annotation(first)?;
+            first = inner.next().unwrap(); // Move to binding
+        }
+
+        // Build the binding
+        let mut binding = self.build_binding(first)?;
+        binding.scope = scope;
+
+        Ok(binding)
+    }
+
+    /// Build a binding annotation
+    fn build_binding_annotation(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<crate::interfaces::Scope, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::binding_annotation);
+
+        let mut inner = pair.into_inner();
+        inner.next(); // Skip 'at'
+
+        let keyword = inner.next().unwrap();
+        match keyword.as_rule() {
+            Rule::keyword_static => Ok(crate::interfaces::Scope::Static),
+            Rule::keyword_global => Ok(crate::interfaces::Scope::Global),
+            Rule::keyword_lazy => Ok(crate::interfaces::Scope::Instance { lazy: true }),
+            _ => Ok(crate::interfaces::Scope::Instance { lazy: false }),
+        }
     }
 
     /// Build a binding (name = Call(args))
