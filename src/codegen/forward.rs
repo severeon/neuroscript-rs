@@ -20,7 +20,7 @@ fn emit_shape_comment_and_assertion(
     // Try to get the inferred shape for this node
     if let Some(shapes) = gen.inference_ctx.node_outputs.get(node_name) {
         if !shapes.is_empty() {
-            let shape = &shapes[0];  // Use first shape for now
+            let shape = &shapes[0]; // Use first shape for now
 
             // Emit comment showing expected shape
             let shape_comment = gen.format_shape_for_comment(shape);
@@ -159,11 +159,15 @@ fn process_destination(
             if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
                 if module_ref.starts_with("self.") {
                     // Check if this is a lazy binding (starts with "self._")
-                    if module_ref.starts_with("self._") && gen.lazy_bindings.contains_key(&port_ref.node) {
+                    if module_ref.starts_with("self._")
+                        && gen.lazy_bindings.contains_key(&port_ref.node)
+                    {
                         // Generate lazy instantiation code
-                        let (call_name, args, kwargs) = gen.lazy_bindings.get(&port_ref.node).unwrap();
+                        let (call_name, args, kwargs) =
+                            gen.lazy_bindings.get(&port_ref.node).unwrap();
 
-                        let args_str = args.iter()
+                        let args_str = args
+                            .iter()
                             .map(|v| gen.value_to_python_with_self(v))
                             .collect::<Vec<_>>()
                             .join(", ");
@@ -171,7 +175,8 @@ fn process_destination(
                         let kwargs_str = if kwargs.is_empty() {
                             String::new()
                         } else {
-                            let kw: Vec<String> = kwargs.iter()
+                            let kw: Vec<String> = kwargs
+                                .iter()
                                 .map(|(k, v)| format!("{}={}", k, gen.value_to_python_with_self(v)))
                                 .collect();
                             if args.is_empty() {
@@ -183,8 +188,12 @@ fn process_destination(
 
                         // Generate lazy instantiation check
                         writeln!(output, "{}if {} is None:", indent, module_ref).unwrap();
-                        writeln!(output, "{}    {} = {}({}{})",
-                                indent, module_ref, call_name, args_str, kwargs_str).unwrap();
+                        writeln!(
+                            output,
+                            "{}    {} = {}({}{})",
+                            indent, module_ref, call_name, args_str, kwargs_str
+                        )
+                        .unwrap();
                     }
 
                     // This is a bound module - generate a call
@@ -198,7 +207,8 @@ fn process_destination(
                     .unwrap();
 
                     // Also update the port_ref.node to map to result_var for future connections
-                    gen.var_names.insert(port_ref.node.clone(), result_var.clone());
+                    gen.var_names
+                        .insert(port_ref.node.clone(), result_var.clone());
                     return Ok(result_var);
                 }
             }
@@ -237,7 +247,10 @@ fn process_destination(
             Ok(source_var) // Return tuple as result
         }
         Endpoint::Call {
-            name, args, kwargs, id
+            name,
+            args,
+            kwargs,
+            id,
         } => {
             // Generate a call to the module
             let key = endpoint_key_impl(endpoint);
@@ -320,7 +333,12 @@ fn process_destination(
                 if !shapes.is_empty() {
                     let shape = &shapes[0];
                     let shape_comment = gen.format_shape_for_comment(shape);
-                    writeln!(output, "{}# {}() output shape: {}", indent, name, shape_comment).unwrap();
+                    writeln!(
+                        output,
+                        "{}# {}() output shape: {}",
+                        indent, name, shape_comment
+                    )
+                    .unwrap();
 
                     if gen.should_assert_shape(shape) {
                         if let Some(expected_shape) = gen.format_shape_for_assertion(shape) {
@@ -524,54 +542,4 @@ pub(super) fn generate_shape_check(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_shape_check_literals() {
-        let program = Program::new();
-        let ctx = InferenceContext::new();
-        let gen = CodeGenerator::new(&program, ctx);
-
-        let shape = Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]);
-
-        let result = generate_shape_check(&gen, &shape, None, "x");
-        assert_eq!(result.condition, "x.ndim == 2 and x.shape[1] == 512");
-        assert!(result.bindings.is_empty());
-        assert!(result.guard_condition.is_none());
-    }
-
-    #[test]
-    fn test_shape_check_with_capture() {
-        let program = Program::new();
-        let ctx = InferenceContext::new();
-        let gen = CodeGenerator::new(&program, ctx);
-
-        let shape = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
-
-        let result = generate_shape_check(&gen, &shape, None, "x");
-        assert_eq!(result.condition, "x.ndim == 2");
-        assert_eq!(result.bindings, vec!["d = x.shape[1]"]);
-        assert!(result.guard_condition.is_none());
-    }
-
-    #[test]
-    fn test_shape_check_with_guard() {
-        let program = Program::new();
-        let ctx = InferenceContext::new();
-        let gen = CodeGenerator::new(&program, ctx);
-
-        let shape = Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]);
-
-        let guard = Value::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(Value::Name("d".to_string())),
-            right: Box::new(Value::Int(512)),
-        };
-
-        let result = generate_shape_check(&gen, &shape, Some(&guard), "x");
-        assert_eq!(result.condition, "x.ndim == 2");
-        assert_eq!(result.bindings, vec!["d = x.shape[1]"]);
-        assert_eq!(result.guard_condition, Some("d > 512".to_string()));
-    }
-}
+mod tests;

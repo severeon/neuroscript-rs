@@ -3,8 +3,8 @@
 //! This module provides pure utility functions for value conversion,
 //! naming transformations, call analysis, and dimension checking.
 
-use std::collections::HashSet;
 use crate::interfaces::*;
+use std::collections::HashSet;
 
 /// Convert a Value to Python code
 pub(super) fn value_to_python_impl(value: &Value) -> String {
@@ -27,10 +27,16 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
                 BinOp::Eq => "==",
                 BinOp::Ne => "!=",
             };
-            format!("{} {} {}", value_to_python_impl(left), op_str, value_to_python_impl(right))
+            format!(
+                "{} {} {}",
+                value_to_python_impl(left),
+                op_str,
+                value_to_python_impl(right)
+            )
         }
         Value::Call { name, args, kwargs } => {
-            let args_str = args.iter()
+            let args_str = args
+                .iter()
                 .map(|v| value_to_python_impl(v))
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -38,7 +44,8 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
             let kwargs_str = if kwargs.is_empty() {
                 String::new()
             } else {
-                let kw: Vec<String> = kwargs.iter()
+                let kw: Vec<String> = kwargs
+                    .iter()
                     .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
                     .collect();
                 if args.is_empty() {
@@ -79,12 +86,19 @@ pub(super) fn snake_case_impl(name: &str) -> String {
 /// each have their own weights).
 pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
     match endpoint {
-        Endpoint::Call { name, args, kwargs, id } => {
-            let args_str = args.iter()
+        Endpoint::Call {
+            name,
+            args,
+            kwargs,
+            id,
+        } => {
+            let args_str = args
+                .iter()
                 .map(|v| format!("{:?}", v))
                 .collect::<Vec<_>>()
                 .join(",");
-            let kwargs_str = kwargs.iter()
+            let kwargs_str = kwargs
+                .iter()
                 .map(|(k, v)| format!("{}={:?}", k, v))
                 .collect::<Vec<_>>()
                 .join(",");
@@ -100,11 +114,14 @@ pub(super) fn has_captured_dimensions_impl(value: &Value, params: &HashSet<Strin
     match value {
         Value::Name(n) => !params.contains(n),
         Value::BinOp { left, right, .. } => {
-            has_captured_dimensions_impl(left, params) || has_captured_dimensions_impl(right, params)
+            has_captured_dimensions_impl(left, params)
+                || has_captured_dimensions_impl(right, params)
         }
         Value::Call { args, kwargs, .. } => {
-            args.iter().any(|v| has_captured_dimensions_impl(v, params)) ||
-            kwargs.iter().any(|(_, v)| has_captured_dimensions_impl(v, params))
+            args.iter().any(|v| has_captured_dimensions_impl(v, params))
+                || kwargs
+                    .iter()
+                    .any(|(_, v)| has_captured_dimensions_impl(v, params))
         }
         _ => false,
     }
@@ -166,9 +183,14 @@ impl<'a> CodeGenerator<'a> {
                     BinOp::Eq => "==",
                     BinOp::Ne => "!=",
                 };
-                format!("{} {} {}", self.value_to_python_with_self(left), op_str, self.value_to_python_with_self(right))
+                format!(
+                    "{} {} {}",
+                    self.value_to_python_with_self(left),
+                    op_str,
+                    self.value_to_python_with_self(right)
+                )
             }
-            _ => self.value_to_python(value)
+            _ => self.value_to_python(value),
         }
     }
 
@@ -220,19 +242,22 @@ impl<'a> CodeGenerator<'a> {
                         return None;
                     }
                 }
-                Dim::Wildcard => return None,  // Can't assert on wildcard
-                Dim::Variadic(_) => return None,  // Can't assert on variadic
+                Dim::Wildcard => return None, // Can't assert on wildcard
+                Dim::Variadic(_) => return None, // Can't assert on variadic
                 Dim::Expr(expr) => {
                     // Try to evaluate the expression
                     if let Some(value) = self.inference_ctx.evaluate_expr(expr) {
                         value.to_string()
                     } else {
                         // Build expression with parameters
-                        format!("({})", self.value_to_python_with_self(&Value::BinOp {
-                            op: expr.op,
-                            left: Box::new(dim_to_value(&expr.left)),
-                            right: Box::new(dim_to_value(&expr.right)),
-                        }))
+                        format!(
+                            "({})",
+                            self.value_to_python_with_self(&Value::BinOp {
+                                op: expr.op,
+                                left: Box::new(dim_to_value(&expr.left)),
+                                right: Box::new(dim_to_value(&expr.right)),
+                            })
+                        )
                     }
                 }
             };
@@ -245,8 +270,10 @@ impl<'a> CodeGenerator<'a> {
     /// Format a shape for use in a comment
     /// Converts [batch, seq, dim] to a readable string like [batch, seq, dim]
     pub(super) fn format_shape_for_comment(&self, shape: &Shape) -> String {
-        let dims: Vec<String> = shape.dims.iter().map(|dim| {
-            match dim {
+        let dims: Vec<String> = shape
+            .dims
+            .iter()
+            .map(|dim| match dim {
                 Dim::Literal(n) => n.to_string(),
                 Dim::Named(name) => {
                     if let Some(value) = self.inference_ctx.resolved_dims.get(name) {
@@ -258,16 +285,18 @@ impl<'a> CodeGenerator<'a> {
                 Dim::Wildcard => "*".to_string(),
                 Dim::Variadic(name) => format!("*{}", name),
                 Dim::Expr(expr) => {
-                    format!("{}", expr.left) + match expr.op {
-                        BinOp::Add => " + ",
-                        BinOp::Sub => " - ",
-                        BinOp::Mul => " * ",
-                        BinOp::Div => " / ",
-                        _ => " ? ",
-                    } + &format!("{}", expr.right)
+                    format!("{}", expr.left)
+                        + match expr.op {
+                            BinOp::Add => " + ",
+                            BinOp::Sub => " - ",
+                            BinOp::Mul => " * ",
+                            BinOp::Div => " / ",
+                            _ => " ? ",
+                        }
+                        + &format!("{}", expr.right)
                 }
-            }
-        }).collect();
+            })
+            .collect();
 
         format!("[{}]", dims.join(", "))
     }
@@ -276,7 +305,11 @@ impl<'a> CodeGenerator<'a> {
     /// Returns true if the shape is concrete enough to assert on
     pub(super) fn should_assert_shape(&self, shape: &Shape) -> bool {
         // Don't assert if shape has wildcards or variadics
-        if shape.dims.iter().any(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_))) {
+        if shape
+            .dims
+            .iter()
+            .any(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_)))
+        {
             return false;
         }
 
@@ -294,8 +327,9 @@ impl<'a> CodeGenerator<'a> {
                 Dim::Literal(_) => continue,
                 Dim::Named(name) => {
                     if !self.inference_ctx.resolved_dims.contains_key(name)
-                       && !self.current_neuron_params.contains(name) {
-                        return false;  // Unresolved dimension
+                        && !self.current_neuron_params.contains(name)
+                    {
+                        return false; // Unresolved dimension
                     }
                 }
                 Dim::Expr(_) => {
@@ -320,88 +354,9 @@ fn dim_to_value(dim: &Dim) -> Value {
             left: Box::new(dim_to_value(&expr.left)),
             right: Box::new(dim_to_value(&expr.right)),
         },
-        _ => Value::Name("None".to_string()),  // Shouldn't happen
+        _ => Value::Name("None".to_string()), // Shouldn't happen
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_value_to_python_primitives() {
-        assert_eq!(value_to_python_impl(&Value::Int(42)), "42");
-        assert_eq!(value_to_python_impl(&Value::Float(3.14)), "3.14");
-        assert_eq!(value_to_python_impl(&Value::String("hello".to_string())), "\"hello\"");
-        assert_eq!(value_to_python_impl(&Value::Bool(true)), "True");
-        assert_eq!(value_to_python_impl(&Value::Bool(false)), "False");
-        assert_eq!(value_to_python_impl(&Value::Name("dim".to_string())), "dim");
-    }
-
-    #[test]
-    fn test_value_to_python_binop() {
-        let binop = Value::BinOp {
-            op: BinOp::Mul,
-            left: Box::new(Value::Name("dim".to_string())),
-            right: Box::new(Value::Int(4)),
-        };
-        assert_eq!(value_to_python_impl(&binop), "dim * 4");
-    }
-
-    #[test]
-    fn test_snake_case() {
-        assert_eq!(snake_case_impl("Linear"), "linear");
-        assert_eq!(snake_case_impl("GELU"), "g_e_l_u");
-        assert_eq!(snake_case_impl("LayerNorm"), "layer_norm");
-        assert_eq!(snake_case_impl("MultiHeadAttention"), "multi_head_attention");
-    }
-
-    #[test]
-    fn test_has_captured_dimensions() {
-        let mut params = HashSet::new();
-        params.insert("dim".to_string());
-
-        // Parameter reference - not captured
-        assert!(!has_captured_dimensions_impl(&Value::Name("dim".to_string()), &params));
-
-        // Non-parameter reference - captured
-        assert!(has_captured_dimensions_impl(&Value::Name("d".to_string()), &params));
-
-        // BinOp with captured
-        let binop = Value::BinOp {
-            op: BinOp::Mul,
-            left: Box::new(Value::Name("d".to_string())),
-            right: Box::new(Value::Int(4)),
-        };
-        assert!(has_captured_dimensions_impl(&binop, &params));
-    }
-
-    #[test]
-    fn test_endpoint_key_unique_per_call() {
-        let call1 = Endpoint::Call {
-            name: "Linear".to_string(),
-            args: vec![Value::Int(512), Value::Int(256)],
-            kwargs: vec![],
-            id: 0,
-        };
-
-        let call2 = Endpoint::Call {
-            name: "Linear".to_string(),
-            args: vec![Value::Int(512), Value::Int(256)],
-            kwargs: vec![],
-            id: 1,
-        };
-
-        // Different ids should produce different keys (each call gets its own module)
-        assert_ne!(endpoint_key_impl(&call1), endpoint_key_impl(&call2));
-
-        // Same id should produce same key
-        let call3 = Endpoint::Call {
-            name: "Linear".to_string(),
-            args: vec![Value::Int(512), Value::Int(256)],
-            kwargs: vec![],
-            id: 0,
-        };
-        assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call3));
-    }
-}
+mod tests;

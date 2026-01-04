@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use miette::{IntoDiagnostic, NamedSource, WrapErr};
-use neuroscript::{parse, validate, generate_pytorch, stdlib, NeuronBody};
+use neuroscript::{generate_pytorch, parse, stdlib, validate, NeuronBody};
 use std::fs;
 use std::path::PathBuf;
 
@@ -91,7 +91,11 @@ fn main() -> miette::Result<()> {
 
     match cli.command {
         Commands::Parse { file, verbose } => cmd_parse(file, verbose),
-        Commands::Validate { file, verbose, no_stdlib } => cmd_validate(file, verbose, no_stdlib),
+        Commands::Validate {
+            file,
+            verbose,
+            no_stdlib,
+        } => cmd_validate(file, verbose, no_stdlib),
         Commands::Compile {
             file,
             neuron,
@@ -100,7 +104,15 @@ fn main() -> miette::Result<()> {
             no_dead_elim,
             verbose,
             no_stdlib,
-        } => cmd_compile(file, neuron, output, no_optimize, no_dead_elim, verbose, no_stdlib),
+        } => cmd_compile(
+            file,
+            neuron,
+            output,
+            no_optimize,
+            no_dead_elim,
+            verbose,
+            no_stdlib,
+        ),
         Commands::List { file, verbose } => cmd_list(file, verbose),
     }
 }
@@ -282,7 +294,10 @@ fn cmd_compile(
         let pruned = neuroscript::optimizer::optimize_matches(&mut program, !no_dead_elim);
         if verbose {
             if reordered > 0 {
-                println!("  Pattern reordering: optimized {} match expressions", reordered);
+                println!(
+                    "  Pattern reordering: optimized {} match expressions",
+                    reordered
+                );
             }
             if pruned > 0 {
                 println!("  Dead branch elimination: pruned {} arms", pruned);
@@ -300,7 +315,11 @@ fn cmd_compile(
                     .into_diagnostic()
                     .wrap_err_with(|| format!("Failed to write to {}", output_path.display()))?;
                 if verbose {
-                    println!("✓ Generated PyTorch code for '{}' → {}", neuron_name, output_path.display());
+                    println!(
+                        "✓ Generated PyTorch code for '{}' → {}",
+                        neuron_name,
+                        output_path.display()
+                    );
                 } else {
                     println!("✓ Compiled to {}", output_path.display());
                 }
@@ -412,7 +431,10 @@ fn print_neuron_summary(program: &neuroscript::Program, verbose: bool) {
         println!("    out: {}", outputs.join(", "));
 
         if verbose {
-            if let NeuronBody::Graph { connections: conns, .. } = &neuron.body {
+            if let NeuronBody::Graph {
+                connections: conns, ..
+            } = &neuron.body
+            {
                 println!("    connections: {:?}", conns);
             }
         }
@@ -427,9 +449,7 @@ fn infer_neuron_name(file: &PathBuf, program: &neuroscript::Program) -> miette::
     let filename = file
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| {
-            miette::miette!("Invalid file path: {}", file.display())
-        })?;
+        .ok_or_else(|| miette::miette!("Invalid file path: {}", file.display()))?;
 
     // Convert snake_case or kebab-case to PascalCase
     let neuron_name = filename
