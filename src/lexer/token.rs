@@ -1,11 +1,11 @@
 //! Token-related implementations for the lexer
 
-use miette::SourceSpan;
 use crate::interfaces::*;
+use miette::SourceSpan;
 
 impl From<Span> for SourceSpan {
     fn from(s: Span) -> Self {
-        SourceSpan::new(s.start.into(), (s.end - s.start).into())
+        SourceSpan::new(s.start.into(), s.end - s.start)
     }
 }
 

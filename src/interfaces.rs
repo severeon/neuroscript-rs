@@ -115,7 +115,7 @@ pub struct CodeGenerator<'a> {
     pub binding_context: HashMap<String, String>,
 
     /// Lazy bindings from let: blocks (name -> (call_name, args, kwargs))
-    pub lazy_bindings: HashMap<String, (String, Vec<Value>, Vec<(String, Value)>)>,
+    pub lazy_bindings: HashMap<String, LazyBinding>,
 
     /// Shape inference context (resolved dimensions and node output shapes)
     /// Used for emitting shape assertions and documentation
@@ -145,7 +145,7 @@ pub enum Value {
     Call {
         name: String,
         args: Vec<Value>,
-        kwargs: Vec<(String, Value)>,
+        kwargs: Vec<Kwarg>,
     },
 }
 
@@ -167,7 +167,7 @@ pub enum Endpoint {
     Call {
         name: String,
         args: Vec<Value>,
-        kwargs: Vec<(String, Value)>,
+        kwargs: Vec<Kwarg>,
         id: usize,
     },
     /// Pattern match expression
@@ -211,13 +211,18 @@ pub enum Scope {
     Global,
 }
 
+pub(crate) type Kwarg = (String, Value);
+pub(crate) type CallArgs = (Vec<Value>, Vec<Kwarg>);
+pub(crate) type CallExpr = (String, Vec<Value>, Vec<Kwarg>);
+type LazyBinding = (String, Vec<Value>, Vec<Kwarg>);
+
 /// A binding in a let: or set: block, or context: block
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
     pub name: String,
     pub call_name: String,
     pub args: Vec<Value>,
-    pub kwargs: Vec<(String, Value)>,
+    pub kwargs: Vec<Kwarg>,
     pub scope: Scope, // Added scope
 }
 
@@ -498,7 +503,7 @@ pub enum ImplRef {
     /// External implementation with keyword arguments
     External {
         /// Keyword arguments for external implementation
-        kwargs: Vec<(String, Value)>,
+        kwargs: Vec<Kwarg>,
     },
     /// Source-based implementation
     Source {

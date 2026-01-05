@@ -276,7 +276,7 @@ fn process_destination(
                 // Generate instantiation with current dimension values
                 let args_str = args
                     .iter()
-                    .map(|v| value_to_python_impl(v))
+                    .map(value_to_python_impl)
                     .collect::<Vec<_>>()
                     .join(", ");
 

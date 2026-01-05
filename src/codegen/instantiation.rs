@@ -5,8 +5,9 @@
 //! captured dimensions.
 
 use super::utils::*;
+use crate::interfaces::Kwarg;
 use crate::interfaces::*;
-use std::collections::HashMap;
+use std::collections::{hash_map, HashMap};
 use std::fmt::Write;
 
 /// Generate module instantiations in __init__
@@ -38,7 +39,7 @@ pub(super) fn generate_module_instantiations(
         // Generate instantiation for set binding
         let args_str = args
             .iter()
-            .map(|v| value_to_python_impl(v))
+            .map(value_to_python_impl)
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -103,8 +104,7 @@ pub(super) fn generate_module_instantiations(
     }
 
     // Collect all unique Call endpoints and assign them IDs
-    let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<(String, Value)>)> =
-        HashMap::new();
+    let mut seen_calls: HashMap<String, (String, String, Vec<Value>, Vec<Kwarg>)> = HashMap::new();
     let mut all_endpoints = Vec::new();
     collect_calls_impl(connections, &mut all_endpoints);
 
@@ -113,16 +113,13 @@ pub(super) fn generate_module_instantiations(
             name, args, kwargs, ..
         } = endpoint
         {
-            let key = endpoint_key_impl(&endpoint);
-            if !seen_calls.contains_key(&key) {
+            let key = endpoint_key_impl(endpoint);
+            if let hash_map::Entry::Vacant(e) = seen_calls.entry(key.clone()) {
                 let id = gen.next_node_id();
-                let module_name = format!("{}_{}", snake_case_impl(&name), id);
+                let module_name = format!("{}_{}", snake_case_impl(name), id);
                 // Store the mapping for use in forward generation
                 gen.call_to_module.insert(key.clone(), module_name.clone());
-                seen_calls.insert(
-                    key,
-                    (name.clone(), module_name, args.clone(), kwargs.clone()),
-                );
+                e.insert((name.clone(), module_name, args.clone(), kwargs.clone()));
             }
         }
     }
@@ -170,7 +167,7 @@ pub(super) fn generate_module_instantiations(
         // Generate instantiation
         let args_str = args
             .iter()
-            .map(|v| value_to_python_impl(v))
+            .map(value_to_python_impl)
             .collect::<Vec<_>>()
             .join(", ");
 

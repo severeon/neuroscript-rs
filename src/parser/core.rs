@@ -1,8 +1,6 @@
 use crate::interfaces::*;
 use miette::SourceSpan;
 
-type CallArgs = (Vec<Value>, Vec<(String, Value)>);
-
 impl ParseError {
     pub fn span(&self) -> SourceSpan {
         match self {

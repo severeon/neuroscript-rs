@@ -194,20 +194,6 @@ fn test_variadic_matching() {
 }
 
 #[test]
-fn test_has_wildcard() {
-    let engine = ShapeInferenceEngine::new();
-
-    let s1 = wildcard();
-    assert!(engine.has_wildcard(&s1));
-
-    let s2 = literal_shape(vec![512]);
-    assert!(!engine.has_wildcard(&s2));
-
-    let s3 = Shape::new(vec![Dim::Literal(512), Dim::Wildcard]);
-    assert!(engine.has_wildcard(&s3));
-}
-
-#[test]
 fn test_has_variadic() {
     let engine = ShapeInferenceEngine::new();
 

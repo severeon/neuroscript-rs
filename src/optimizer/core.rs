@@ -24,21 +24,18 @@ pub fn optimize_matches(program: &mut Program, enable_dead_elim: bool) -> usize 
 
 fn optimize_endpoint(endpoint: &mut Endpoint) -> usize {
     let mut count = 0;
-    match endpoint {
-        Endpoint::Match(match_expr) => {
-            // Prune arms
-            let initial_len = match_expr.arms.len();
-            match_expr.arms.retain(|arm| arm.is_reachable);
-            count += initial_len - match_expr.arms.len();
+    if let Endpoint::Match(match_expr) = endpoint {
+        // Prune arms
+        let initial_len = match_expr.arms.len();
+        match_expr.arms.retain(|arm| arm.is_reachable);
+        count += initial_len - match_expr.arms.len();
 
-            // Recurse into remaining arms
-            for arm in &mut match_expr.arms {
-                for pipe_endpoint in &mut arm.pipeline {
-                    count += optimize_endpoint(pipe_endpoint);
-                }
+        // Recurse into remaining arms
+        for arm in &mut match_expr.arms {
+            for pipe_endpoint in &mut arm.pipeline {
+                count += optimize_endpoint(pipe_endpoint);
             }
         }
-        _ => {}
     }
     count
 }
@@ -60,17 +57,14 @@ pub fn count_matches(program: &Program) -> usize {
 
 fn count_matches_in_endpoint(endpoint: &Endpoint) -> usize {
     let mut count = 0;
-    match endpoint {
-        Endpoint::Match(match_expr) => {
-            count += 1;
-            // Recurse into arms
-            for arm in &match_expr.arms {
-                for pipe_endpoint in &arm.pipeline {
-                    count += count_matches_in_endpoint(pipe_endpoint);
-                }
+    if let Endpoint::Match(match_expr) = endpoint {
+        count += 1;
+        // Recurse into arms
+        for arm in &match_expr.arms {
+            for pipe_endpoint in &arm.pipeline {
+                count += count_matches_in_endpoint(pipe_endpoint);
             }
         }
-        _ => {}
     }
     count
 }
@@ -126,41 +120,38 @@ pub fn reorder_match_arms(program: &mut Program) -> usize {
 fn reorder_endpoint(endpoint: &mut Endpoint) -> usize {
     let mut count = 0;
 
-    match endpoint {
-        Endpoint::Match(match_expr) => {
-            // Check if reordering would change anything
-            let original_order: Vec<_> = match_expr.arms.iter().map(pattern_specificity).collect();
+    if let Endpoint::Match(match_expr) = endpoint {
+        // Check if reordering would change anything
+        let original_order: Vec<_> = match_expr.arms.iter().map(pattern_specificity).collect();
 
-            // Stable sort by specificity (descending - most specific first)
-            match_expr.arms.sort_by(|a, b| {
-                let spec_a = pattern_specificity(a);
-                let spec_b = pattern_specificity(b);
+        // Stable sort by specificity (descending - most specific first)
+        match_expr.arms.sort_by(|a, b| {
+            let spec_a = pattern_specificity(a);
+            let spec_b = pattern_specificity(b);
 
-                // Compare specificity scores first (higher = more specific)
-                match spec_b.0.cmp(&spec_a.0) {
-                    Ordering::Equal => {
-                        // If equal specificity, guards come first
-                        spec_b.1.cmp(&spec_a.1)
-                    }
-                    other => other,
+            // Compare specificity scores first (higher = more specific)
+            match spec_b.0.cmp(&spec_a.0) {
+                Ordering::Equal => {
+                    // If equal specificity, guards come first
+                    spec_b.1.cmp(&spec_a.1)
                 }
-            });
-
-            // Check if order actually changed
-            let new_order: Vec<_> = match_expr.arms.iter().map(pattern_specificity).collect();
-
-            if original_order != new_order {
-                count += 1;
+                other => other,
             }
+        });
 
-            // Recurse into arms
-            for arm in &mut match_expr.arms {
-                for pipe_endpoint in &mut arm.pipeline {
-                    count += reorder_endpoint(pipe_endpoint);
-                }
+        // Check if order actually changed
+        let new_order: Vec<_> = match_expr.arms.iter().map(pattern_specificity).collect();
+
+        if original_order != new_order {
+            count += 1;
+        }
+
+        // Recurse into arms
+        for arm in &mut match_expr.arms {
+            for pipe_endpoint in &mut arm.pipeline {
+                count += reorder_endpoint(pipe_endpoint);
             }
         }
-        _ => {}
     }
 
     count

@@ -11,6 +11,9 @@ use crate::interfaces::{
     BinOp, Binding, Connection, Dim, DimExpr, Endpoint, ImplRef, MatchArm, MatchExpr, NeuronBody,
     NeuronDef, Param, ParseError, Port, PortRef, Program, Shape, UseStmt, Value,
 };
+use crate::CallArgs;
+use crate::CallExpr;
+use crate::Kwarg;
 
 /// AST builder state
 pub struct AstBuilder {
@@ -506,10 +509,7 @@ impl AstBuilder {
     }
 
     /// Build a call expression, returning (name, args, kwargs)
-    fn build_call_expr(
-        &mut self,
-        pair: Pair<Rule>,
-    ) -> Result<(String, Vec<Value>, Vec<(String, Value)>), ParseError> {
+    fn build_call_expr(&mut self, pair: Pair<Rule>) -> Result<CallExpr, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::call_expr);
 
         let mut inner = pair.into_inner();
@@ -531,11 +531,7 @@ impl AstBuilder {
         Ok((name, args, kwargs))
     }
 
-    /// Build call arguments
-    fn build_call_args(
-        &mut self,
-        pair: Pair<Rule>,
-    ) -> Result<(Vec<Value>, Vec<(String, Value)>), ParseError> {
+    fn build_call_args(&mut self, pair: Pair<Rule>) -> Result<CallArgs, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::call_args);
 
         let mut args = vec![];
@@ -558,7 +554,7 @@ impl AstBuilder {
     }
 
     /// Build a keyword argument
-    fn build_kwarg(&mut self, pair: Pair<Rule>) -> Result<(String, Value), ParseError> {
+    fn build_kwarg(&mut self, pair: Pair<Rule>) -> Result<Kwarg, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::kwarg);
 
         let mut inner = pair.into_inner();

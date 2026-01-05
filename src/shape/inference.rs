@@ -643,10 +643,6 @@ impl ShapeInferenceEngine {
         s.dims.iter().any(|d| matches!(d, Dim::Variadic(_)))
     }
 
-    pub(crate) fn has_wildcard(&self, s: &Shape) -> bool {
-        s.dims.iter().any(|d| matches!(d, Dim::Wildcard))
-    }
-
     fn unify_shapes_with_variadic(
         &self,
         s1: &Shape,

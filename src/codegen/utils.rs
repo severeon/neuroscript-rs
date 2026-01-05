@@ -37,7 +37,7 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
         Value::Call { name, args, kwargs } => {
             let args_str = args
                 .iter()
-                .map(|v| value_to_python_impl(v))
+                .map(value_to_python_impl)
                 .collect::<Vec<_>>()
                 .join(", ");
 
@@ -63,9 +63,8 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
 /// Convert CamelCase to snake_case
 pub(super) fn snake_case_impl(name: &str) -> String {
     let mut result = String::new();
-    let mut chars = name.chars().peekable();
 
-    while let Some(c) = chars.next() {
+    for c in name.chars() {
         if c.is_uppercase() {
             if !result.is_empty() {
                 result.push('_');

@@ -270,7 +270,7 @@ impl<'a> Lexer<'a> {
             // Check for inconsistent indentation
             if *self.indent_stack.last().unwrap() != indent {
                 return Err(LexError::InconsistentIndent {
-                    span: SourceSpan::new(start_pos.into(), indent.into()),
+                    span: SourceSpan::new(start_pos.into(), indent),
                     expected: *self.indent_stack.last().unwrap(),
                     found: indent,
                 });
@@ -295,7 +295,7 @@ impl<'a> Lexer<'a> {
                 Some(ch) => value.push(ch),
                 None => {
                     return Err(LexError::UnterminatedString {
-                        span: SourceSpan::new(start.into(), (self.pos - start).into()),
+                        span: SourceSpan::new(start.into(), self.pos - start),
                     })
                 }
             }
@@ -336,13 +336,13 @@ impl<'a> Lexer<'a> {
             s.parse()
                 .map(TokenKind::Float)
                 .map_err(|_| LexError::InvalidNumber {
-                    span: SourceSpan::new(self.pos.into(), s.len().into()),
+                    span: SourceSpan::new(self.pos.into(), s.len()),
                 })
         } else {
             s.parse()
                 .map(TokenKind::Int)
                 .map_err(|_| LexError::InvalidNumber {
-                    span: SourceSpan::new(self.pos.into(), s.len().into()),
+                    span: SourceSpan::new(self.pos.into(), s.len()),
                 })
         }
     }

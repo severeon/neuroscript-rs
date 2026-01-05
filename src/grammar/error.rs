@@ -23,11 +23,11 @@ pub fn from_pest_error(err: PestError<Rule>) -> ParseError {
         }
     };
 
-    let span = SourceSpan::new(start.into(), (end - start).into());
+    let span = SourceSpan::new(start.into(), end - start);
 
     // Extract what was expected vs found from the pest error
     let message = err.to_string();
-    
+
     ParseError::Expected {
         expected: extract_expected(&message),
         found: extract_found(&message),
@@ -81,7 +81,7 @@ fn extract_found(message: &str) -> String {
 pub fn duplicate_neuron(name: &str, offset: usize) -> ParseError {
     ParseError::DuplicateNeuron {
         name: name.to_string(),
-        span: SourceSpan::new(offset.into(), name.len().into()),
+        span: SourceSpan::new(offset.into(), name.len()),
     }
 }
 
@@ -89,7 +89,7 @@ pub fn duplicate_neuron(name: &str, offset: usize) -> ParseError {
 pub fn unexpected(found: &str, offset: usize) -> ParseError {
     ParseError::Unexpected {
         found: found.to_string(),
-        span: SourceSpan::new(offset.into(), found.len().max(1).into()),
+        span: SourceSpan::new(offset.into(), found.len().max(1)),
     }
 }
 
@@ -98,6 +98,6 @@ pub fn expected(expected: &str, found: &str, offset: usize) -> ParseError {
     ParseError::Expected {
         expected: expected.to_string(),
         found: found.to_string(),
-        span: SourceSpan::new(offset.into(), found.len().max(1).into()),
+        span: SourceSpan::new(offset.into(), found.len().max(1)),
     }
 }
