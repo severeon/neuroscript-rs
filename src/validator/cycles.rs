@@ -1,5 +1,5 @@
-use crate::interfaces::*;
 use super::symbol_table::SymbolTable;
+use crate::interfaces::*;
 use std::collections::{HashMap, HashSet};
 
 /// Detect cycles in the neuron dependency graph
@@ -41,10 +41,10 @@ pub(super) fn detect_cycles(
 
         // Add nodes
         for node in &source_nodes {
-            graph.entry(node.clone()).or_insert_with(HashSet::new);
+            graph.entry(node.clone()).or_default();
         }
         for node in &dest_nodes {
-            graph.entry(node.clone()).or_insert_with(HashSet::new);
+            graph.entry(node.clone()).or_default();
         }
 
         // Add edges, but skip self-edges within the same connection

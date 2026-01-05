@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use miette::{IntoDiagnostic, NamedSource, WrapErr};
 use neuroscript::{generate_pytorch, parse, stdlib, validate, NeuronBody};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "neuroscript")]
@@ -444,7 +444,7 @@ fn print_neuron_summary(program: &neuroscript::Program, verbose: bool) {
 }
 
 /// Infer neuron name from filename, or fail with helpful message
-fn infer_neuron_name(file: &PathBuf, program: &neuroscript::Program) -> miette::Result<String> {
+fn infer_neuron_name(file: &Path, program: &neuroscript::Program) -> miette::Result<String> {
     // Extract filename without extension
     let filename = file
         .file_stem()
@@ -453,7 +453,7 @@ fn infer_neuron_name(file: &PathBuf, program: &neuroscript::Program) -> miette::
 
     // Convert snake_case or kebab-case to PascalCase
     let neuron_name = filename
-        .split(|c: char| c == '_' || c == '-')
+        .split(['_', '-'])
         .map(|part| {
             let mut chars = part.chars();
             match chars.next() {

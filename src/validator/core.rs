@@ -1,8 +1,8 @@
-use crate::interfaces::*;
-use super::symbol_table;
-use super::shapes;
-use super::cycles;
 use super::bindings;
+use super::cycles;
+use super::shapes;
+use super::symbol_table;
+use crate::interfaces::*;
 
 /// Graph validator
 pub struct Validator;
@@ -21,7 +21,7 @@ impl Validator {
         // Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
         {
-            for (_neuron_name, neuron) in &program.neurons {
+            for neuron in program.neurons.values() {
                 // Validate connections within this neuron if it's composite
                 if let NeuronBody::Graph {
                     let_bindings,
@@ -197,9 +197,8 @@ impl Validator {
             if !Self::is_catch_all_pattern(last_pattern) {
                 errors.push(ValidationError::NonExhaustiveMatch {
                     context: context_neuron.to_string(),
-                    suggestion: format!(
-                        "Add a catch-all pattern as the last arm, e.g., [*shape] or [*, d]"
-                    ),
+                    suggestion: "Add a catch-all pattern as the last arm, e.g., [*shape] or [*, d]"
+                        .to_string(),
                 });
             }
         }
