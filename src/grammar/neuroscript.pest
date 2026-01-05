@@ -31,6 +31,9 @@ keyword_context = @{ "context" ~ !ident_cont }
 keyword_static = @{ "static" ~ !ident_cont }
 keyword_global = @{ "global" ~ !ident_cont }
 keyword_lazy = @{ "lazy" ~ !ident_cont }
+keyword_if = @{ "if" ~ !ident_cont }
+keyword_elif = @{ "elif" ~ !ident_cont }
+keyword_else = @{ "else" ~ !ident_cont }
 
 // ============================================================================
 // Operators
@@ -90,6 +93,7 @@ keyword = _{
   | keyword_external | keyword_and | keyword_or
   | keyword_true | keyword_false
   | keyword_context | keyword_static | keyword_global | keyword_lazy
+  | keyword_if | keyword_elif | keyword_else
 }
 
 // Identifiers: foo, _bar, baz123
@@ -320,9 +324,10 @@ indented_pipeline_item = {
   | (!(ref_endpoint ~ arrow ~ NEWLINE) ~ endpoint ~ NEWLINE)
 }
 
-// Endpoint: in, out, foo, Foo(args), (a, b), match: ...
+// Endpoint: in, out, foo, Foo(args), (a, b), match: ..., if ...
 endpoint = {
     match_expr
+  | if_expr
   | tuple_endpoint
   | call_endpoint
   | ref_endpoint
@@ -359,7 +364,25 @@ match_arm = {
 
 // Pipeline in match arm
 match_pipeline = {
-    endpoint ~ (arrow ~ endpoint)*
+    // Inline pipeline
+    (endpoint ~ (arrow ~ endpoint)*)
+}
+
+// ============================================================================
+// If Expressions
+// ============================================================================
+
+if_expr = {
+    keyword_if ~ value ~ colon ~ branch_pipeline ~
+    (NEWLINE* ~ keyword_elif ~ value ~ colon ~ branch_pipeline)* ~
+    (NEWLINE* ~ keyword_else ~ colon ~ branch_pipeline)?
+}
+
+branch_pipeline = {
+    // Indented pipeline
+    (NEWLINE ~ indented_pipeline)
+    // Inline pipeline
+  | (endpoint ~ (arrow ~ endpoint)*)
 }
 
 // ============================================================================

@@ -104,9 +104,9 @@ neuron HybridPipeline:
   outputs:
     default: [batch, seq_out, vocab]
   graph:
-    in -> SmallTransformer#33()
-    SmallTransformer#33() -> LMStudio#34("qwen3-vl-12b")
-    LMStudio#34("qwen3-vl-12b") -> out
+    in -> SmallTransformer#34()
+    SmallTransformer#34() -> LMStudio#35("qwen3-vl-12b")
+    LMStudio#35("qwen3-vl-12b") -> out
 
 neuron Identity:
   inputs:
@@ -171,16 +171,16 @@ neuron SmallTransformer(vocab = 50000, dim = 512, layers = 6, heads = 8):
   outputs:
     default: [batch, seq, vocab]
   graph:
-    in -> Embedding#24(vocab, dim)
-    Embedding#24(vocab, dim) -> TransformerBlock#25(dim, heads)
-    TransformerBlock#25(dim, heads) -> TransformerBlock#26(dim, heads)
+    in -> Embedding#25(vocab, dim)
+    Embedding#25(vocab, dim) -> TransformerBlock#26(dim, heads)
     TransformerBlock#26(dim, heads) -> TransformerBlock#27(dim, heads)
     TransformerBlock#27(dim, heads) -> TransformerBlock#28(dim, heads)
     TransformerBlock#28(dim, heads) -> TransformerBlock#29(dim, heads)
     TransformerBlock#29(dim, heads) -> TransformerBlock#30(dim, heads)
-    TransformerBlock#30(dim, heads) -> LayerNorm#31(dim)
-    LayerNorm#31(dim) -> Linear#32(dim, vocab)
-    Linear#32(dim, vocab) -> out
+    TransformerBlock#30(dim, heads) -> TransformerBlock#31(dim, heads)
+    TransformerBlock#31(dim, heads) -> LayerNorm#32(dim)
+    LayerNorm#32(dim) -> Linear#33(dim, vocab)
+    Linear#33(dim, vocab) -> out
 
 neuron Softmax:
   inputs:

@@ -292,6 +292,29 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
             }
             result.trim_end().to_string()
         }
+        Endpoint::If(if_expr) => {
+            let mut result = String::from("if:\n");
+            for (i, branch) in if_expr.branches.iter().enumerate() {
+                let prefix = if i == 0 { "if" } else { "elif" };
+                result.push_str(&format!(
+                    "      {} {}: ",
+                    prefix,
+                    format_value(&branch.condition)
+                ));
+                // Format pipeline
+                let pipeline_str: Vec<String> =
+                    branch.pipeline.iter().map(format_endpoint).collect();
+                result.push_str(&pipeline_str.join(" -> "));
+                result.push('\n');
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                result.push_str("      else: ");
+                let pipeline_str: Vec<String> = else_branch.iter().map(format_endpoint).collect();
+                result.push_str(&pipeline_str.join(" -> "));
+                result.push('\n');
+            }
+            result.trim_end().to_string()
+        }
     }
 }
 

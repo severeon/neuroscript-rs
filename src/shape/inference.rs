@@ -509,7 +509,110 @@ impl ShapeInferenceEngine {
                 // Validate match expression
                 self.validate_match_destination(&match_expr.arms, &source_shapes, ctx, program)?;
             }
+
+            Endpoint::If(if_expr) => {
+                self.validate_if_destination(if_expr, &source_shapes, ctx, program)?;
+            }
         }
+
+        Ok(())
+    }
+
+    fn validate_if_destination(
+        &self,
+        if_expr: &IfExpr,
+        source_shapes: &[Shape],
+        ctx: &mut InferenceContext,
+        program: &Program,
+    ) -> Result<(), ShapeError> {
+        let mut branch_outputs = Vec::new();
+
+        // Helper to validate a pipeline branch
+        let check_branch = |pipeline: &[Endpoint]| -> Result<Vec<Shape>, ShapeError> {
+            let mut branch_ctx = ctx.clone();
+            let mut current_shapes = source_shapes.to_vec();
+
+            for endpoint in pipeline {
+                // Synthesize connection
+                let temp_conn = Connection {
+                    source: Endpoint::Ref(PortRef::new("_temp")), // Dummy source
+                    destination: endpoint.clone(),
+                };
+
+                // Inject shapes
+                branch_ctx
+                    .node_outputs
+                    .insert("_temp".to_string(), current_shapes.clone());
+
+                // Validate
+                self.check_connection(&temp_conn, &mut branch_ctx, program)?;
+
+                // Resolve output
+                current_shapes = resolve_match_endpoint(endpoint, &branch_ctx, program)?;
+            }
+            Ok(current_shapes)
+        };
+
+        // Check if/elifs
+        for branch in &if_expr.branches {
+            let shapes = check_branch(&branch.pipeline)?;
+            branch_outputs.push(shapes);
+        }
+
+        // Check else
+        if let Some(else_pipeline) = &if_expr.else_branch {
+            let shapes = check_branch(else_pipeline)?;
+            branch_outputs.push(shapes);
+        } else {
+            // Implicit else: Identity / Pass-through
+            branch_outputs.push(source_shapes.to_vec());
+        }
+
+        // Validate consistency across all branches
+        if branch_outputs.is_empty() {
+            return Ok(());
+        }
+
+        let first_branch = &branch_outputs[0];
+        for (i, other_branch) in branch_outputs.iter().skip(1).enumerate() {
+            // Check arity
+            if first_branch.len() != other_branch.len() {
+                return Err(ShapeError::ConstraintViolation {
+                    message: format!(
+                        "Arity mismatch: expected {} outputs, got {}",
+                        first_branch.len(),
+                        other_branch.len()
+                    ),
+                    context: format!(
+                        "If branches produce different number of outputs: branch 0 produces {} outputs, branch {} produces {} outputs",
+                        first_branch.len(),
+                        i + 1,
+                        other_branch.len()
+                    ),
+                });
+            }
+
+            // Check each shape
+            for (j, (s_first, s_other)) in first_branch.iter().zip(other_branch.iter()).enumerate()
+            {
+                if !self.shapes_compatible(s_first, s_other) {
+                    return Err(ShapeError::Mismatch {
+                        expected: s_first.clone(),
+                        got: s_other.clone(),
+                        context: format!(
+                            "If branches produce incompatible output shapes at index {}: branch 0 produces {}, branch {} produces {}",
+                            j,
+                            s_first,
+                            i + 1,
+                            s_other
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Store resolved output shapes for this If expression
+        ctx.call_outputs.insert(if_expr.id, first_branch.clone());
 
         Ok(())
     }
@@ -545,7 +648,7 @@ impl ShapeInferenceEngine {
         ctx: &mut InferenceContext,
         program: &Program,
     ) -> Result<(), ShapeError> {
-        let mut output_shapes = Vec::new();
+        let mut arm_outputs = Vec::new();
 
         for arm in arms {
             // Each arm gets its own isolated context for capture
@@ -596,26 +699,43 @@ impl ShapeInferenceEngine {
                 current_shapes = resolve_match_endpoint(endpoint, &arm_ctx, program)?;
             }
 
-            // Collect output shape from this arm
-            if !current_shapes.is_empty() {
-                output_shapes.push(current_shapes[0].clone());
-            }
+            // Collect output shapes from this arm
+            arm_outputs.push(current_shapes);
         }
 
         // Validate that all arms produce compatible output shapes
-        if output_shapes.len() > 1 {
-            let first_output = &output_shapes[0];
-            for (idx, arm_output) in output_shapes.iter().skip(1).enumerate() {
-                // Check if outputs are structurally compatible
-                if !self.shapes_compatible(first_output, arm_output) {
+        if arm_outputs.is_empty() {
+            return Ok(());
+        }
+
+        let first_arm = &arm_outputs[0];
+        for (i, other_arm) in arm_outputs.iter().skip(1).enumerate() {
+            // Check arity
+            if first_arm.len() != other_arm.len() {
+                return Err(ShapeError::ConstraintViolation {
+                    message: format!(
+                        "Match arms produce different number of outputs: arm 0 produces {} outputs, arm {} produces {} outputs",
+                        first_arm.len(),
+                        i + 1,
+                        other_arm.len()
+                    ),
+                    context: "Match expression outputs must have consistent arity across all arms"
+                        .to_string(),
+                });
+            }
+
+            // Check each shape
+            for (j, (s_first, s_other)) in first_arm.iter().zip(other_arm.iter()).enumerate() {
+                if !self.shapes_compatible(s_first, s_other) {
                     return Err(ShapeError::Mismatch {
-                        expected: first_output.clone(),
-                        got: arm_output.clone(),
+                        expected: s_first.clone(),
+                        got: s_other.clone(),
                         context: format!(
-                            "Match arms produce incompatible output shapes: arm 0 produces {}, arm {} produces {}",
-                            first_output,
-                            idx + 1,
-                            arm_output
+                            "Match arms produce incompatible output shapes at index {}: arm 0 produces {}, arm {} produces {}",
+                            j,
+                            s_first,
+                            i + 1,
+                            s_other
                         ),
                     });
                 }
@@ -852,6 +972,7 @@ impl ShapeInferenceEngine {
                     .join(", ")
             ),
             Endpoint::Match(_) => "match".to_string(),
+            Endpoint::If(_) => "if".to_string(),
         }
     }
 
@@ -956,6 +1077,9 @@ fn resolve_match_endpoint(
 ) -> Result<Vec<Shape>, ShapeError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
+            if port_ref.node == "out" {
+                return Ok(vec![]);
+            }
             // Look up the output shape for this reference
             if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
                 Ok(shapes.clone())
@@ -993,6 +1117,9 @@ fn resolve_match_endpoint(
         Endpoint::Match(_) => Err(ShapeError::UnsupportedFeature(
             "Nested match expressions not yet supported".to_string(),
         )),
+        Endpoint::If(_) => Err(ShapeError::UnsupportedFeature(
+            "Nested if expressions not yet supported in match pipeline".to_string(),
+        )),
     }
 }
 
@@ -1011,6 +1138,10 @@ fn resolve_endpoint_shape(
 ) -> Result<Vec<Shape>, ShapeError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
+            // println!("DEBUG: Resolving Ref: node='{}' port='{}'", port_ref.node, port_ref.port);
+            if port_ref.node == "out" {
+                return Ok(vec![]);
+            }
             if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
                 // TODO: Handle port_ref.port selection
                 Ok(shapes.clone())
@@ -1040,6 +1171,17 @@ fn resolve_endpoint_shape(
             Ok(shapes)
         }
         Endpoint::Match(_) => Ok(vec![]), // TODO
+        Endpoint::If(if_expr) => {
+            if let Some(shapes) = ctx.call_outputs.get(&if_expr.id) {
+                Ok(shapes.clone())
+            } else {
+                // If ID not found, it means it hasn't been processed as a destination yet.
+                // This implies it's being used as a source without being a destination first?
+                // Or we are in a cycle?
+                // For now return empty or error?
+                Ok(vec![])
+            }
+        }
     }
 }
 

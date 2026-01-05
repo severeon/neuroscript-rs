@@ -37,6 +37,7 @@ fn test_optimize_matches_basic() {
                 is_reachable: true,
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -107,6 +108,7 @@ fn test_optimize_matches_shadowing() {
                 is_reachable: false, // Shadowed by first arm
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -180,6 +182,7 @@ fn test_optimize_matches_guards_prevent_pruning() {
                 is_reachable: true, // Should remain reachable (guard makes it distinct)
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -263,6 +266,7 @@ fn test_optimize_matches_multiple_unreachable() {
                 is_reachable: false, // Shadowed
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -329,6 +333,7 @@ fn test_optimize_matches_disabled() {
                 is_reachable: false, // Would be pruned if enabled
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -394,6 +399,7 @@ fn test_optimize_matches_nested() {
                 is_reachable: false, // Unreachable inner arm
             },
         ],
+        id: 1,
     };
 
     let outer_match = MatchExpr {
@@ -415,6 +421,7 @@ fn test_optimize_matches_nested() {
                 is_reachable: false, // Unreachable outer arm
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -477,6 +484,7 @@ fn test_count_matches() {
             pipeline: vec![],
             is_reachable: true,
         }],
+        id: 0,
     };
 
     let match2 = MatchExpr {
@@ -488,6 +496,7 @@ fn test_count_matches() {
             pipeline: vec![],
             is_reachable: true,
         }],
+        id: 1,
     };
 
     let neuron = NeuronDef {
@@ -591,6 +600,7 @@ fn test_reorder_match_arms() {
                 is_reachable: true,
             },
         ],
+        id: 0,
     };
 
     let connection = Connection {
@@ -674,6 +684,7 @@ fn test_static_resolve_concrete_shape() {
                 is_reachable: true,
             },
         ],
+        id: 0,
     };
 
     // Input shape: [batch, dim] where both are resolved
@@ -718,6 +729,7 @@ fn test_static_resolve_with_guard() {
                 is_reachable: true,
             },
         ],
+        id: 0,
     };
 
     // Input shape has concrete first dimension and resolved second dimension
@@ -747,6 +759,7 @@ fn test_static_resolve_runtime_needed() {
             pipeline: vec![],
             is_reachable: true,
         }],
+        id: 0,
     };
 
     // Input shape has unresolved dimension

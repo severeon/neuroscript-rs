@@ -25,37 +25,13 @@ pub(super) fn detect_cycles(
 
     // Build edges from connections
     for connection in connections {
-        // Extract source nodes - these reference existing instances
-        let source_nodes = extract_node_names_from_sources(
+        add_edges_recursive(
             &connection.source,
-            &mut call_last_instance,
-            &mut call_instance_counter,
-        );
-
-        // Extract destination nodes - these CREATE new instances
-        let dest_nodes = extract_node_names_from_destinations(
             &connection.destination,
-            &mut call_instance_counter,
+            &mut graph,
             &mut call_last_instance,
+            &mut call_instance_counter,
         );
-
-        // Add nodes
-        for node in &source_nodes {
-            graph.entry(node.clone()).or_default();
-        }
-        for node in &dest_nodes {
-            graph.entry(node.clone()).or_default();
-        }
-
-        // Add edges, but skip self-edges within the same connection
-        // (e.g., Linear -> Linear in same connection is OK for pipeline)
-        for src in &source_nodes {
-            for dst in &dest_nodes {
-                if src != dst || source_nodes.len() > 1 || dest_nodes.len() > 1 {
-                    graph.get_mut(src).unwrap().insert(dst.clone());
-                }
-            }
-        }
     }
 
     // Detect cycles using DFS
@@ -121,7 +97,88 @@ pub(super) fn extract_node_names_from_sources(
         }
         Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
-        Endpoint::Match(_) => vec![], // Skip Match for cycle detection
+        Endpoint::Match(_) => vec![],
+        Endpoint::If(_) => vec![],
+    }
+}
+
+/// Recursively add edges from source to destination
+fn add_edges_recursive(
+    source: &Endpoint,
+    dest: &Endpoint,
+    graph: &mut HashMap<String, HashSet<String>>,
+    call_last_instance: &mut HashMap<String, String>,
+    call_counter: &mut HashMap<String, usize>,
+) {
+    match dest {
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                let mut current_source = source.clone();
+                for ep in &branch.pipeline {
+                    add_edges_recursive(
+                        &current_source,
+                        ep,
+                        graph,
+                        call_last_instance,
+                        call_counter,
+                    );
+                    current_source = ep.clone();
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                let mut current_source = source.clone();
+                for ep in else_branch {
+                    add_edges_recursive(
+                        &current_source,
+                        ep,
+                        graph,
+                        call_last_instance,
+                        call_counter,
+                    );
+                    current_source = ep.clone();
+                }
+            }
+        }
+        Endpoint::Match(match_expr) => {
+            for arm in &match_expr.arms {
+                let mut current_source = source.clone();
+                for ep in &arm.pipeline {
+                    add_edges_recursive(
+                        &current_source,
+                        ep,
+                        graph,
+                        call_last_instance,
+                        call_counter,
+                    );
+                    current_source = ep.clone();
+                }
+            }
+        }
+        _ => {
+            // Top-level or leaf connection
+            let source_nodes =
+                extract_node_names_from_sources(source, call_last_instance, call_counter);
+            let dest_nodes =
+                extract_node_names_from_destinations(dest, call_counter, call_last_instance);
+
+            // Add nodes
+            for node in &source_nodes {
+                graph.entry(node.clone()).or_default();
+            }
+            for node in &dest_nodes {
+                graph.entry(node.clone()).or_default();
+            }
+
+            // Add edges
+            for src in &source_nodes {
+                for dst in &dest_nodes {
+                    // Skip self-edges only if it's a direct reference to same node
+                    if src != dst || source_nodes.len() > 1 || dest_nodes.len() > 1 {
+                        graph.entry(src.clone()).or_default().insert(dst.clone());
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -159,7 +216,8 @@ pub(super) fn extract_node_names_from_destinations(
         }
         Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
-        Endpoint::Match(_) => vec![], // Skip Match for cycle detection
+        Endpoint::Match(_) => vec![],
+        Endpoint::If(_) => vec![],
     }
 }
 
@@ -181,6 +239,7 @@ pub(super) fn extract_simple_node_names(endpoint: &Endpoint) -> Vec<String> {
         Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
         Endpoint::Match(_) => vec![], // Skip Match for cycle detection
+        Endpoint::If(_) => vec![],    // Skip If for cycle detection
     }
 }
 

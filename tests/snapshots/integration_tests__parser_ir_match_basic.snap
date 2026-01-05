@@ -27,8 +27,8 @@ neuron MatchWithWildcard:
     default: [*, 512]
   graph:
     in -> match:
-      [*, 512]: Identity#3() -> out
-      [*, d]: Linear#4(d, 512) -> out
+      [*, 512]: Identity#4() -> out
+      [*, d]: Linear#5(d, 512) -> out
 
 neuron SimpleMatch:
   inputs:

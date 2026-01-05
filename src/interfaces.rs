@@ -176,6 +176,8 @@ pub enum Endpoint {
     },
     /// Pattern match expression
     Match(MatchExpr),
+    /// Conditional expression
+    If(IfExpr),
 }
 
 /// A connection: source -> destination
@@ -200,6 +202,22 @@ pub struct MatchArm {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr {
     pub arms: Vec<MatchArm>,
+    pub id: usize,
+}
+
+/// A branch in an if expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfBranch {
+    pub condition: Value,
+    pub pipeline: Vec<Endpoint>,
+}
+
+/// If/Else conditional expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfExpr {
+    pub branches: Vec<IfBranch>,            // if and elifs
+    pub else_branch: Option<Vec<Endpoint>>, // optional else
+    pub id: usize,
 }
 
 // ImplRef is already defined above as a struct
@@ -302,6 +320,9 @@ pub enum TokenKind {
     And,
     Or,
     Context,
+    If,
+    Elif,
+    Else,
 
     // Annotations
     AtStatic, // @static

@@ -54,6 +54,7 @@ fn test_codegen_match() {
                             is_reachable: true,
                         },
                     ],
+                    id: 0,
                 }),
             }],
         },
@@ -135,6 +136,7 @@ fn test_codegen_match_with_captured_dims() {
                             is_reachable: true,
                         },
                     ],
+                    id: 0,
                 }),
             }],
         },
@@ -212,6 +214,7 @@ fn test_codegen_match_guards_with_bindings() {
                         ],
                         is_reachable: true,
                     }],
+                    id: 0,
                 }),
             }],
         },
@@ -305,6 +308,7 @@ fn test_codegen_optimized_match_fewer_branches() {
                                 is_reachable: true, // All start reachable
                             },
                         ],
+                        id: 0,
                     }),
                 }],
             },
@@ -463,6 +467,7 @@ fn test_codegen_optimized_match_with_guards() {
                             is_reachable: true, // Guard makes this reachable
                         },
                     ],
+                    id: 0,
                 }),
             }],
         },
@@ -540,4 +545,93 @@ neuron OptimizeDemo:
 
     // Should have dimension binding
     assert!(code.contains("d = x.shape[1]"));
+}
+
+#[test]
+fn test_codegen_if_else() {
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "IfTest".to_string(),
+        params: vec![Param {
+            name: "d".to_string(),
+            default: Some(Value::Int(64)),
+        }],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(64)]),
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]), // Simplified output shape
+        }],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![],
+            connections: vec![Connection {
+                source: Endpoint::Ref(PortRef::new("in")),
+                destination: Endpoint::If(IfExpr {
+                    branches: vec![
+                        IfBranch {
+                            condition: Value::BinOp {
+                                op: BinOp::Gt,
+                                left: Box::new(Value::Name("d".to_string())),
+                                right: Box::new(Value::Int(512)),
+                            },
+                            pipeline: vec![
+                                Endpoint::Call {
+                                    name: "Linear".to_string(),
+                                    args: vec![Value::Name("d".to_string()), Value::Int(512)],
+                                    kwargs: vec![],
+                                    id: 0,
+                                    frozen: false,
+                                },
+                                Endpoint::Ref(PortRef::new("out")),
+                            ],
+                        },
+                        IfBranch {
+                            condition: Value::BinOp {
+                                op: BinOp::Eq,
+                                left: Box::new(Value::Name("d".to_string())),
+                                right: Box::new(Value::Int(256)),
+                            },
+                            pipeline: vec![
+                                Endpoint::Call {
+                                    name: "Linear".to_string(),
+                                    args: vec![Value::Int(256), Value::Int(512)],
+                                    kwargs: vec![],
+                                    id: 1,
+                                    frozen: false,
+                                },
+                                Endpoint::Ref(PortRef::new("out")),
+                            ],
+                        },
+                    ],
+                    else_branch: Some(vec![
+                        Endpoint::Call {
+                            name: "Linear".to_string(),
+                            args: vec![Value::Name("d".to_string()), Value::Int(512)],
+                            kwargs: vec![],
+                            id: 2,
+                            frozen: false,
+                        },
+                        Endpoint::Ref(PortRef::new("out")),
+                    ]),
+                    id: 0,
+                }),
+            }],
+        },
+    };
+
+    program.neurons.insert("IfTest".to_string(), neuron);
+
+    let code = generate_pytorch(&program, "IfTest").unwrap();
+    println!("{}", code);
+
+    assert!(code.contains("if self.d > 512:"));
+    assert!(code.contains("elif self.d == 256:"));
+    assert!(code.contains("else:"));
+
+    // Check linear instantiations
+    // Since 'd' is a parameter, it's statically resolvable in __init__, so we expect static instantiation:
+    assert!(code.contains("self.linear_"));
 }

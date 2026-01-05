@@ -75,6 +75,9 @@ pub(super) fn generate_forward_body(
     // Build a map from Match endpoints to their result variable names
     let mut match_to_result: HashMap<String, String> = HashMap::new();
 
+    // Build a map from If endpoints to their result variable names
+    let mut if_to_result: HashMap<String, String> = HashMap::new();
+
     // Track the last result variable (for implicit output)
     let mut last_result = None;
 
@@ -119,6 +122,15 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::If(_) => {
+                // Look it up in our if_to_result map
+                let key = endpoint_key_impl(&conn.source);
+                if_to_result.get(&key).cloned().ok_or_else(|| {
+                    CodegenError::InvalidConnection(format!(
+                        "If expression used as source before being defined"
+                    ))
+                })?
+            }
         };
 
         // Process the destination
@@ -131,6 +143,7 @@ pub(super) fn generate_forward_body(
             &mut temp_var_counter,
             &mut call_to_result,
             &mut match_to_result,
+            &mut if_to_result,
         )?;
 
         // Track the last result for implicit output
@@ -143,6 +156,9 @@ pub(super) fn generate_forward_body(
         } else if let Endpoint::Match(_) = &conn.destination {
             let key = endpoint_key_impl(&conn.destination);
             match_to_result.insert(key, result_var.clone());
+        } else if let Endpoint::If(_) = &conn.destination {
+            let key = endpoint_key_impl(&conn.destination);
+            if_to_result.insert(key, result_var.clone());
         }
     }
 
@@ -169,6 +185,7 @@ fn process_destination(
     temp_var_counter: &mut usize,
     call_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
+    if_to_result: &mut HashMap<String, String>,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
@@ -451,6 +468,7 @@ fn process_destination(
                         temp_var_counter,
                         call_to_result,
                         match_to_result,
+                        if_to_result,
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -480,6 +498,95 @@ fn process_destination(
                     indent, source_var
                 )
                 .unwrap();
+            }
+
+            Ok(result_var)
+        }
+        Endpoint::If(if_expr) => {
+            let result_var = format!("x{}", *temp_var_counter);
+            *temp_var_counter += 1;
+
+            // Initialize result variable to None
+            writeln!(output, "{}{} = None", indent, result_var).unwrap();
+
+            // Handle branches
+            for (i, branch) in if_expr.branches.iter().enumerate() {
+                let prefix = if i == 0 { "if" } else { "elif" };
+                // Ensure self.param is used in conditions
+                let cond_str = gen.value_to_python_with_self(&branch.condition);
+
+                writeln!(output, "{}{} {}:", indent, prefix, cond_str).unwrap();
+                let branch_indent = format!("{}    ", indent);
+
+                // Process pipeline
+                let saved_var_names = gen.var_names.clone();
+                let mut current_var = source_var.clone();
+
+                for ep in &branch.pipeline {
+                    current_var = process_destination(
+                        output,
+                        gen,
+                        ep,
+                        current_var,
+                        &branch_indent,
+                        temp_var_counter,
+                        call_to_result,
+                        match_to_result,
+                        if_to_result,
+                    )?;
+                    // Cache call/match/if results inside branch
+                    if let Endpoint::Call { .. } = ep {
+                        let key = endpoint_key_impl(ep);
+                        call_to_result.insert(key, current_var.clone());
+                    } else if let Endpoint::Match(_) = ep {
+                        let key = endpoint_key_impl(ep);
+                        match_to_result.insert(key, current_var.clone());
+                    } else if let Endpoint::If(_) = ep {
+                        let key = endpoint_key_impl(ep);
+                        if_to_result.insert(key, current_var.clone());
+                    }
+                }
+
+                writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+                gen.var_names = saved_var_names;
+            }
+
+            // Else branch
+            if let Some(else_branch) = &if_expr.else_branch {
+                writeln!(output, "{}else:", indent).unwrap();
+                let branch_indent = format!("{}    ", indent);
+                let saved_var_names = gen.var_names.clone();
+                let mut current_var = source_var.clone();
+
+                for ep in else_branch {
+                    current_var = process_destination(
+                        output,
+                        gen,
+                        ep,
+                        current_var,
+                        &branch_indent,
+                        temp_var_counter,
+                        call_to_result,
+                        match_to_result,
+                        if_to_result,
+                    )?;
+                    if let Endpoint::Call { .. } = ep {
+                        let key = endpoint_key_impl(ep);
+                        call_to_result.insert(key, current_var.clone());
+                    } else if let Endpoint::Match(_) = ep {
+                        let key = endpoint_key_impl(ep);
+                        match_to_result.insert(key, current_var.clone());
+                    } else if let Endpoint::If(_) = ep {
+                        let key = endpoint_key_impl(ep);
+                        if_to_result.insert(key, current_var.clone());
+                    }
+                }
+                writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+                gen.var_names = saved_var_names;
+            } else {
+                // Implicit else: pass-through/Identity
+                writeln!(output, "{}else:", indent).unwrap();
+                writeln!(output, "{}    {} = {}", indent, result_var, source_var).unwrap();
             }
 
             Ok(result_var)

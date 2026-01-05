@@ -11,9 +11,9 @@ neuron AdaptiveCompression:
     default: [*, 128]
   graph:
     in -> match:
-      [*, d] where (d > 1024): Linear#3(d, 512) -> Linear#4(512, 128) -> out
-      [*, d] where (d > 128): Linear#5(d, 128) -> out
-      [*, d]: Identity#6() -> out
+      [*, d] where (d > 1024): Linear#4(d, 512) -> Linear#5(512, 128) -> out
+      [*, d] where (d > 128): Linear#6(d, 128) -> out
+      [*, d]: Identity#7() -> out
 
 neuron DynamicProjection:
   inputs:
@@ -32,9 +32,9 @@ neuron FlexibleEncoder:
     default: [*, seq, 512]
   graph:
     in -> match:
-      [*, s, d] where (d < 512): Linear#7(d, 512) -> out
-      [*, s, d] where (d == 512): Identity#8() -> out
-      [*, s, d]: Linear#9(d, 512) -> out
+      [*, s, d] where (d < 512): Linear#9(d, 512) -> out
+      [*, s, d] where (d == 512): Identity#10() -> out
+      [*, s, d]: Linear#11(d, 512) -> out
 
 neuron Identity:
   inputs:

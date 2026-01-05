@@ -721,6 +721,8 @@ impl Parser {
             Ok(Endpoint::Tuple(refs))
         } else if self.at(&TokenKind::Match) {
             Ok(Endpoint::Match(self.match_expr()?))
+        } else if self.at(&TokenKind::If) {
+            Ok(Endpoint::If(self.parse_if_expr()?))
         } else {
             // Accept 'in' and 'out' keywords as identifiers for port references
             let name = if self.at(&TokenKind::In) {
@@ -816,7 +818,92 @@ impl Parser {
             self.advance();
         }
 
-        Ok(MatchExpr { arms })
+        Ok(MatchExpr {
+            arms,
+            id: self.next_id(),
+        })
+    }
+
+    fn parse_if_expr(&mut self) -> Result<IfExpr, ParseError> {
+        self.expect(&TokenKind::If)?;
+        let condition = self.expr()?;
+        self.expect(&TokenKind::Colon)?;
+
+        let pipeline = self.parse_branch_pipeline()?;
+        let mut branches = vec![IfBranch {
+            condition,
+            pipeline,
+        }];
+        let mut else_branch = None;
+
+        loop {
+            self.skip_newlines();
+
+            if self.at(&TokenKind::Elif) {
+                self.advance();
+                let cond = self.expr()?;
+                self.expect(&TokenKind::Colon)?;
+                let pipe = self.parse_branch_pipeline()?;
+                branches.push(IfBranch {
+                    condition: cond,
+                    pipeline: pipe,
+                });
+            } else if self.at(&TokenKind::Else) {
+                self.advance();
+                self.expect(&TokenKind::Colon)?;
+                else_branch = Some(self.parse_branch_pipeline()?);
+                break;
+            } else {
+                break;
+            }
+        }
+
+        Ok(IfExpr {
+            branches,
+            else_branch,
+            id: self.next_id(),
+        })
+    }
+
+    fn parse_branch_pipeline(&mut self) -> Result<Vec<Endpoint>, ParseError> {
+        if self.at(&TokenKind::Newline) {
+            self.advance();
+            self.expect(&TokenKind::Indent)?;
+
+            let mut pipeline = vec![];
+            while !self.at(&TokenKind::Dedent) && !self.at(&TokenKind::Eof) {
+                self.skip_newlines();
+                if self.at(&TokenKind::Dedent) {
+                    break;
+                }
+
+                pipeline.push(self.endpoint()?);
+
+                if self.at(&TokenKind::Arrow) {
+                    self.advance();
+                }
+
+                if self.at(&TokenKind::Newline) {
+                    self.advance();
+                }
+            }
+
+            if self.at(&TokenKind::Dedent) {
+                self.advance();
+            }
+            Ok(pipeline)
+        } else {
+            let mut pipeline = vec![];
+            loop {
+                pipeline.push(self.endpoint()?);
+                if self.at(&TokenKind::Arrow) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            Ok(pipeline)
+        }
     }
 
     // arg, arg, name=arg, ...

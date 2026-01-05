@@ -106,6 +106,7 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
             // Include id to ensure each call gets its own module instance
             format!("{}({};{})@{}", name, args_str, kwargs_str, id)
         }
+        Endpoint::If(if_expr) => format!("if@{}", if_expr.id),
         _ => format!("{:?}", endpoint),
     }
 }
@@ -144,6 +145,18 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
         Endpoint::Match(match_expr) => {
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
+                    collect_calls_from_endpoint_impl(ep, calls);
+                }
+            }
+        }
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                for ep in &branch.pipeline {
+                    collect_calls_from_endpoint_impl(ep, calls);
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                for ep in else_branch {
                     collect_calls_from_endpoint_impl(ep, calls);
                 }
             }

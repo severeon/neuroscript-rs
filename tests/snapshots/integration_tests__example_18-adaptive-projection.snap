@@ -39,11 +39,11 @@ neuron ShapeAdaptive:
     default: [*, 512]
   graph:
     in -> match:
-      [*, 512]: Identity#11() -> out
-      [*, *, 512]: Identity#12() -> out
-      [*, d]: Linear#13(d, 512) -> out
-      [*, *, d]: Linear#14(d, 512) -> out
-      [*dims, d]: Linear#15(d, 512) -> out
+      [*, 512]: Identity#13() -> out
+      [*, *, 512]: Identity#14() -> out
+      [*, d]: Linear#15(d, 512) -> out
+      [*, *, d]: Linear#16(d, 512) -> out
+      [*dims, d]: Linear#17(d, 512) -> out
 
 neuron SmartCompression:
   inputs:
@@ -52,7 +52,7 @@ neuron SmartCompression:
     default: [*, 128]
   graph:
     in -> match:
-      [*, d] where (d > 2048): Linear#4(d, 1024) -> Linear#5(1024, 512) -> Linear#6(512, 128) -> out
-      [*, d] where (d > 512): Linear#7(d, 256) -> Linear#8(256, 128) -> out
-      [*, d] where (d > 128): Linear#9(d, 128) -> out
-      [*, d]: Identity#10() -> out
+      [*, d] where (d > 2048): Linear#5(d, 1024) -> Linear#6(1024, 512) -> Linear#7(512, 128) -> out
+      [*, d] where (d > 512): Linear#8(d, 256) -> Linear#9(256, 128) -> out
+      [*, d] where (d > 128): Linear#10(d, 128) -> out
+      [*, d]: Identity#11() -> out

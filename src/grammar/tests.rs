@@ -157,3 +157,57 @@ x ->
     }
     assert!(result.is_ok(), "Failed to parse multiple connections");
 }
+
+#[test]
+fn test_parse_if_expr() {
+    let input = "if has_pool: pool else: Identity() -> out";
+    let result = NeuroScriptParser::parse(Rule::if_expr, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse if expr");
+}
+
+#[test]
+fn test_if_is_not_ident() {
+    let input = "if";
+    let result = NeuroScriptParser::parse(Rule::ident, input);
+    assert!(result.is_err(), "if should not parse as identifier");
+}
+
+#[test]
+fn test_if_as_endpoint() {
+    let input = "if true: pool";
+    let result = NeuroScriptParser::parse(Rule::endpoint, input);
+    assert!(result.is_ok(), "Failed to parse if as endpoint");
+}
+
+#[test]
+fn test_branch_pipeline_with_arrow() {
+    let input = "Identity() -> out";
+    let result = NeuroScriptParser::parse(Rule::branch_pipeline, input);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_parse_connection_with_if() {
+    let input = "act -> if has_pool: pool else: Identity() -> out\n";
+    let result = NeuroScriptParser::parse(Rule::connection, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_parse_simple_neuron_with_if() {
+    let input = r#"neuron Test:
+    graph:
+        act -> if has_pool: pool else: Identity() -> out
+"#;
+    let result = NeuroScriptParser::parse(Rule::neuron_def, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok());
+}

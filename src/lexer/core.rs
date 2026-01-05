@@ -374,6 +374,9 @@ impl<'a> Lexer<'a> {
             "or" => TokenKind::Or,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+            "if" => TokenKind::If,
+            "elif" => TokenKind::Elif,
+            "else" => TokenKind::Else,
             _ => TokenKind::Ident(s),
         }
     }

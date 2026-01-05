@@ -180,7 +180,39 @@ impl std::fmt::Display for Endpoint {
                 write!(f, ")")
             }
             Endpoint::Match(m) => write!(f, "{}", m),
+            Endpoint::If(expr) => write!(f, "{}", expr),
         }
+    }
+}
+
+impl std::fmt::Display for IfExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, branch) in self.branches.iter().enumerate() {
+            if i == 0 {
+                write!(f, "if {}: ", branch.condition)?;
+            } else {
+                write!(f, "elif {}: ", branch.condition)?;
+            }
+            // Display pipeline
+            for (j, e) in branch.pipeline.iter().enumerate() {
+                if j > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+            // Newline handled by parent or context?
+            // Inline if/else is usually single line in display for simplicity unless verbose
+        }
+        if let Some(else_branch) = &self.else_branch {
+            write!(f, " else: ")?;
+            for (j, e) in else_branch.iter().enumerate() {
+                if j > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+        }
+        Ok(())
     }
 }
 

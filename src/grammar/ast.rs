@@ -786,6 +786,7 @@ impl AstBuilder {
 
         match inner.as_rule() {
             Rule::match_expr => Ok(Endpoint::Match(self.build_match_expr(inner)?)),
+            Rule::if_expr => Ok(Endpoint::If(self.build_if_expr(inner)?)),
             Rule::tuple_endpoint => self.build_tuple_endpoint(inner),
             Rule::call_endpoint => self.build_call_endpoint(inner),
             Rule::ref_endpoint => self.build_ref_endpoint(inner),
@@ -793,6 +794,122 @@ impl AstBuilder {
         }
     }
 
+    /// Build an if expression
+    fn build_if_expr(&mut self, pair: Pair<Rule>) -> Result<crate::interfaces::IfExpr, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::if_expr);
+
+        let mut branches = vec![];
+        let mut else_branch = None;
+
+        let mut inner = pair.into_inner();
+
+        // if condition : pipeline
+        inner.next(); // Skip 'if'
+        let condition = self.build_value(inner.next().unwrap())?;
+        inner.next(); // Skip ':'
+        let pipeline = self.build_branch_pipeline(inner.next().unwrap())?;
+        branches.push(crate::interfaces::IfBranch {
+            condition,
+            pipeline,
+        });
+
+        // elifs or else
+        while let Some(token) = inner.next() {
+            match token.as_rule() {
+                Rule::keyword_elif => {
+                    let condition = self.build_value(inner.next().unwrap())?;
+                    inner.next(); // Skip ':'
+                    let pipeline = self.build_branch_pipeline(inner.next().unwrap())?;
+                    branches.push(crate::interfaces::IfBranch {
+                        condition,
+                        pipeline,
+                    });
+                }
+                Rule::keyword_else => {
+                    inner.next(); // Skip ':'
+                    else_branch = Some(self.build_branch_pipeline(inner.next().unwrap())?);
+                }
+                Rule::NEWLINE => continue,
+                _ => break,
+            }
+        }
+
+        Ok(crate::interfaces::IfExpr {
+            branches,
+            else_branch,
+            id: self.next_id(),
+        })
+    }
+
+    /// Build a pipeline for an if/elif/else branch
+    fn build_branch_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::branch_pipeline);
+
+        let inner = pair.clone().into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::indented_pipeline => {
+                // We're already in a pipeline structure, but we need a starting endpoint for the indented pipeline logic
+                // The indented_pipeline rule expects to be processed item by item.
+                // However, `build_indented_pipeline` expects a `first` endpoint because it was designed for
+                // `a -> \n b`.
+
+                // Wait, `indented_pipeline` in `if` branch behaves differently. It doesn't have a "previous" source
+                // from the line before because `if ... :` is the start.
+                // Actually, the `if` *is* the source if strictly following flow, but inside the branch,
+                // the first element is the start of that branch's pipe.
+
+                // Let's modify `build_indented_pipeline` or create a new helper.
+                // The `indented_pipeline` rule is: `indented_pipeline_item+`
+                // `indented_pipeline_item` is `endpoint ~ arrow ~ NEWLINE` or `endpoint ~ NEWLINE`
+
+                self.build_standalone_indented_pipeline(inner)
+            }
+            Rule::endpoint => {
+                // Inline: endpoint ~ (arrow ~ endpoint)*
+                // The rule in pest is: (endpoint ~ (arrow ~ endpoint)*)
+                // But wait, `branch_pipeline` -> `(endpoint ~ (arrow ~ endpoint)*)`
+                // Pest might give us a sequence of pairs.
+
+                // If `inner` is just the first `endpoint`, we need to iterate siblings.
+                // Actually `pair.into_inner()` will give all the inline components.
+                // Let's re-parse `pair` directly if it's inline.
+
+                // If the rule matched `endpoint`, it means it's the inline case.
+                self.build_inline_pipeline(pair)
+            }
+            _ => Ok(vec![]),
+        }
+    }
+
+    /// Build an inline pipeline: a -> b -> c
+    fn build_inline_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
+        let mut endpoints = vec![];
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::endpoint {
+                endpoints.push(self.build_endpoint(inner)?);
+            }
+        }
+        Ok(endpoints)
+    }
+
+    /// Build an indented pipeline that doesn't start from an existing previous endpoint
+    fn build_standalone_indented_pipeline(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<Vec<Endpoint>, ParseError> {
+        let mut endpoints = vec![];
+
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::indented_pipeline_item {
+                for item_inner in inner.into_inner() {
+                    if item_inner.as_rule() == Rule::endpoint {
+                        endpoints.push(self.build_endpoint(item_inner)?);
+                    }
+                }
+            }
+        }
+        Ok(endpoints)
+    }
     /// Build a reference endpoint (in, out, name, name.port)
     fn build_ref_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::ref_endpoint);
@@ -811,15 +928,18 @@ impl AstBuilder {
         if let Some(dot) = inner.next() {
             if dot.as_rule() == Rule::dot {
                 if let Some(port) = inner.next() {
-                    return Ok(Endpoint::Ref(PortRef::with_port(node, port.as_str())));
+                    return Ok(Endpoint::Ref(PortRef {
+                        node,
+                        port: port.as_str().to_string(),
+                    }));
                 }
-            } else if dot.as_rule() == Rule::ident {
-                // The dot was implicit, this is the port name
-                return Ok(Endpoint::Ref(PortRef::with_port(node, dot.as_str())));
             }
         }
 
-        Ok(Endpoint::Ref(PortRef::new(node)))
+        Ok(Endpoint::Ref(PortRef {
+            node,
+            port: "default".to_string(),
+        }))
     }
 
     /// Build a call endpoint (Name(args) or Freeze(Name(args)))
@@ -867,7 +987,10 @@ impl AstBuilder {
             }
         }
 
-        Ok(MatchExpr { arms })
+        let id = self.next_node_id;
+        self.next_node_id += 1;
+
+        Ok(MatchExpr { arms, id })
     }
 
     /// Build a match arm

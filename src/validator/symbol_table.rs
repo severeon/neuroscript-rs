@@ -118,53 +118,88 @@ where
 
     // Scan connections for intermediate node creation
     for connection in connections {
-        match &connection.destination {
-            // Tuple unpacking: source -> (a, b, c)
-            Endpoint::Tuple(port_refs) => {
-                // Source must resolve to multiple ports
-                match resolve_endpoint_partial(&connection.source, &ctx, &table, true, errors) {
-                    Some(source_ports) => {
-                        if source_ports.len() != port_refs.len() {
-                            errors.push(ValidationError::ArityMismatch {
-                                expected: port_refs.len(),
-                                got: source_ports.len(),
-                                context: format!("{}:  tuple unpacking", neuron.name),
-                            });
-                        } else {
-                            // Add each unpacked reference as a single-port node
-                            for (port_ref, port) in port_refs.iter().zip(source_ports.iter()) {
-                                table.add_node(port_ref.node.clone(), vec![port.clone()]);
-                            }
-                        }
-                    }
-                    None => {
-                        // Error already added by resolve_endpoint_partial
-                    }
-                }
-            }
-            // Single intermediate node: source -> intermediate
-            Endpoint::Ref(port_ref) if port_ref.node != "in" && port_ref.node != "out" => {
-                // This creates an intermediate node if it's not already in the table
-                // (e.g. not a context binding)
-                if table.get_ports(&port_ref.node).is_none() {
-                    match resolve_endpoint_partial(&connection.source, &ctx, &table, true, errors) {
-                        Some(source_ports) => {
-                            // Add the intermediate node with the source's output ports
-                            table.add_node(port_ref.node.clone(), source_ports);
-                        }
-                        None => {
-                            // Error already added by resolve_endpoint_partial
-                        }
-                    }
-                }
-            }
-            _ => {
-                // Not an intermediate node creation
-            }
-        }
+        process_destination_for_symbol_table(
+            &connection.destination,
+            &connection.source,
+            &ctx,
+            &mut table,
+            errors,
+        );
     }
 
     table
+}
+
+/// Helper to recursively process destinations for symbol table building
+fn process_destination_for_symbol_table<F>(
+    dest: &Endpoint,
+    source: &Endpoint,
+    ctx: &ResolutionContext<F>,
+    table: &mut SymbolTable,
+    errors: &mut Vec<ValidationError>,
+) where
+    F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
+{
+    match dest {
+        // Tuple unpacking: source -> (a, b, c)
+        Endpoint::Tuple(port_refs) => {
+            // Source must resolve to multiple ports
+            if let Some(source_ports) = resolve_endpoint_partial(source, ctx, table, true, errors) {
+                if source_ports.len() != port_refs.len() {
+                    errors.push(ValidationError::ArityMismatch {
+                        expected: port_refs.len(),
+                        got: source_ports.len(),
+                        context: format!("{}: tuple unpacking", ctx.neuron.name),
+                    });
+                } else {
+                    // Add each unpacked reference as a single-port node
+                    for (port_ref, port) in port_refs.iter().zip(source_ports.iter()) {
+                        table.add_node(port_ref.node.clone(), vec![port.clone()]);
+                    }
+                }
+            }
+        }
+        // Single intermediate node: source -> intermediate
+        Endpoint::Ref(port_ref) if port_ref.node != "in" && port_ref.node != "out" => {
+            // This creates an intermediate node if it's not already in the table
+            if table.get_ports(&port_ref.node).is_none() {
+                if let Some(source_ports) =
+                    resolve_endpoint_partial(source, ctx, table, true, errors)
+                {
+                    // Add the intermediate node with the source's output ports
+                    table.add_node(port_ref.node.clone(), source_ports);
+                }
+            }
+        }
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                let mut current_source = source.clone();
+                for ep in &branch.pipeline {
+                    process_destination_for_symbol_table(ep, &current_source, ctx, table, errors);
+                    current_source = ep.clone();
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                let mut current_source = source.clone();
+                for ep in else_branch {
+                    process_destination_for_symbol_table(ep, &current_source, ctx, table, errors);
+                    current_source = ep.clone();
+                }
+            }
+        }
+        Endpoint::Match(match_expr) => {
+            for arm in &match_expr.arms {
+                let mut current_source = source.clone();
+                for ep in &arm.pipeline {
+                    process_destination_for_symbol_table(ep, &current_source, ctx, table, errors);
+                    current_source = ep.clone();
+                }
+            }
+        }
+        _ => {
+            // Not an intermediate node creation
+        }
+    }
 }
 
 /// Partially resolve endpoint (used during symbol table building)
@@ -295,10 +330,61 @@ where
             }
             Ok(ports)
         }
-        Endpoint::Match(_match_expr) => {
-            // Match expressions are complex - conservatively skip for now
-            // A full implementation would need to handle all possible arms
-            Ok(vec![])
+        Endpoint::Match(match_expr) => {
+            if match_expr.arms.is_empty() {
+                return Ok(vec![]);
+            }
+
+            let mut all_arm_ports = Vec::new();
+            for arm in &match_expr.arms {
+                let ep = if is_source {
+                    arm.pipeline.last()
+                } else {
+                    arm.pipeline.first()
+                };
+                if let Some(ep) = ep {
+                    all_arm_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                } else {
+                    all_arm_ports.push(vec![]);
+                }
+            }
+
+            // Return ports from first arm (they should be consistent in number)
+            Ok(all_arm_ports[0].clone())
+        }
+        Endpoint::If(if_expr) => {
+            if if_expr.branches.is_empty() {
+                return Ok(vec![]);
+            }
+
+            let mut all_branch_ports = Vec::new();
+            for branch in &if_expr.branches {
+                let ep = if is_source {
+                    branch.pipeline.last()
+                } else {
+                    branch.pipeline.first()
+                };
+                if let Some(ep) = ep {
+                    all_branch_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                } else {
+                    all_branch_ports.push(vec![]);
+                }
+            }
+
+            if let Some(else_branch) = &if_expr.else_branch {
+                let ep = if is_source {
+                    else_branch.last()
+                } else {
+                    else_branch.first()
+                };
+                if let Some(ep) = ep {
+                    all_branch_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                } else {
+                    all_branch_ports.push(vec![]);
+                }
+            }
+
+            Ok(all_branch_ports[0].clone())
         }
     }
 }
@@ -314,11 +400,18 @@ pub(super) fn check_port_compatibility(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // Skip Match endpoints
-    if matches!(source_endpoint, Endpoint::Match(_)) || matches!(dest_endpoint, Endpoint::Match(_))
+    // For Match and If, we check consistency but typically they are destinations
+    // and shape inference does the heavy lifting.
+    // We'll allow them through but we might need more specific checks later.
+    /*
+    if matches!(source_endpoint, Endpoint::Match(_))
+        || matches!(dest_endpoint, Endpoint::Match(_))
+        || matches!(source_endpoint, Endpoint::If(_))
+        || matches!(dest_endpoint, Endpoint::If(_))
     {
         return errors;
     }
+    */
 
     // Check arity
     if source_ports.len() != dest_ports.len() {
@@ -361,6 +454,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Ref(port_ref) => port_ref.node.clone(),
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
+        Endpoint::If(_) => "If".to_string(),
     }
 }
 
@@ -389,5 +483,6 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
             )
         }
         Endpoint::Match(_) => "match".to_string(),
+        Endpoint::If(_) => "if".to_string(),
     }
 }

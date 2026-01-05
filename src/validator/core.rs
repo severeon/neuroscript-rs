@@ -190,6 +190,30 @@ impl Validator {
                     })
                 })
                 .collect(),
+            Endpoint::If(if_expr) => {
+                let mut errors = Vec::new();
+                for branch in &if_expr.branches {
+                    for ep in &branch.pipeline {
+                        errors.extend(Self::check_neurons_exist(
+                            ep,
+                            context_neuron,
+                            program,
+                            registry,
+                        ));
+                    }
+                }
+                if let Some(else_branch) = &if_expr.else_branch {
+                    for ep in else_branch {
+                        errors.extend(Self::check_neurons_exist(
+                            ep,
+                            context_neuron,
+                            program,
+                            registry,
+                        ));
+                    }
+                }
+                errors
+            }
             _ => vec![],
         }
     }

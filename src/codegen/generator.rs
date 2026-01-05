@@ -233,6 +233,18 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
                 }
             }
         }
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                for ep in &branch.pipeline {
+                    collect_calls_from_endpoint(ep, result);
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                for ep in else_branch {
+                    collect_calls_from_endpoint(ep, result);
+                }
+            }
+        }
         Endpoint::Ref(_) => {
             // Port references don't call neurons
         }
