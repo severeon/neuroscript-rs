@@ -71,8 +71,8 @@ fn test_optimize_matches_basic() {
     if let NeuronBody::Graph { connections, .. } = &neuron.body {
         if let Endpoint::Match(match_expr) = &connections[0].destination {
             assert_eq!(match_expr.arms.len(), 2);
-            assert_eq!(match_expr.arms[0].is_reachable, true);
-            assert_eq!(match_expr.arms[1].is_reachable, true);
+            assert!(match_expr.arms[0].is_reachable);
+            assert!(match_expr.arms[1].is_reachable);
         } else {
             panic!("Expected Match endpoint");
         }
@@ -815,17 +815,13 @@ fn test_evaluate_guard() {
     let mut ctx = InferenceContext::default();
     ctx.resolved_dims.insert("d".to_string(), 1024);
 
-    let shape = Shape {
-        dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-    };
-
     // Test greater than
     let guard1 = Value::BinOp {
         op: BinOp::Gt,
         left: Box::new(Value::Name("d".to_string())),
         right: Box::new(Value::Int(512)),
     };
-    assert_eq!(try_evaluate_guard(&guard1, &shape, &ctx), Some(true));
+    assert_eq!(try_evaluate_guard(&guard1, &ctx), Some(true));
 
     // Test less than
     let guard2 = Value::BinOp {
@@ -833,7 +829,7 @@ fn test_evaluate_guard() {
         left: Box::new(Value::Name("d".to_string())),
         right: Box::new(Value::Int(2048)),
     };
-    assert_eq!(try_evaluate_guard(&guard2, &shape, &ctx), Some(true));
+    assert_eq!(try_evaluate_guard(&guard2, &ctx), Some(true));
 
     // Test equality
     let guard3 = Value::BinOp {
@@ -841,5 +837,5 @@ fn test_evaluate_guard() {
         left: Box::new(Value::Name("d".to_string())),
         right: Box::new(Value::Int(1024)),
     };
-    assert_eq!(try_evaluate_guard(&guard3, &shape, &ctx), Some(true));
+    assert_eq!(try_evaluate_guard(&guard3, &ctx), Some(true));
 }

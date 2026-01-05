@@ -4,8 +4,7 @@ use crate::interfaces::Parser as OldParser;
 use pest::Parser;
 
 fn parse_program(input: &str) -> Result<Program, ParseError> {
-    let pairs =
-        NeuroScriptParser::parse(Rule::program, input).map_err(|e| error::from_pest_error(e))?;
+    let pairs = NeuroScriptParser::parse(Rule::program, input).map_err(error::from_pest_error)?;
 
     let mut builder = AstBuilder::new();
     builder.build_program(pairs.into_iter().next().unwrap())

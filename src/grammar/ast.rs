@@ -18,6 +18,18 @@ pub struct AstBuilder {
     next_node_id: usize,
 }
 
+/// Temporary state used during neuron construction
+#[derive(Default)]
+struct NeuronBuilderState {
+    inputs: Vec<Port>,
+    outputs: Vec<Port>,
+    let_bindings: Vec<Binding>,
+    set_bindings: Vec<Binding>,
+    context_bindings: Vec<Binding>,
+    connections: Vec<Connection>,
+    impl_ref: Option<ImplRef>,
+}
+
 impl AstBuilder {
     pub fn new() -> Self {
         AstBuilder { next_node_id: 0 }
@@ -120,41 +132,25 @@ impl AstBuilder {
         }
 
         // Skip colon and newlines, process sections
-        let mut inputs = vec![];
-        let mut outputs = vec![];
-        let mut let_bindings = vec![];
-
-        let mut set_bindings = vec![];
-        let mut context_bindings = vec![];
-        let mut connections = vec![];
-        let mut impl_ref = None;
+        let mut state = NeuronBuilderState::default();
 
         // Process remaining elements (sections)
         while let Some(p) = next {
             if p.as_rule() == Rule::neuron_section {
-                self.process_neuron_section(
-                    p,
-                    &mut inputs,
-                    &mut outputs,
-                    &mut let_bindings,
-                    &mut set_bindings,
-                    &mut context_bindings,
-                    &mut connections,
-                    &mut impl_ref,
-                )?;
+                self.process_neuron_section(p, &mut state)?;
             }
             next = inner.next();
         }
 
         // Construct body
-        let body = if let Some(impl_ref_val) = impl_ref {
+        let body = if let Some(impl_ref_val) = state.impl_ref {
             NeuronBody::Primitive(impl_ref_val)
         } else {
             NeuronBody::Graph {
-                let_bindings,
-                set_bindings,
-                context_bindings,
-                connections,
+                let_bindings: state.let_bindings,
+                set_bindings: state.set_bindings,
+                context_bindings: state.context_bindings,
+                connections: state.connections,
             }
         };
 
@@ -167,8 +163,8 @@ impl AstBuilder {
         Ok(NeuronDef {
             name,
             params,
-            inputs,
-            outputs,
+            inputs: state.inputs,
+            outputs: state.outputs,
             body,
             max_cycle_depth,
         })
@@ -178,13 +174,7 @@ impl AstBuilder {
     fn process_neuron_section(
         &mut self,
         pair: Pair<Rule>,
-        inputs: &mut Vec<Port>,
-        outputs: &mut Vec<Port>,
-        let_bindings: &mut Vec<Binding>,
-        set_bindings: &mut Vec<Binding>,
-        context_bindings: &mut Vec<Binding>,
-        connections: &mut Vec<Connection>,
-        impl_ref: &mut Option<ImplRef>,
+        state: &mut NeuronBuilderState,
     ) -> Result<(), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::neuron_section);
 
@@ -193,30 +183,30 @@ impl AstBuilder {
         match section.as_rule() {
             Rule::in_section => {
                 let ports = self.build_in_section(section)?;
-                inputs.extend(ports);
+                state.inputs.extend(ports);
             }
             Rule::out_section => {
                 let ports = self.build_out_section(section)?;
-                outputs.extend(ports);
+                state.outputs.extend(ports);
             }
             Rule::let_section => {
                 let bindings = self.build_let_section(section)?;
-                let_bindings.extend(bindings);
+                state.let_bindings.extend(bindings);
             }
             Rule::set_section => {
                 let bindings = self.build_set_section(section)?;
-                set_bindings.extend(bindings);
+                state.set_bindings.extend(bindings);
             }
             Rule::context_section => {
                 let bindings = self.build_context_section(section)?;
-                context_bindings.extend(bindings);
+                state.context_bindings.extend(bindings);
             }
             Rule::graph_section => {
                 let conns = self.build_graph_section(section)?;
-                connections.extend(conns);
+                state.connections.extend(conns);
             }
             Rule::impl_section => {
-                *impl_ref = Some(self.build_impl_section(section)?);
+                state.impl_ref = Some(self.build_impl_section(section)?);
             }
             _ => {}
         }

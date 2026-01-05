@@ -1,10 +1,7 @@
-//! NeuroScript Parser Core
-//!
-//! Recursive descent parser implementation with good error messages.
-
 use crate::interfaces::*;
-use crate::interfaces::{Lexer, Token, TokenKind};
 use miette::SourceSpan;
+
+type CallArgs = (Vec<Value>, Vec<(String, Value)>);
 
 impl ParseError {
     pub fn span(&self) -> SourceSpan {
@@ -849,7 +846,7 @@ impl Parser {
     }
 
     // arg, arg, name=arg, ...
-    fn call_args(&mut self) -> Result<(Vec<Value>, Vec<(String, Value)>), ParseError> {
+    fn call_args(&mut self) -> Result<CallArgs, ParseError> {
         let mut args = vec![];
         let mut kwargs = vec![];
 

@@ -1,223 +1,275 @@
 use crate::interfaces::*;
+use std::collections::HashMap;
 
 impl InferenceContext {
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn resolve_dim(&self, dim: &Dim) -> Option<usize> {
-        match dim {
-            Dim::Literal(n) => Some(*n as usize),
-            Dim::Named(name) => self.resolved_dims.get(name).copied(),
-            Dim::Expr(expr) => self.evaluate_expr(expr),
-            _ => None,
+        InferenceContext {
+            node_outputs: HashMap::new(),
+            call_outputs: HashMap::new(),
+            resolved_dims: HashMap::new(),
+            resolved_variadics: HashMap::new(),
+            pending_constraints: Vec::new(),
+            equivalences: HashMap::new(),
         }
     }
 
-    pub fn evaluate_expr(&self, expr: &DimExpr) -> Option<usize> {
-        let left = self.resolve_dim(&expr.left)?;
-        let right = self.resolve_dim(&expr.right)?;
-
-        match expr.op {
-            BinOp::Add => Some(left + right),
-            BinOp::Sub => Some(left.checked_sub(right)?),
-            BinOp::Mul => Some(left * right),
-            BinOp::Div => Some(left / right),
-            _ => None,
+    /// Register a solved dimension value
+    pub fn resolve_dim(&mut self, name: String, value: usize) -> Result<(), String> {
+        if let Some(existing) = self.resolved_dims.get(&name) {
+            if *existing != value {
+                return Err(format!(
+                    "Dimension mismatch: {} already resolved to {}, but now trying to set to {}",
+                    name, existing, value
+                ));
+            }
         }
-    }
-
-    pub fn unify(&mut self, d1: &Dim, d2: &Dim) -> Result<(), String> {
-        match (d1, d2) {
-            (Dim::Literal(v1), Dim::Literal(v2)) => {
-                if v1 != v2 {
-                    return Err(format!("Literal mismatch: {} != {}", v1, v2));
-                }
-            }
-            (Dim::Named(n1), Dim::Named(n2)) => {
-                if n1 != n2 {
-                    let v1 = self.resolved_dims.get(n1);
-                    let v2 = self.resolved_dims.get(n2);
-
-                    if let (Some(val1), Some(val2)) = (v1, v2) {
-                        if val1 != val2 {
-                            return Err(format!(
-                                "Variable mismatch: {}={} != {}={}",
-                                n1, val1, n2, val2
-                            ));
-                        }
-                    } else if let Some(val) = v1 {
-                        self.resolved_dims.insert(n2.clone(), *val);
-                    } else if let Some(val) = v2 {
-                        self.resolved_dims.insert(n1.clone(), *val);
-                    }
-                }
-            }
-            (Dim::Named(n), Dim::Literal(v)) | (Dim::Literal(v), Dim::Named(n)) => {
-                if let Some(current) = self.resolved_dims.get(n) {
-                    if *current != *v as usize {
-                        return Err(format!(
-                            "Variable {} already bound to {}, cannot bind to {}",
-                            n, current, v
-                        ));
-                    }
-                } else {
-                    self.resolved_dims.insert(n.clone(), *v as usize);
-                }
-            }
-            // Unify expressions - try to solve for unknowns
-            (Dim::Expr(expr), Dim::Literal(v)) | (Dim::Literal(v), Dim::Expr(expr)) => {
-                // Try to solve the expression backwards
-                self.solve_expr_for_unknown(expr, *v as usize)?;
-            }
-            (Dim::Expr(expr), Dim::Named(name)) | (Dim::Named(name), Dim::Expr(expr)) => {
-                // If the named dim is resolved, try to solve the expression
-                if let Some(value) = self.resolved_dims.get(name).copied() {
-                    self.solve_expr_for_unknown(expr, value)?;
-                }
-            }
-            (Dim::Expr(e1), Dim::Expr(e2)) => {
-                // Both are expressions - try to evaluate both and unify results
-                let v1 = self.evaluate_expr(e1);
-                let v2 = self.evaluate_expr(e2);
-                if let (Some(val1), Some(val2)) = (v1, v2) {
-                    if val1 != val2 {
-                        return Err(format!(
-                            "Expression mismatch: {} = {} != {} = {}",
-                            self.format_expr(e1),
-                            val1,
-                            self.format_expr(e2),
-                            val2
-                        ));
-                    }
-                }
-                // Otherwise, we can't unify them yet
-            }
-            _ => {}
-        }
+        self.resolved_dims.insert(name, value);
         Ok(())
     }
 
-    /// Attempt to solve an expression for an unknown variable
-    /// For example: if expr is "dim * 4" and target is 2048, solve for dim = 512
+    /// Try to unify two dimensions, possibly solving for unknowns
+    pub fn unify(&mut self, d1: &Dim, d2: &Dim) -> Result<(), String> {
+        match (d1, d2) {
+            (Dim::Literal(n1), Dim::Literal(n2)) => {
+                if n1 != n2 {
+                    return Err(format!("Literal dimension mismatch: {} != {}", n1, n2));
+                }
+                Ok(())
+            }
+            (Dim::Literal(n), Dim::Named(name)) | (Dim::Named(name), Dim::Literal(n)) => {
+                self.resolve_dim(name.clone(), *n as usize)
+            }
+            (Dim::Named(n1), Dim::Named(n2)) => {
+                let v1 = self.resolved_dims.get(n1).copied();
+                let v2 = self.resolved_dims.get(n2).copied();
+                match (v1, v2) {
+                    (Some(val1), Some(val2)) => {
+                        if val1 != val2 {
+                            return Err(format!("Named dimension mismatch: {} != {}", val1, val2));
+                        }
+                        Ok(())
+                    }
+                    (Some(val), None) => self.resolve_dim(n2.clone(), val),
+                    (None, Some(val)) => self.resolve_dim(n1.clone(), val),
+                    (None, None) => {
+                        // Both unknown - for now, we just record they must be equal
+                        // In a more advanced engine, we'd use a Union-Find
+                        self.equivalences.insert(n1.clone(), n2.clone());
+                        Ok(())
+                    }
+                }
+            }
+            (Dim::Literal(n), Dim::Expr(expr)) | (Dim::Expr(expr), Dim::Literal(n)) => {
+                self.solve_expr_for_unknown(expr, *n as usize)
+            }
+            (Dim::Wildcard, _) | (_, Dim::Wildcard) => Ok(()), // Wildcard matches anything
+            _ => {
+                // TODO: Handle more complex unifications (e.g. named vs expr)
+                Ok(())
+            }
+        }
+    }
+
+    /// Solve for an unknown in a DimExpr given a target value
     pub(crate) fn solve_expr_for_unknown(
         &mut self,
         expr: &DimExpr,
         target: usize,
     ) -> Result<(), String> {
-        // Try to solve for the left operand
-        if let Dim::Named(left_name) = &expr.left {
-            if !self.resolved_dims.contains_key(left_name) {
-                if let Some(right_val) = self.resolve_dim(&expr.right) {
-                    // Solve: left op right = target  =>  left = target inv_op right
-                    let left_val = match expr.op {
-                        BinOp::Mul => {
-                            if target % right_val != 0 {
-                                return Err(format!(
-                                    "Cannot solve {} * {} = {}: {} is not divisible by {}",
-                                    left_name, right_val, target, target, right_val
-                                ));
-                            }
-                            target / right_val
+        match (&expr.left, &expr.right) {
+            (Dim::Named(left_name), Dim::Literal(right_val)) => {
+                // Solve: left op right = target
+                match expr.op {
+                    BinOp::Add => {
+                        if target >= *right_val as usize {
+                            self.resolve_dim(left_name.clone(), target - *right_val as usize)
+                        } else {
+                            Err(format!(
+                                "Illegal negative dimension: {} + {} = {}",
+                                left_name, right_val, target
+                            ))
                         }
-                        BinOp::Div => target * right_val,
-                        BinOp::Add => {
-                            if target < right_val {
-                                return Err(format!(
-                                    "Cannot solve {} + {} = {}: result would be negative",
-                                    left_name, right_val, target
-                                ));
-                            }
-                            target - right_val
+                    }
+                    BinOp::Sub => self.resolve_dim(left_name.clone(), target + *right_val as usize),
+                    BinOp::Mul => {
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target % (*right_val as usize) != 0 {
+                            return Err(format!(
+                                "Cannot solve {} * {} = {}: {} is not divisible by {}",
+                                left_name, right_val, target, target, right_val
+                            ));
                         }
-                        BinOp::Sub => target + right_val,
-                        _ => return Ok(()), // Can't solve for other ops yet
-                    };
-                    self.resolved_dims.insert(left_name.clone(), left_val);
-                    return Ok(());
+                        self.resolve_dim(left_name.clone(), target / (*right_val as usize))
+                    }
+                    BinOp::Div => {
+                        self.resolve_dim(left_name.clone(), target * (*right_val as usize))
+                    }
+                    _ => Ok(()), // TODO
                 }
             }
-        }
-
-        // Try to solve for the right operand
-        if let Dim::Named(right_name) = &expr.right {
-            if !self.resolved_dims.contains_key(right_name) {
-                if let Some(left_val) = self.resolve_dim(&expr.left) {
-                    // Solve: left op right = target  =>  right = ...
-                    let right_val = match expr.op {
-                        BinOp::Mul => {
-                            if target % left_val != 0 {
-                                return Err(format!(
-                                    "Cannot solve {} * {} = {}: {} is not divisible by {}",
-                                    left_val, right_name, target, target, left_val
-                                ));
-                            }
-                            target / left_val
+            (Dim::Literal(left_val), Dim::Named(right_name)) => {
+                // Solve: left op right = target
+                match expr.op {
+                    BinOp::Add => {
+                        if target >= *left_val as usize {
+                            self.resolve_dim(right_name.clone(), target - *left_val as usize)
+                        } else {
+                            Err(format!(
+                                "Illegal negative dimension: {} + {} = {}",
+                                left_val, right_name, target
+                            ))
                         }
-                        BinOp::Div => {
-                            if left_val % target != 0 {
-                                return Err(format!(
-                                    "Cannot solve {} / {} = {}: {} is not divisible by {}",
-                                    left_val, right_name, target, left_val, target
-                                ));
-                            }
-                            left_val / target
+                    }
+                    BinOp::Sub => {
+                        // left - right = target  =>  right = left - target
+                        if *left_val as usize >= target {
+                            self.resolve_dim(right_name.clone(), *left_val as usize - target)
+                        } else {
+                            Err(format!(
+                                "Illegal negative dimension: {} - {} = {}",
+                                left_val, right_name, target
+                            ))
                         }
-                        BinOp::Add => {
-                            if target < left_val {
-                                return Err(format!(
-                                    "Cannot solve {} + {} = {}: result would be negative",
-                                    left_val, right_name, target
-                                ));
-                            }
-                            target - left_val
+                    }
+                    BinOp::Mul => {
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target % (*left_val as usize) != 0 {
+                            return Err(format!(
+                                "Cannot solve {} * {} = {}: {} is not divisible by {}",
+                                left_val, right_name, target, target, left_val
+                            ));
                         }
-                        BinOp::Sub => {
-                            if left_val < target {
-                                return Err(format!(
-                                    "Cannot solve {} - {} = {}: result would be negative",
-                                    left_val, right_name, target
-                                ));
-                            }
-                            left_val - target
+                        self.resolve_dim(right_name.clone(), target / (*left_val as usize))
+                    }
+                    BinOp::Div => {
+                        // left / right = target  =>  right = left / target
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target != 0 && (*left_val as usize) % target == 0 {
+                            self.resolve_dim(right_name.clone(), (*left_val as usize) / target)
+                        } else {
+                            Ok(())
                         }
-                        _ => return Ok(()), // Can't solve for other ops yet
-                    };
-                    self.resolved_dims.insert(right_name.clone(), right_val);
-                    return Ok(());
+                    }
+                    _ => Ok(()), // TODO
                 }
             }
-        }
+            // Solve recursive expressions
+            (Dim::Expr(left_expr), Dim::Literal(right_val)) => {
+                // Solve: left op right = target  =>  left = target inv_op right
+                let left_val = match expr.op {
+                    BinOp::Add => {
+                        if target >= *right_val as usize {
+                            Some(target - *right_val as usize)
+                        } else {
+                            None
+                        }
+                    }
+                    BinOp::Sub => Some(target + *right_val as usize),
+                    BinOp::Mul => {
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target % (*right_val as usize) != 0 {
+                            return Err(format!(
+                                "Cannot solve expr * {} = {}: {} is not divisible by {}",
+                                right_val, target, target, right_val
+                            ));
+                        }
+                        Some(target / (*right_val as usize))
+                    }
+                    BinOp::Div => Some(target * (*right_val as usize)),
+                    _ => None,
+                };
 
-        Ok(())
+                if let Some(val) = left_val {
+                    self.solve_expr_for_unknown(left_expr, val)
+                } else {
+                    Ok(()) // or error
+                }
+            }
+            (Dim::Literal(left_val), Dim::Expr(right_expr)) => {
+                // Solve: left op right = target  =>  right = ...
+                let right_val = match expr.op {
+                    BinOp::Add => {
+                        if target >= *left_val as usize {
+                            Some(target - *left_val as usize)
+                        } else {
+                            None
+                        }
+                    }
+                    BinOp::Sub => {
+                        if *left_val as usize >= target {
+                            Some(*left_val as usize - target)
+                        } else {
+                            None
+                        }
+                    }
+                    BinOp::Mul => {
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target % (*left_val as usize) != 0 {
+                            return Err(format!(
+                                "Cannot solve {} * expr = {}: {} is not divisible by {}",
+                                left_val, target, target, left_val
+                            ));
+                        }
+                        Some(target / (*left_val as usize))
+                    }
+                    BinOp::Div =>
+                    {
+                        #[allow(clippy::manual_is_multiple_of)]
+                        if target != 0 && (*left_val as usize) % target == 0 {
+                            Some((*left_val as usize) / target)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(val) = right_val {
+                    self.solve_expr_for_unknown(right_expr, val)
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()), // Too complex to solve for now
+        }
     }
 
-    fn format_expr(&self, expr: &DimExpr) -> String {
-        format!(
-            "{} {} {}",
-            expr.left,
-            match expr.op {
-                BinOp::Add => "+",
-                BinOp::Sub => "-",
-                BinOp::Mul => "*",
-                BinOp::Div => "/",
-                _ => "?",
-            },
-            expr.right
-        )
+    /// Evaluate a DimExpr with current resolved dimensions
+    pub fn evaluate_expr(&self, expr: &DimExpr) -> Option<usize> {
+        let left = match &expr.left {
+            Dim::Literal(n) => Some(*n as usize),
+            Dim::Named(name) => self.resolved_dims.get(name).copied(),
+            Dim::Expr(e) => self.evaluate_expr(e),
+            _ => None,
+        }?;
+        let right = match &expr.right {
+            Dim::Literal(n) => Some(*n as usize),
+            Dim::Named(name) => self.resolved_dims.get(name).copied(),
+            Dim::Expr(e) => self.evaluate_expr(e),
+            _ => None,
+        }?;
+        match expr.op {
+            BinOp::Add => Some(left + right),
+            BinOp::Sub => left.checked_sub(right),
+            BinOp::Mul => Some(left * right),
+            BinOp::Div => left.checked_div(right),
+            _ => None,
+        }
     }
 }
+
+#[derive(Default)]
 pub struct ShapeInferenceEngine;
 
 impl ShapeInferenceEngine {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
     pub fn infer(&mut self, program: &Program) -> Result<(), Vec<ShapeError>> {
         let mut errors = Vec::new();
 
-        for (_name, neuron) in &program.neurons {
+        for neuron in program.neurons.values() {
             if let Err(e) = self.infer_neuron(neuron, program) {
                 errors.push(e);
             }
@@ -251,7 +303,7 @@ impl ShapeInferenceEngine {
             .insert("in".to_string(), input_shapes.clone());
 
         // Also register individual input ports if they are named
-        for (_i, port) in neuron.inputs.iter().enumerate() {
+        for port in &neuron.inputs {
             if port.name != "default" {
                 ctx.node_outputs
                     .insert(port.name.clone(), vec![port.shape.clone()]);
@@ -282,24 +334,21 @@ impl ShapeInferenceEngine {
         );
 
         // 1. Resolve source shapes
-        let source_shapes = self
-            .resolve_endpoint_shape(&conn.source, ctx, program)
-            .map_err(|e| {
-                // Add connection context to error
-                match e {
-                    ShapeError::UnknownNode(node) => ShapeError::UnknownNode(format!(
-                        "{} (in connection: {})",
-                        node, conn_context
-                    )),
-                    ShapeError::NodeInferenceFailed { node, message } => {
-                        ShapeError::NodeInferenceFailed {
-                            node,
-                            message: format!("{} (in connection: {})", message, conn_context),
-                        }
-                    }
-                    _ => e,
+        let source_shapes = resolve_endpoint_shape(&conn.source, ctx, program).map_err(|e| {
+            // Add connection context to error
+            match e {
+                ShapeError::UnknownNode(node) => {
+                    ShapeError::UnknownNode(format!("{} (in connection: {})", node, conn_context))
                 }
-            })?;
+                ShapeError::NodeInferenceFailed { node, message } => {
+                    ShapeError::NodeInferenceFailed {
+                        node,
+                        message: format!("{} (in connection: {})", message, conn_context),
+                    }
+                }
+                _ => e,
+            }
+        })?;
 
         // 2. Validate and process destination
         match &conn.destination {
@@ -387,11 +436,11 @@ impl ShapeInferenceEngine {
                         // Named port access - validate it exists
                         // For now, just store with the node name
                         ctx.node_outputs
-                            .insert(port_ref.node.clone(), source_shapes);
+                            .insert(port_ref.node.clone(), source_shapes.to_vec());
                     } else {
                         // Default port
                         ctx.node_outputs
-                            .insert(port_ref.node.clone(), source_shapes);
+                            .insert(port_ref.node.clone(), source_shapes.to_vec());
                     }
                 }
             }
@@ -424,7 +473,7 @@ impl ShapeInferenceEngine {
                             context: format!(
                                 "Tuple binding {} should be a simple name, not {}",
                                 i,
-                                self.format_port_ref(port_ref)
+                                format_port_ref(port_ref)
                             ),
                         });
                     }
@@ -447,17 +496,21 @@ impl ShapeInferenceEngine {
         &self,
         port_ref: &PortRef,
         _source_shapes: &[Shape],
-        _ctx: &mut InferenceContext,
+        ctx: &InferenceContext,
         _program: &Program,
     ) -> Result<(), ShapeError> {
-        // For now, basic validation
-        // TODO: Check that if port_ref.port is not "default", the port actually exists on the neuron
+        if port_ref.node == "in" {
+            return Err(ShapeError::ConstraintViolation {
+                message: "Cannot use 'in' as connection destination".to_string(),
+                context: format!("Port reference: {}", format_port_ref(port_ref)),
+            });
+        }
 
-        if port_ref.port != "default" {
-            // Named port access - in a destination context, this is unusual
-            // Typically you'd see this in a source context like "fork.left"
-            // In a destination, it means we're assigning to a specific port
-            // For MVP, allow it but don't validate port existence yet
+        // Check for multiple assignments?
+        if let Some(_existing) = ctx.node_outputs.get(&port_ref.node) {
+            // Multiple assignments are allowed and result in unification?
+            // Or only one source per node is allowed?
+            // NeuroScript currently allows multiple sources resulting in a cycle check.
         }
 
         Ok(())
@@ -470,61 +523,45 @@ impl ShapeInferenceEngine {
         ctx: &mut InferenceContext,
         program: &Program,
     ) -> Result<(), ShapeError> {
-        if source_shapes.len() != 1 {
-            return Err(ShapeError::ConstraintViolation {
-                message: format!(
-                    "Match expression requires exactly one input, got {}",
-                    source_shapes.len()
-                ),
-                context: "Match expression validation".to_string(),
-            });
-        }
-
-        let source_shape = &source_shapes[0];
         let mut output_shapes = Vec::new();
 
-        // Validate each arm
-        for (arm_idx, arm) in arms.iter().enumerate() {
-            // Fork context for this arm to avoid cross-contamination
+        for arm in arms {
+            // Each arm gets its own isolated context for capture
             let mut arm_ctx = ctx.clone();
 
-            // Unify pattern with source shape and bind captured dimensions
-            self.unify_pattern_with_shape(&arm.pattern, source_shape, &mut arm_ctx)
-                .map_err(|e| ShapeError::ConstraintViolation {
-                    message: format!("Match arm {} pattern mismatch: {}", arm_idx, e),
-                    context: format!("Pattern: {}, Source: {}", arm.pattern, source_shape),
-                })?;
-
-            // Validate guard expression if present
-            if let Some(guard) = &arm.guard {
-                self.validate_guard_expr(guard, &arm_ctx).map_err(|e| {
-                    ShapeError::ConstraintViolation {
-                        message: format!("Match arm {} guard error: {}", arm_idx, e),
-                        context: format!("Guard in pattern: {}", arm.pattern),
-                    }
-                })?;
+            // Source shapes must be unifiable with match pattern
+            // Combine all source shapes into a single pattern match?
+            // Match expressions often take a single input.
+            if source_shapes.is_empty() {
+                return Err(ShapeError::Mismatch {
+                    expected: arm.pattern.clone(),
+                    got: Shape::new(vec![]),
+                    context: "Match source produces no output".to_string(),
+                });
             }
 
-            // Validate each endpoint in the pipeline with the forked context
-            let mut current_shapes = vec![source_shape.clone()];
-            for (ep_idx, endpoint) in arm.pipeline.iter().enumerate() {
-                // Create a temporary connection for validation
+            // Unify with ARM pattern
+            self.unify_pattern_with_shape(&arm.pattern, &source_shapes[0], &mut arm_ctx)
+                .map_err(|msg| ShapeError::ConstraintViolation {
+                    message: format!("Pattern mismatch in match arm: {}", msg),
+                    context: format!(
+                        "Pattern: {}\nSource shape: {}",
+                        arm.pattern, source_shapes[0]
+                    ),
+                })?;
+
+            // Track current output shapes as we walk the arm pipeline
+            let mut current_shapes = source_shapes.to_vec();
+
+            for endpoint in &arm.pipeline {
+                // Synthesize a connection from previous output to this endpoint
                 let temp_conn = Connection {
-                    source: if ep_idx == 0 {
-                        Endpoint::Ref(PortRef::new("in"))
-                    } else {
-                        // Use a dummy ref - we track shapes in current_shapes
-                        Endpoint::Ref(PortRef::new("_temp"))
-                    },
+                    source: Endpoint::Ref(PortRef::new("_temp")), // Dummy source
                     destination: endpoint.clone(),
                 };
 
-                // Register current shapes in context
-                if ep_idx == 0 {
-                    arm_ctx
-                        .node_outputs
-                        .insert("in".to_string(), current_shapes.clone());
-                } else {
+                // Inject current_shapes into context for the dummy source
+                {
                     arm_ctx
                         .node_outputs
                         .insert("_temp".to_string(), current_shapes.clone());
@@ -534,7 +571,7 @@ impl ShapeInferenceEngine {
                 self.check_connection(&temp_conn, &mut arm_ctx, program)?;
 
                 // Get output shapes from this endpoint
-                current_shapes = self.resolve_match_endpoint(endpoint, &arm_ctx, program)?;
+                current_shapes = resolve_match_endpoint(endpoint, &arm_ctx, program)?;
             }
 
             // Collect output shape from this arm
@@ -587,253 +624,27 @@ impl ShapeInferenceEngine {
             );
         }
 
-        // Check rank matches for non-variadic patterns
-        if pattern.dims.len() != concrete.dims.len() {
+        if pattern.rank() != concrete.rank() {
             return Err(format!(
-                "Rank mismatch: pattern has {} dimensions, shape has {}",
-                pattern.dims.len(),
-                concrete.dims.len()
+                "Rank mismatch: pattern rank {}, concrete rank {}",
+                pattern.rank(),
+                concrete.rank()
             ));
         }
 
-        // Unify each dimension
-        for (i, (pat_dim, conc_dim)) in pattern.dims.iter().zip(concrete.dims.iter()).enumerate() {
-            match (pat_dim, conc_dim) {
-                (Dim::Wildcard, _) => {
-                    // Wildcard matches anything, no binding
-                    continue;
-                }
-                (Dim::Literal(_lit), _) => {
-                    // Literal must match exactly - use unify to check
-                    ctx.unify(pat_dim, conc_dim)
-                        .map_err(|e| format!("Dimension {} mismatch: {}", i, e))?;
-                }
-                (Dim::Named(name), _) => {
-                    // Named dimension: bind it if not already bound
-                    ctx.unify(pat_dim, conc_dim)
-                        .map_err(|e| format!("Dimension {} ({}): {}", i, name, e))?;
-                }
-                (Dim::Expr(_), _) => {
-                    // Expression in pattern - unify it
-                    ctx.unify(pat_dim, conc_dim)
-                        .map_err(|e| format!("Dimension {} expression mismatch: {}", i, e))?;
-                }
-                (Dim::Variadic(_), _) => {
-                    // Shouldn't reach here if has_variadic check worked
-                    unreachable!("Variadic should have been handled above")
-                }
-            }
+        for (pat_dim, conc_dim) in pattern.dims.iter().zip(concrete.dims.iter()) {
+            ctx.unify(pat_dim, conc_dim)?;
         }
 
         Ok(())
     }
 
-    /// Validate a guard expression can be evaluated
-    fn validate_guard_expr(&self, _guard: &Value, _ctx: &InferenceContext) -> Result<(), String> {
-        // For MVP, assume guard is valid if it compiles
-        // TODO: Check that all referenced names are either:
-        // 1. Captured dimensions (in ctx.resolved_dims)
-        // 2. Neuron parameters
-        Ok(())
+    pub(crate) fn has_variadic(&self, s: &Shape) -> bool {
+        s.dims.iter().any(|d| matches!(d, Dim::Variadic(_)))
     }
 
-    /// Resolve the output shapes of a match endpoint
-    fn resolve_match_endpoint(
-        &self,
-        endpoint: &Endpoint,
-        ctx: &InferenceContext,
-        program: &Program,
-    ) -> Result<Vec<Shape>, ShapeError> {
-        match endpoint {
-            Endpoint::Ref(port_ref) => {
-                // Look up the output shape for this reference
-                if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
-                    Ok(shapes.clone())
-                } else {
-                    Err(ShapeError::UnknownNode(format!(
-                        "Unknown node '{}' in match pipeline",
-                        port_ref.node
-                    )))
-                }
-            }
-            Endpoint::Call { name, id, .. } => {
-                // Look up output from call_outputs
-                if let Some(shapes) = ctx.call_outputs.get(id) {
-                    Ok(shapes.clone())
-                } else {
-                    // Get output shapes from neuron definition
-                    if let Some(neuron) = program.neurons.get(name) {
-                        Ok(neuron.outputs.iter().map(|p| p.shape.clone()).collect())
-                    } else {
-                        Err(ShapeError::UnknownNode(format!(
-                            "Unknown neuron '{}' in match pipeline",
-                            name
-                        )))
-                    }
-                }
-            }
-            Endpoint::Tuple(refs) => {
-                let mut shapes = Vec::new();
-                for r in refs {
-                    let s = self.resolve_match_endpoint(&Endpoint::Ref(r.clone()), ctx, program)?;
-                    shapes.extend(s);
-                }
-                Ok(shapes)
-            }
-            Endpoint::Match(_) => Err(ShapeError::UnsupportedFeature(
-                "Nested match expressions not yet supported".to_string(),
-            )),
-        }
-    }
-
-    /// Check if two shapes are compatible (can be unified)
-    pub(crate) fn shapes_compatible(&self, s1: &Shape, s2: &Shape) -> bool {
-        // Create a temporary context for testing
-        let mut test_ctx = InferenceContext::new();
-        self.unify_shapes(s1, s2, &mut test_ctx).is_ok()
-    }
-
-    fn format_endpoint(&self, ep: &Endpoint) -> String {
-        match ep {
-            Endpoint::Ref(r) => self.format_port_ref(r),
-            Endpoint::Call { name, .. } => format!("{}()", name),
-            Endpoint::Tuple(refs) => format!(
-                "({})",
-                refs.iter()
-                    .map(|r| r.node.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Endpoint::Match(_) => "match".to_string(),
-        }
-    }
-
-    fn format_port_ref(&self, r: &PortRef) -> String {
-        if r.port != "default" {
-            format!("{}.{}", r.node, r.port)
-        } else {
-            r.node.clone()
-        }
-    }
-
-    fn resolve_endpoint_shape(
-        &self,
-        endpoint: &Endpoint,
-        ctx: &InferenceContext,
-        _program: &Program,
-    ) -> Result<Vec<Shape>, ShapeError> {
-        match endpoint {
-            Endpoint::Ref(port_ref) => {
-                if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
-                    // TODO: Handle port_ref.port selection
-                    Ok(shapes.clone())
-                } else {
-                    Err(ShapeError::UnknownNode(port_ref.node.clone()))
-                }
-            }
-            Endpoint::Call { id, .. } => {
-                if let Some(shapes) = ctx.call_outputs.get(id) {
-                    Ok(shapes.clone())
-                } else {
-                    // This happens if we try to read from a Call that hasn't been processed as a destination yet?
-                    // But connections are ordered?
-                    // Or if it's a source-only call (generator)?
-                    // If it's a source, we need to instantiate it and get outputs.
-                    // But we don't have inputs to unify.
-                    // TODO: Handle source calls
-                    Ok(vec![])
-                }
-            }
-            Endpoint::Tuple(refs) => {
-                let mut shapes = Vec::new();
-                for r in refs {
-                    let s =
-                        self.resolve_endpoint_shape(&Endpoint::Ref(r.clone()), ctx, _program)?;
-                    shapes.extend(s);
-                }
-                Ok(shapes)
-            }
-            Endpoint::Match(_) => Ok(vec![]), // TODO
-        }
-    }
-
-    pub(crate) fn unify_shapes(
-        &self,
-        s1: &Shape,
-        s2: &Shape,
-        ctx: &mut InferenceContext,
-    ) -> Result<(), String> {
-        // Handle variadic dimensions first
-        if self.has_variadic(s1) || self.has_variadic(s2) {
-            return self.unify_shapes_with_variadic(s1, s2, ctx);
-        }
-
-        // Handle wildcards
-        if self.has_wildcard(s1) || self.has_wildcard(s2) {
-            return self.unify_shapes_with_wildcard(s1, s2, ctx);
-        }
-
-        // No wildcards or variadics - strict rank check
-        if s1.dims.len() != s2.dims.len() {
-            return Err(format!(
-                "Rank mismatch: {} (rank {}) vs {} (rank {})",
-                s1,
-                s1.dims.len(),
-                s2,
-                s2.dims.len()
-            ));
-        }
-
-        // Unify dimension by dimension
-        for (i, (d1, d2)) in s1.dims.iter().zip(s2.dims.iter()).enumerate() {
-            ctx.unify(d1, d2).map_err(|e| {
-                format!(
-                    "Dimension {} mismatch: {} - in shapes {} vs {}",
-                    i, e, s1, s2
-                )
-            })?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn has_wildcard(&self, shape: &Shape) -> bool {
-        shape.dims.iter().any(|d| matches!(d, Dim::Wildcard))
-    }
-
-    pub(crate) fn has_variadic(&self, shape: &Shape) -> bool {
-        shape.dims.iter().any(|d| matches!(d, Dim::Variadic(_)))
-    }
-
-    fn unify_shapes_with_wildcard(
-        &self,
-        s1: &Shape,
-        s2: &Shape,
-        ctx: &mut InferenceContext,
-    ) -> Result<(), String> {
-        if s1.dims.len() != s2.dims.len() {
-            return Err(format!(
-                "Rank mismatch even with wildcards: {} (rank {}) vs {} (rank {})",
-                s1,
-                s1.dims.len(),
-                s2,
-                s2.dims.len()
-            ));
-        }
-
-        for (i, (d1, d2)) in s1.dims.iter().zip(s2.dims.iter()).enumerate() {
-            if matches!(d1, Dim::Wildcard) || matches!(d2, Dim::Wildcard) {
-                continue;
-            }
-
-            ctx.unify(d1, d2).map_err(|e| {
-                format!(
-                    "Dimension {} mismatch: {} - in shapes {} vs {}",
-                    i, e, s1, s2
-                )
-            })?;
-        }
-
-        Ok(())
+    pub(crate) fn has_wildcard(&self, s: &Shape) -> bool {
+        s.dims.iter().any(|d| matches!(d, Dim::Wildcard))
     }
 
     fn unify_shapes_with_variadic(
@@ -951,47 +762,49 @@ impl ShapeInferenceEngine {
                 .map_err(|e| format!("Suffix dimension {} mismatch: {}", i, e))?;
         }
 
-        // Capture variadic dimensions
-        if let Some(Dim::Variadic(name)) = pattern.dims.get(variadic_pos) {
-            let captured_dims = concrete.dims[prefix_len..concrete_suffix_start].to_vec();
+        // Capture variadic segment
+        if let Dim::Variadic(name) = &pattern.dims[variadic_pos] {
+            let variadic_dims = &concrete.dims[prefix_len..concrete_suffix_start];
+            let segment = variadic_dims.to_vec();
 
-            // Should check if already bound to ensure consistency
-            // Need to handle borrow checker carefully
-            let existing_dims = ctx.resolved_variadics.get(name).cloned();
-
-            if let Some(existing) = existing_dims {
-                if existing.len() != captured_dims.len() {
-                    return Err(format!(
-                        "Variadic binding mismatch for {}: captured {} dims vs previous {}",
-                        name,
-                        captured_dims.len(),
-                        existing.len()
-                    ));
+            if let Some(existing) = ctx.resolved_variadics.get(name) {
+                // If already bound, they must be equal (or at least same rank and compatible)
+                if existing.len() != segment.len() {
+                    return Err(format!("Variadic binding mismatch for {}: existing variant rank {}, new variant rank {}", name, existing.len(), segment.len()));
                 }
-                for (i, (d1, d2)) in existing.iter().zip(captured_dims.iter()).enumerate() {
-                    ctx.unify(d1, d2)
-                        .map_err(|e| format!("Variadic binding dim {} mismatch: {}", i, e))?;
-                }
+                // TODO: Deep unification of variadic segments
             } else {
-                ctx.resolved_variadics.insert(name.clone(), captured_dims);
+                ctx.resolved_variadics.insert(name.clone(), segment);
             }
         }
 
         Ok(())
     }
 
-    /// Substitute captured variadics into a shape
     fn substitute_variadics(&self, shape: &Shape, ctx: &InferenceContext) -> Shape {
         let mut new_dims = Vec::new();
 
         for dim in &shape.dims {
             match dim {
                 Dim::Variadic(name) => {
-                    if let Some(captured) = ctx.resolved_variadics.get(name) {
-                        new_dims.extend(captured.clone());
+                    if let Some(segment) = ctx.resolved_variadics.get(name) {
+                        new_dims.extend(segment.clone());
                     } else {
-                        // Not captured? Keep as is or handle error?
-                        // For now keep as is, it might be resolved later or valid to keep
+                        new_dims.push(dim.clone());
+                    }
+                }
+                Dim::Expr(expr) => {
+                    // Try to evaluate expression
+                    if let Some(val) = ctx.evaluate_expr(expr) {
+                        new_dims.push(Dim::Literal(val as i64));
+                    } else {
+                        new_dims.push(dim.clone());
+                    }
+                }
+                Dim::Named(name) => {
+                    if let Some(val) = ctx.resolved_dims.get(name) {
+                        new_dims.push(Dim::Literal(*val as i64));
+                    } else {
                         new_dims.push(dim.clone());
                     }
                 }
@@ -999,33 +812,84 @@ impl ShapeInferenceEngine {
             }
         }
 
-        Shape { dims: new_dims }
+        Shape::new(new_dims)
     }
 
-    /// Validate shape compatibility between source and destination with detailed context
+    /// Check if two shapes are compatible (can be unified)
+    pub(crate) fn shapes_compatible(&self, s1: &Shape, s2: &Shape) -> bool {
+        // Create a temporary context for testing
+        let mut test_ctx = InferenceContext::new();
+        self.unify_shapes(s1, s2, &mut test_ctx).is_ok()
+    }
+
+    fn format_endpoint(&self, ep: &Endpoint) -> String {
+        match ep {
+            Endpoint::Ref(r) => format_port_ref(r),
+            Endpoint::Call { name, .. } => format!("{}()", name),
+            Endpoint::Tuple(refs) => format!(
+                "({})",
+                refs.iter()
+                    .map(format_port_ref)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Endpoint::Match(_) => "match".to_string(),
+        }
+    }
+
+    pub(crate) fn unify_shapes(
+        &self,
+        s1: &Shape,
+        s2: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), String> {
+        // Handle variadic dimensions first
+        if self.has_variadic(s1) || self.has_variadic(s2) {
+            return self.unify_shapes_with_variadic(s1, s2, ctx);
+        }
+
+        if s1.rank() != s2.rank() {
+            return Err(format!(
+                "Rank mismatch: {} (rank {}) != {} (rank {})",
+                s1,
+                s1.rank(),
+                s2,
+                s2.rank()
+            ));
+        }
+
+        for (d1, d2) in s1.dims.iter().zip(s2.dims.iter()) {
+            ctx.unify(d1, d2)?;
+        }
+
+        Ok(())
+    }
+
     fn validate_connection_shapes(
         &self,
         source: &Shape,
-        dest: &Shape,
+        expected: &Shape,
         ctx: &mut InferenceContext,
         context: &str,
     ) -> Result<(), String> {
-        // Try to unify shapes
-        self.unify_shapes(source, dest, ctx)
-            .map_err(|e| format!("{}\n  Context: {}", e, context))?;
+        self.unify_shapes(source, expected, ctx).map_err(|e| {
+            format!(
+                "{} - Incompatible shapes: {} vs {}\n  Reason: {}",
+                context, source, expected, e
+            )
+        })?;
 
-        // Check for expression constraints that need solving
-        for dim in &dest.dims {
+        // Check expressions
+        for dim in &expected.dims {
             if let Dim::Expr(expr) = dim {
-                self.validate_expr_constraint(expr, ctx, context)?;
+                self.validate_dim_expr(expr, ctx, context)?;
             }
         }
 
         Ok(())
     }
 
-    /// Validate that an expression constraint can be satisfied
-    fn validate_expr_constraint(
+    fn validate_dim_expr(
         &self,
         expr: &DimExpr,
         ctx: &InferenceContext,
@@ -1039,8 +903,8 @@ impl ShapeInferenceEngine {
             }
             None => {
                 // Check if we have enough information to potentially solve it
-                let left_resolvable = self.is_dim_resolvable(&expr.left, ctx);
-                let right_resolvable = self.is_dim_resolvable(&expr.right, ctx);
+                let left_resolvable = is_dim_resolvable(&expr.left, ctx);
+                let right_resolvable = is_dim_resolvable(&expr.right, ctx);
 
                 if !left_resolvable || !right_resolvable {
                     Err(format!(
@@ -1064,38 +928,112 @@ impl ShapeInferenceEngine {
             }
         }
     }
+}
 
-    /// Check if a dimension can be resolved with current context
-    pub(crate) fn is_dim_resolvable(&self, dim: &Dim, ctx: &InferenceContext) -> bool {
-        match dim {
-            Dim::Literal(_) => true,
-            Dim::Named(name) => ctx.resolved_dims.contains_key(name),
-            Dim::Wildcard => true,
-            Dim::Variadic(_) => true,
-            Dim::Expr(expr) => {
-                self.is_dim_resolvable(&expr.left, ctx) && self.is_dim_resolvable(&expr.right, ctx)
+/// Resolve the output shapes of a match endpoint
+fn resolve_match_endpoint(
+    endpoint: &Endpoint,
+    ctx: &InferenceContext,
+    program: &Program,
+) -> Result<Vec<Shape>, ShapeError> {
+    match endpoint {
+        Endpoint::Ref(port_ref) => {
+            // Look up the output shape for this reference
+            if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
+                Ok(shapes.clone())
+            } else {
+                Err(ShapeError::UnknownNode(format!(
+                    "Unknown node '{}' in match pipeline",
+                    port_ref.node
+                )))
             }
         }
+        Endpoint::Call { name, id, .. } => {
+            // Look up output from call_outputs
+            if let Some(shapes) = ctx.call_outputs.get(id) {
+                Ok(shapes.clone())
+            } else {
+                // Get output shapes from neuron definition
+                if let Some(neuron) = program.neurons.get(name) {
+                    Ok(neuron.outputs.iter().map(|p| p.shape.clone()).collect())
+                } else {
+                    Err(ShapeError::UnknownNode(format!(
+                        "Unknown neuron '{}' in match pipeline",
+                        name
+                    )))
+                }
+            }
+        }
+        Endpoint::Tuple(refs) => {
+            let mut shapes = Vec::new();
+            for r in refs {
+                let s = resolve_match_endpoint(&Endpoint::Ref(r.clone()), ctx, program)?;
+                shapes.extend(s);
+            }
+            Ok(shapes)
+        }
+        Endpoint::Match(_) => Err(ShapeError::UnsupportedFeature(
+            "Nested match expressions not yet supported".to_string(),
+        )),
     }
+}
 
-    // /// Validate shape compatibility for a specific operation type
-    // fn validate_shape_compatibility(&self, op: &str, source: &Shape, dest: &Shape, ctx: &mut InferenceContext) -> Result<(), String> {
-    //     match op {
-    //         // Operations that require exact shape match
-    //         "add" | "sub" | "mul" | "div" => {
-    //             self.unify_shapes(source, dest, ctx)?;
-    //         }
-    //         // Operations that support broadcasting
-    //         "broadcast_add" | "broadcast_mul" => {
-    //             // Check if shapes are broadcastable
-    //             // For MVP, just check they unify or one has wildcards
-    //             self.unify_shapes(source, dest, ctx)?;
-    //         }
-    //         // Default: require unification
-    //         _ => {
-    //             self.unify_shapes(source, dest, ctx)?;
-    //         }
-    //     }
-    //     Ok(())
-    // }
+fn format_port_ref(r: &PortRef) -> String {
+    if r.port != "default" {
+        format!("{}.{}", r.node, r.port)
+    } else {
+        r.node.clone()
+    }
+}
+
+fn resolve_endpoint_shape(
+    endpoint: &Endpoint,
+    ctx: &InferenceContext,
+    _program: &Program,
+) -> Result<Vec<Shape>, ShapeError> {
+    match endpoint {
+        Endpoint::Ref(port_ref) => {
+            if let Some(shapes) = ctx.node_outputs.get(&port_ref.node) {
+                // TODO: Handle port_ref.port selection
+                Ok(shapes.clone())
+            } else {
+                Err(ShapeError::UnknownNode(port_ref.node.clone()))
+            }
+        }
+        Endpoint::Call { id, .. } => {
+            if let Some(shapes) = ctx.call_outputs.get(id) {
+                Ok(shapes.clone())
+            } else {
+                // This happens if we try to read from a Call that hasn't been processed as a destination yet?
+                // But connections are ordered?
+                // Or if it's a source-only call (generator)?
+                // If it's a source, we need to instantiate it and get outputs.
+                // But we don't have inputs to unify.
+                // TODO: Handle source calls
+                Ok(vec![])
+            }
+        }
+        Endpoint::Tuple(refs) => {
+            let mut shapes = Vec::new();
+            for r in refs {
+                let s = resolve_endpoint_shape(&Endpoint::Ref(r.clone()), ctx, _program)?;
+                shapes.extend(s);
+            }
+            Ok(shapes)
+        }
+        Endpoint::Match(_) => Ok(vec![]), // TODO
+    }
+}
+
+/// Check if a dimension can be resolved with current context
+pub(crate) fn is_dim_resolvable(dim: &Dim, ctx: &InferenceContext) -> bool {
+    match dim {
+        Dim::Literal(_) => true,
+        Dim::Named(name) => ctx.resolved_dims.contains_key(name),
+        Dim::Wildcard => true,
+        Dim::Variadic(_) => true,
+        Dim::Expr(expr) => {
+            is_dim_resolvable(&expr.left, ctx) && is_dim_resolvable(&expr.right, ctx)
+        }
+    }
 }

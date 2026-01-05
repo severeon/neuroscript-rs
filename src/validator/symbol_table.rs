@@ -32,15 +32,29 @@ impl SymbolTable {
     }
 }
 
+/// Context for partially resolving endpoints during symbol table building
+pub(super) struct ResolutionContext<'a, F>
+where
+    F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
+{
+    pub neuron: &'a NeuronDef,
+    pub program: &'a Program,
+    pub registry: &'a StdlibRegistry,
+    pub substitute_params_fn: F,
+}
+
 /// Build symbol table from connections, tracking intermediate nodes
-pub(super) fn build_symbol_table(
+pub(super) fn build_symbol_table<F>(
     neuron: &NeuronDef,
     connections: &[Connection],
     program: &Program,
     registry: &StdlibRegistry,
     errors: &mut Vec<ValidationError>,
-    substitute_params_fn: impl Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
-) -> SymbolTable {
+    substitute_params_fn: F,
+) -> SymbolTable
+where
+    F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
+{
     let mut table = SymbolTable::new();
 
     // Add input ports as nodes
@@ -75,22 +89,20 @@ pub(super) fn build_symbol_table(
         }
     }
 
+    let ctx = ResolutionContext {
+        neuron,
+        program,
+        registry,
+        substitute_params_fn,
+    };
+
     // Scan connections for intermediate node creation
     for connection in connections {
         match &connection.destination {
             // Tuple unpacking: source -> (a, b, c)
             Endpoint::Tuple(port_refs) => {
                 // Source must resolve to multiple ports
-                match resolve_endpoint_partial(
-                    &connection.source,
-                    neuron,
-                    &table,
-                    program,
-                    registry,
-                    true,
-                    errors,
-                    &substitute_params_fn,
-                ) {
+                match resolve_endpoint_partial(&connection.source, &ctx, &table, true, errors) {
                     Some(source_ports) => {
                         if source_ports.len() != port_refs.len() {
                             errors.push(ValidationError::ArityMismatch {
@@ -113,16 +125,7 @@ pub(super) fn build_symbol_table(
             // Single intermediate node: source -> intermediate
             Endpoint::Ref(port_ref) if port_ref.node != "in" && port_ref.node != "out" => {
                 // This creates an intermediate node
-                match resolve_endpoint_partial(
-                    &connection.source,
-                    neuron,
-                    &table,
-                    program,
-                    registry,
-                    true,
-                    errors,
-                    &substitute_params_fn,
-                ) {
+                match resolve_endpoint_partial(&connection.source, &ctx, &table, true, errors) {
                     Some(source_ports) => {
                         // Add the intermediate node with the source's output ports
                         table.add_node(port_ref.node.clone(), source_ports);
@@ -143,47 +146,39 @@ pub(super) fn build_symbol_table(
 
 /// Partially resolve endpoint (used during symbol table building)
 /// Returns None if resolution fails (errors added to errors vec)
-pub(super) fn resolve_endpoint_partial(
+pub(super) fn resolve_endpoint_partial<F>(
     endpoint: &Endpoint,
-    neuron: &NeuronDef,
+    ctx: &ResolutionContext<F>,
     table: &SymbolTable,
-    program: &Program,
-    registry: &StdlibRegistry,
     is_source: bool,
     errors: &mut Vec<ValidationError>,
-    substitute_params_fn: &impl Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
-) -> Option<Vec<Port>> {
-    match resolve_endpoint(
-        endpoint,
-        neuron,
-        table,
-        program,
-        registry,
-        is_source,
-        substitute_params_fn,
-    ) {
+) -> Option<Vec<Port>>
+where
+    F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
+{
+    match resolve_endpoint(endpoint, ctx, table, is_source) {
         Ok(ports) => Some(ports),
         Err(e) => {
-            errors.push(e);
+            errors.push(*e);
             None
         }
     }
 }
 
 /// Resolve an endpoint to a vector of ports
-pub(super) fn resolve_endpoint(
+pub(super) fn resolve_endpoint<F>(
     endpoint: &Endpoint,
-    neuron: &NeuronDef,
+    ctx: &ResolutionContext<F>,
     symbol_table: &SymbolTable,
-    program: &Program,
-    registry: &StdlibRegistry,
     is_source: bool,
-    substitute_params_fn: &impl Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
-) -> Result<Vec<Port>, ValidationError> {
+) -> Result<Vec<Port>, Box<ValidationError>>
+where
+    F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
+{
     match endpoint {
         Endpoint::Call { name, args, .. } => {
             // Look up neuron definition
-            if let Some(called_neuron) = program.neurons.get(name) {
+            if let Some(called_neuron) = ctx.program.neurons.get(name) {
                 let ports = if is_source {
                     &called_neuron.outputs
                 } else {
@@ -191,9 +186,10 @@ pub(super) fn resolve_endpoint(
                 };
 
                 // Substitute parameters in port shapes
-                let substituted_ports = substitute_params_fn(ports, &called_neuron.params, args);
+                let substituted_ports =
+                    (ctx.substitute_params_fn)(ports, &called_neuron.params, args);
                 Ok(substituted_ports)
-            } else if registry.contains(name) {
+            } else if ctx.registry.contains(name) {
                 // Primitive neuron - skip detailed port validation
                 // Primitives are validated at codegen time
                 // Return a dummy port to allow validation to continue
@@ -202,10 +198,10 @@ pub(super) fn resolve_endpoint(
                     shape: Shape { dims: vec![] },
                 }])
             } else {
-                Err(ValidationError::MissingNeuron {
+                Err(Box::new(ValidationError::MissingNeuron {
                     name: name.clone(),
-                    context: neuron.name.clone(),
-                })
+                    context: ctx.neuron.name.clone(),
+                }))
             }
         }
         Endpoint::Ref(port_ref) => {
@@ -217,16 +213,16 @@ pub(super) fn resolve_endpoint(
                 } else if let Some(port) = ports.iter().find(|p| p.name == port_ref.port) {
                     Ok(vec![port.clone()])
                 } else {
-                    Err(ValidationError::UnknownNode {
+                    Err(Box::new(ValidationError::UnknownNode {
                         node: format!("{}.{}", port_ref.node, port_ref.port),
-                        context: neuron.name.clone(),
-                    })
+                        context: ctx.neuron.name.clone(),
+                    }))
                 }
             } else {
-                Err(ValidationError::UnknownNode {
+                Err(Box::new(ValidationError::UnknownNode {
                     node: port_ref.node.clone(),
-                    context: neuron.name.clone(),
-                })
+                    context: ctx.neuron.name.clone(),
+                }))
             }
         }
         Endpoint::Tuple(port_refs) => {
@@ -235,12 +231,9 @@ pub(super) fn resolve_endpoint(
             for port_ref in port_refs {
                 let resolved = resolve_endpoint(
                     &Endpoint::Ref(port_ref.clone()),
-                    neuron,
+                    ctx,
                     symbol_table,
-                    program,
-                    registry,
                     is_source,
-                    substitute_params_fn,
                 )?;
                 ports.extend(resolved);
             }
@@ -266,8 +259,7 @@ pub(super) fn check_port_compatibility(
     let mut errors = Vec::new();
 
     // Skip Match endpoints
-    if matches!(source_endpoint, Endpoint::Match(_))
-        || matches!(dest_endpoint, Endpoint::Match(_))
+    if matches!(source_endpoint, Endpoint::Match(_)) || matches!(dest_endpoint, Endpoint::Match(_))
     {
         return errors;
     }

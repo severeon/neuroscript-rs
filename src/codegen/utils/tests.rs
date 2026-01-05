@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn test_value_to_python_primitives() {
     assert_eq!(value_to_python_impl(&Value::Int(42)), "42");
-    assert_eq!(value_to_python_impl(&Value::Float(3.14)), "3.14");
+    assert_eq!(value_to_python_impl(&Value::Float(4.5)), "4.5");
     assert_eq!(
         value_to_python_impl(&Value::String("hello".to_string())),
         "\"hello\""

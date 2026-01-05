@@ -332,17 +332,17 @@ fn test_is_dim_resolvable() {
     let engine = ShapeInferenceEngine::new();
 
     // Literal is always resolvable
-    assert!(engine.is_dim_resolvable(&Dim::Literal(512), &ctx));
+    assert!(is_dim_resolvable(&Dim::Literal(512), &ctx));
 
     // Wildcard is always resolvable
-    assert!(engine.is_dim_resolvable(&Dim::Wildcard, &ctx));
+    assert!(is_dim_resolvable(&Dim::Wildcard, &ctx));
 
     // Named dimension not yet resolved
-    assert!(!engine.is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
+    assert!(!is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
 
     // Resolve it
     ctx.resolved_dims.insert("dim".to_string(), 512);
-    assert!(engine.is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
+    assert!(is_dim_resolvable(&Dim::Named("dim".to_string()), &ctx));
 
     // Expression with resolvable operands
     let expr = Dim::Expr(Box::new(DimExpr {
@@ -350,7 +350,7 @@ fn test_is_dim_resolvable() {
         op: BinOp::Mul,
         right: Dim::Literal(4),
     }));
-    assert!(engine.is_dim_resolvable(&expr, &ctx));
+    assert!(is_dim_resolvable(&expr, &ctx));
 
     // Expression with unresolvable operand
     let expr2 = Dim::Expr(Box::new(DimExpr {
@@ -358,7 +358,7 @@ fn test_is_dim_resolvable() {
         op: BinOp::Mul,
         right: Dim::Literal(4),
     }));
-    assert!(!engine.is_dim_resolvable(&expr2, &ctx));
+    assert!(!is_dim_resolvable(&expr2, &ctx));
 }
 
 #[test]

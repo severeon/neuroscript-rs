@@ -103,24 +103,25 @@ impl Validator {
                 registry,
             ));
 
+            let res_ctx = symbol_table::ResolutionContext {
+                neuron,
+                program,
+                registry,
+                substitute_params_fn: shapes::substitute_params,
+            };
+
             // Resolve source and destination endpoints
             let source_resolution = symbol_table::resolve_endpoint(
                 &connection.source,
-                neuron,
+                &res_ctx,
                 &symbol_table,
-                program,
-                registry,
                 true, // is_source
-                &shapes::substitute_params,
             );
             let dest_resolution = symbol_table::resolve_endpoint(
                 &connection.destination,
-                neuron,
+                &res_ctx,
                 &symbol_table,
-                program,
-                registry,
                 false, // is_source
-                &shapes::substitute_params,
             );
 
             match (source_resolution, dest_resolution) {
@@ -136,7 +137,7 @@ impl Validator {
                     ));
                 }
                 (Err(e), _) | (_, Err(e)) => {
-                    errors.push(e);
+                    errors.push(*e);
                 }
             }
         }

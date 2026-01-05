@@ -200,7 +200,7 @@ pub fn try_static_resolve(
         if pattern_matches_shape(&arm.pattern, input_shape, ctx) {
             // If there's a guard, we need to evaluate it
             if let Some(guard) = &arm.guard {
-                if try_evaluate_guard(guard, input_shape, ctx) == Some(true) {
+                if try_evaluate_guard(guard, ctx) == Some(true) {
                     return Some(i);
                 }
                 // Guard failed, try next arm
@@ -260,11 +260,11 @@ fn pattern_matches_shape(pattern: &Shape, concrete: &Shape, ctx: &InferenceConte
 }
 
 /// Try to evaluate a guard condition at compile-time
-fn try_evaluate_guard(guard: &Value, shape: &Shape, ctx: &InferenceContext) -> Option<bool> {
+fn try_evaluate_guard(guard: &Value, ctx: &InferenceContext) -> Option<bool> {
     match guard {
         Value::BinOp { op, left, right } => {
-            let left_val = evaluate_value(left, shape, ctx)?;
-            let right_val = evaluate_value(right, shape, ctx)?;
+            let left_val = evaluate_value(left, ctx)?;
+            let right_val = evaluate_value(right, ctx)?;
 
             Some(match op {
                 BinOp::Eq => left_val == right_val,
@@ -281,7 +281,7 @@ fn try_evaluate_guard(guard: &Value, shape: &Shape, ctx: &InferenceContext) -> O
 }
 
 /// Evaluate a value expression at compile-time
-fn evaluate_value(val: &Value, shape: &Shape, ctx: &InferenceContext) -> Option<i64> {
+fn evaluate_value(val: &Value, ctx: &InferenceContext) -> Option<i64> {
     match val {
         Value::Int(n) => Some(*n),
         Value::Name(name) => {
@@ -289,8 +289,8 @@ fn evaluate_value(val: &Value, shape: &Shape, ctx: &InferenceContext) -> Option<
             ctx.resolved_dims.get(name).map(|v| *v as i64)
         }
         Value::BinOp { op, left, right } => {
-            let left_val = evaluate_value(left, shape, ctx)?;
-            let right_val = evaluate_value(right, shape, ctx)?;
+            let left_val = evaluate_value(left, ctx)?;
+            let right_val = evaluate_value(right, ctx)?;
 
             Some(match op {
                 BinOp::Add => left_val + right_val,
