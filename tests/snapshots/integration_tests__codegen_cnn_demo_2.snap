@@ -1,0 +1,62 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.activations import ReLU
+from neuroscript_runtime.primitives.convolutions import Conv2d
+from neuroscript_runtime.primitives.linear import Linear
+from neuroscript_runtime.primitives.normalization import BatchNorm
+from neuroscript_runtime.primitives.pooling import GlobalAvgPool
+from neuroscript_runtime.primitives.pooling import MaxPool
+from neuroscript_runtime.primitives.structural import Flatten
+from neuroscript_runtime.primitives.structural import Identity
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, has_pool=True):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.has_pool = has_pool
+        self.conv = Conv2d(in_channels, out_channels, 3, padding=1)
+        self.bn = BatchNorm(out_channels)
+        self.act = ReLU()
+        self._pool = None  # Lazy instantiation (@lazy)
+        self.identity_0 = Identity()
+
+    def forward(self, x):
+        x0 = self.conv(x)
+        x1 = self.bn(x0)
+        x2 = self.act(x1)
+        x3 = None
+        if (self.has_pool == True):
+            if self._pool is None:
+                self._pool = MaxPool(2, stride=2)
+            x4 = self._pool(x2)
+            x3 = x4
+        elif True:
+            x5 = self.identity_0(x2)
+            x3 = x5
+        return x3
+
+class CNN(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        super().__init__()
+        self.in_channels = in_channels
+        self.num_classes = num_classes
+        self.conv1 = ConvBlock(, in_channels=in_channels, out_channels=32)
+        self.conv2 = ConvBlock(, in_channels=32, out_channels=64)
+        self.conv3 = ConvBlock(, in_channels=64, out_channels=128, has_pool=False)
+        self.gap = GlobalAvgPool()
+        self.flat = Flatten(1)
+        self.head = Linear(128, num_classes)
+
+    def forward(self, x):
+        x0 = self.conv1(x)
+        x1 = self.conv2(x0)
+        x2 = self.conv3(x1)
+        x3 = self.gap(x2)
+        x4 = self.flat(x3)
+        x5 = self.head(x4)
+        return x5

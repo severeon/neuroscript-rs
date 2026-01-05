@@ -1,0 +1,4 @@
+neuron MaxPool(kernel_size, stride=1, padding=0, dilation=1):
+    in: [batch, channels, height, width]
+    out: [batch, channels, *, *]
+    impl: core,pooling/MaxPool

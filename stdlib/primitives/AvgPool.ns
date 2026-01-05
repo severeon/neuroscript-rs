@@ -1,0 +1,4 @@
+neuron AvgPool(kernel_size, stride=1, padding=0):
+    in: [batch, channels, height, width]
+    out: [batch, channels, *, *]
+    impl: core,pooling/AvgPool

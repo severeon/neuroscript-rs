@@ -51,7 +51,9 @@ pub(super) fn dims_compatible(source: &Dim, dest: &Dim) -> bool {
         // Expressions: would need evaluation context, for now assume compatible
         (Dim::Expr(_), _) | (_, Dim::Expr(_)) => true,
         // Mixed named/literal: incompatible (can't unify 512 with a variable)
-        (Dim::Named(_), Dim::Literal(_)) | (Dim::Literal(_), Dim::Named(_)) => false,
+        // UPDATE: For validator without full inference, we must be optimistic
+        // A Named dimension *could* bind to this Literal at runtime/inference time.
+        (Dim::Named(_), Dim::Literal(_)) | (Dim::Literal(_), Dim::Named(_)) => true,
         // Global dimensions: compatible if same name (conservative)
         (Dim::Global(n1), Dim::Global(n2)) => n1 == n2,
         (Dim::Global(_), _) | (_, Dim::Global(_)) => true,
@@ -257,7 +259,11 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             // Named dimensions match anything (they capture)
             (Dim::Named(_), _) => continue,
             // Literal must match exactly
-            (Dim::Literal(g_lit), Dim::Literal(s_lit)) => return g_lit != s_lit,
+            (Dim::Literal(g_lit), Dim::Literal(s_lit)) => {
+                if g_lit != s_lit {
+                    return false;
+                }
+            }
             // Literal in general, but wildcard/named in specific - not subsumed
             (Dim::Literal(_), _) => return false,
             // Expression dimensions - conservative check
@@ -265,7 +271,12 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             // Variadic should have been handled above
             (Dim::Variadic(_), _) => continue,
             // Global (conservative check)
-            (Dim::Global(g), Dim::Global(s)) => return g != s,
+            // Global (conservative check)
+            (Dim::Global(g), Dim::Global(s)) => {
+                if g != s {
+                    return false;
+                }
+            }
             (Dim::Global(_), _) => return false,
         }
     }

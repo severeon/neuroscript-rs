@@ -1,0 +1,55 @@
+use core,convolutions/Conv2d
+use core,convolutions/MaxPool
+use core,pooling/GlobalAvgPool
+use core,normalization/BatchNorm
+use core,activations/ReLU
+use core,nn/Linear
+use core,structural/Flatten
+
+
+# A simple Convolutional Neural Network for image classification
+neuron CNN(in_channels, num_classes):
+    # Standard image input: [batch, channels, height, width]
+    in: [batch, in_channels, height, width]
+    out: [batch, num_classes]
+
+    context:
+        # Layer 1: Conv -> BN -> ReLU -> Pool
+        conv1 = Conv2d(in_channels, 32, 3, padding=1)
+        bn1 = BatchNorm(32)
+        act1 = ReLU()
+        pool1 = MaxPool(2, stride=2)
+
+        # Layer 2: Conv -> BN -> ReLU -> Pool
+        conv2 = Conv2d(32, 64, 3, padding=1)
+        bn2 = BatchNorm(64)
+        act2 = ReLU()
+        pool2 = MaxPool(2, stride=2)
+
+        # Layer 3: Conv -> BN -> ReLU
+        conv3 = Conv2d(64, 128, 3, padding=1)
+        bn3 = BatchNorm(128)
+        act3 = ReLU()
+        
+        # Pooling & Head
+        gap = GlobalAvgPool()
+        flat = Flatten(1) # Flatten channels -> end
+        head = Linear(128, num_classes)
+
+    graph:
+        in ->
+            conv1
+            bn1
+            act1
+            pool1
+            conv2
+            bn2
+            act2
+            pool2
+            conv3
+            bn3
+            act3
+            gap
+            flat
+            head
+            out

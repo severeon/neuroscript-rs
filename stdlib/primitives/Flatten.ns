@@ -1,0 +1,4 @@
+neuron Flatten(start_dim=1, end_dim=-1):
+    in: [*shape_in]
+    out: [*shape_out]
+    impl: core,structural/Flatten
