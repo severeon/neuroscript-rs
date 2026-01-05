@@ -527,6 +527,39 @@ fn snapshot_codegen_residual_block() {
     insta::assert_snapshot!("codegen_residual_block", code);
 }
 
+#[test]
+fn snapshot_codegen_cnn_demo() {
+    let source = fs::read_to_string("examples/cnn_demo.ns").expect("Failed to read cnn_demo.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    // We need to load stdlib primitives for this to pass validation
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "CNN").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_cnn_demo", code);
+}
+
+#[test]
+fn snapshot_codegen_cnn_demo_2() {
+    let source =
+        fs::read_to_string("examples/cnn_demo_2.ns").expect("Failed to read cnn_demo_2.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    // We need to load stdlib primitives for this to pass validation
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "CNN").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_cnn_demo_2", code);
+}
+
 // ============================================================================
 // Error Message Snapshot Tests
 // ============================================================================
@@ -615,6 +648,8 @@ fn snapshot_all_examples() {
             || file_name == "10-match.ns"
             || file_name == "17-match-dimension-binding.ns"
             || file_name == "FFN.ns"
+            || file_name == "cnn_demo.ns"
+            || file_name == "cnn_demo_2.ns"
         {
             continue;
         }

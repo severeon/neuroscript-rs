@@ -72,6 +72,9 @@ pub(super) fn generate_forward_body(
     // Build a map from Call endpoints to their result variable names
     let mut call_to_result: HashMap<String, String> = HashMap::new();
 
+    // Build a map from Match endpoints to their result variable names
+    let mut match_to_result: HashMap<String, String> = HashMap::new();
+
     // Track the last result variable (for implicit output)
     let mut last_result = None;
 
@@ -108,9 +111,13 @@ pub(super) fn generate_forward_body(
                 })?
             }
             Endpoint::Match(_) => {
-                return Err(CodegenError::UnsupportedFeature(
-                    "Match expressions as source".to_string(),
-                ));
+                // Look it up in our match_to_result map
+                let key = endpoint_key_impl(&conn.source);
+                match_to_result.get(&key).cloned().ok_or_else(|| {
+                    CodegenError::InvalidConnection(format!(
+                        "Match expression used as source before being defined"
+                    ))
+                })?
             }
         };
 
@@ -123,6 +130,7 @@ pub(super) fn generate_forward_body(
             indent,
             &mut temp_var_counter,
             &mut call_to_result,
+            &mut match_to_result,
         )?;
 
         // Track the last result for implicit output
@@ -131,7 +139,10 @@ pub(super) fn generate_forward_body(
         // If destination was a Call, store result in call_to_result
         if let Endpoint::Call { .. } = &conn.destination {
             let key = endpoint_key_impl(&conn.destination);
-            call_to_result.insert(key, result_var);
+            call_to_result.insert(key, result_var.clone());
+        } else if let Endpoint::Match(_) = &conn.destination {
+            let key = endpoint_key_impl(&conn.destination);
+            match_to_result.insert(key, result_var.clone());
         }
     }
 
@@ -157,6 +168,7 @@ fn process_destination(
     indent: &str,
     temp_var_counter: &mut usize,
     call_to_result: &mut HashMap<String, String>,
+    match_to_result: &mut HashMap<String, String>,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
@@ -438,6 +450,7 @@ fn process_destination(
                         &pipeline_indent,
                         temp_var_counter,
                         call_to_result,
+                        match_to_result,
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -473,7 +486,6 @@ fn process_destination(
         }
     }
 }
-
 /// Generate a runtime shape check condition and dimension bindings
 ///
 /// Returns a ShapeCheckResult containing:

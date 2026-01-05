@@ -1,0 +1,4 @@
+neuron GlobalAvgPool:
+    in: [batch, channels, *, *]
+    out: [batch, channels, 1, 1]
+    impl: core,pooling/GlobalAvgPool

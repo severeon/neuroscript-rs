@@ -24,7 +24,7 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Core Operations
 
-- [ ] `Linear` - dense/fully-connected layer
+- [x] `Linear` - dense/fully-connected layer
 - [ ] `Bias` - additive bias
 - [ ] `Scale` - multiplicative scaling
 - [ ] `MatMul` - matrix multiplication
@@ -32,37 +32,37 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Activations
 
-- [ ] `ReLU` - rectified linear unit
-- [ ] `GELU` - Gaussian error linear unit
-- [ ] `SiLU` / `Swish` - sigmoid linear unit
-- [ ] `Tanh` - hyperbolic tangent
-- [ ] `Sigmoid` - logistic function
-- [ ] `Softmax` - normalized exponential
+- [x] `ReLU` - rectified linear unit
+- [x] `GELU` - Gaussian error linear unit
+- [x] `SiLU` / `Swish` - sigmoid linear unit
+- [x] `Tanh` - hyperbolic tangent
+- [x] `Sigmoid` - logistic function
+- [x] `Softmax` - normalized exponential
 - [ ] `Mish` - self-regularized non-monotonic activation
 - [ ] `PReLU` - parametric ReLU
 - [ ] `ELU` - exponential linear unit
 
 ### Normalizations
 
-- [ ] `LayerNorm` - layer normalization
-- [ ] `BatchNorm` - batch normalization
-- [ ] `RMSNorm` - root mean square normalization
-- [ ] `GroupNorm` - group normalization
+- [x] `LayerNorm` - layer normalization
+- [x] `BatchNorm` - batch normalization
+- [x] `RMSNorm` - root mean square normalization
+- [x] `GroupNorm` - group normalization
 - [ ] `InstanceNorm` - instance normalization
 - [ ] `WeightNorm` - weight normalization
 
 ### Regularization
 
-- [ ] `Dropout` - random neuron dropout
-- [ ] `DropPath` - stochastic depth
+- [x] `Dropout` - random neuron dropout
+- [x] `DropPath` - stochastic depth
 - [ ] `Dropblock` - structured dropout for CNNs
-- [ ] `DropConnect` - connection dropout
+- [x] `DropConnect` - connection dropout
 - [ ] `SpecAugment` - frequency/time masking (audio)
 
 ### Convolutions
 
 - [ ] `Conv1d` - 1D convolution (sequences)
-- [ ] `Conv2d` - 2D convolution (images)
+- [x] `Conv2d` - 2D convolution (images)
 - [ ] `Conv3d` - 3D convolution (video/volumetric)
 - [ ] `DepthwiseConv` - channel-wise convolution
 - [ ] `SeparableConv` - depthwise + pointwise
@@ -71,33 +71,33 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Pooling
 
-- [ ] `MaxPool` - max pooling
-- [ ] `AvgPool` - average pooling
-- [ ] `AdaptiveAvgPool` - output-size-adaptive pooling
+- [x] `MaxPool` - max pooling
+- [x] `AvgPool` - average pooling
+- [x] `AdaptiveAvgPool` - output-size-adaptive pooling
 - [ ] `AdaptiveMaxPool` - output-size-adaptive max pooling
-- [ ] `GlobalAvgPool` - spatial averaging
+- [x] `GlobalAvgPool` - spatial averaging
 - [ ] `GlobalMaxPool` - spatial max
 
 ### Embeddings
 
-- [ ] `Embedding` - discrete token → dense vector
-- [ ] `PositionalEncoding` - sinusoidal position embeddings
-- [ ] `LearnedPositionalEmbedding` - trainable positions
+- [x] `Embedding` - discrete token → dense vector
+- [x] `PositionalEncoding` - sinusoidal position embeddings
+- [x] `LearnedPositionalEmbedding` - trainable positions
 - [ ] `RotaryEmbedding` (RoPE) - rotary position embeddings
 - [ ] `ALiBi` - attention with linear biases
 
 ### Utility
 
-- [ ] `Reshape` - tensor reshaping
-- [ ] `Transpose` - dimension permutation
-- [ ] `Concatenate` - tensor concatenation
+- [x] `Reshape` - tensor reshaping
+- [x] `Transpose` - dimension permutation
+- [x] `Concatenate` - tensor concatenation
 - [ ] `Split` - tensor splitting
 - [ ] `Slice` - tensor slicing
 - [ ] `Pad` - tensor padding
 - [ ] `Crop` - tensor cropping
 - [ ] `Cast` - dtype conversion
 - [ ] `Clone` - tensor duplication
-- [ ] `Identity` - pass-through (useful for routing)
+- [x] `Identity` - pass-through (useful for routing)
 
 ---
 

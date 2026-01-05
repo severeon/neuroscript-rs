@@ -1,0 +1,4 @@
+neuron Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, *, *]
+    impl: core,convolutions/Conv2d

@@ -1,0 +1,4 @@
+neuron AdaptiveAvgPool(output_size):
+    in: [batch, channels, *, *]
+    out: [batch, channels, output_size, output_size]
+    impl: core,pooling/AdaptiveAvgPool

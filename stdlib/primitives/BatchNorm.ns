@@ -1,0 +1,4 @@
+neuron BatchNorm(num_features):
+    in: [*shape, num_features]
+    out: [*shape, num_features]
+    impl: core,normalization/BatchNorm

@@ -164,6 +164,15 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "BatchNorm",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.normalization",
+                "BatchNorm",
+                "Batch normalization",
+            ),
+        );
+
         // Level 0: Regularization
         self.register(
             "Dropout",
@@ -189,6 +198,53 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.regularization",
                 "DropConnect",
                 "Connection dropout (drops weights)",
+            ),
+        );
+
+        // Level 0: Convolutions
+        self.register(
+            "Conv2d",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "Conv2d",
+                "2D convolution layer",
+            ),
+        );
+
+        // Level 0: Pooling
+        self.register(
+            "MaxPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "MaxPool",
+                "Max pooling",
+            ),
+        );
+
+        self.register(
+            "AvgPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "AvgPool",
+                "Average pooling",
+            ),
+        );
+
+        self.register(
+            "AdaptiveAvgPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "AdaptiveAvgPool",
+                "Adaptive average pooling (output size fixed)",
+            ),
+        );
+
+        self.register(
+            "GlobalAvgPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "GlobalAvgPool",
+                "Global average pooling (reduces spatial dims to 1x1)",
             ),
         );
 
@@ -290,6 +346,15 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.structural",
                 "Transpose",
                 "Permute tensor dimensions (transpose/permute operation)",
+            ),
+        );
+
+        self.register(
+            "Flatten",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Flatten",
+                "Flattens a contiguous range of dims into a tensor",
             ),
         );
 
