@@ -23,6 +23,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **The building Neurons of building Neurons.**
 
 ### Core Operations
+
 - [ ] `Linear` - dense/fully-connected layer
 - [ ] `Bias` - additive bias
 - [ ] `Scale` - multiplicative scaling
@@ -30,6 +31,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `Einsum` - Einstein summation (generalized tensor operations)
 
 ### Activations
+
 - [ ] `ReLU` - rectified linear unit
 - [ ] `GELU` - Gaussian error linear unit
 - [ ] `SiLU` / `Swish` - sigmoid linear unit
@@ -41,6 +43,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `ELU` - exponential linear unit
 
 ### Normalizations
+
 - [ ] `LayerNorm` - layer normalization
 - [ ] `BatchNorm` - batch normalization
 - [ ] `RMSNorm` - root mean square normalization
@@ -49,6 +52,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `WeightNorm` - weight normalization
 
 ### Regularization
+
 - [ ] `Dropout` - random neuron dropout
 - [ ] `DropPath` - stochastic depth
 - [ ] `Dropblock` - structured dropout for CNNs
@@ -56,6 +60,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `SpecAugment` - frequency/time masking (audio)
 
 ### Convolutions
+
 - [ ] `Conv1d` - 1D convolution (sequences)
 - [ ] `Conv2d` - 2D convolution (images)
 - [ ] `Conv3d` - 3D convolution (video/volumetric)
@@ -65,6 +70,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `DilatedConv` - atrous convolution
 
 ### Pooling
+
 - [ ] `MaxPool` - max pooling
 - [ ] `AvgPool` - average pooling
 - [ ] `AdaptiveAvgPool` - output-size-adaptive pooling
@@ -73,6 +79,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `GlobalMaxPool` - spatial max
 
 ### Embeddings
+
 - [ ] `Embedding` - discrete token → dense vector
 - [ ] `PositionalEncoding` - sinusoidal position embeddings
 - [ ] `LearnedPositionalEmbedding` - trainable positions
@@ -80,6 +87,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `ALiBi` - attention with linear biases
 
 ### Utility
+
 - [ ] `Reshape` - tensor reshaping
 - [ ] `Transpose` - dimension permutation
 - [ ] `Concatenate` - tensor concatenation
@@ -98,6 +106,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Built from atomic Neurons. Reusable patterns.**
 
 ### Attention Mechanisms
+
 - [ ] `ScaledDotProductAttention` - core attention operation
 - [ ] `MultiHeadAttention` - parallel attention heads
 - [ ] `SelfAttention` - query=key=value
@@ -109,6 +118,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `MultiQueryAttention` (MQA) - single key/value head
 
 ### Feed-Forward Networks
+
 - [ ] `FFN` / `MLP` - linear → activation → linear
 - [ ] `GatedFFN` - gating mechanism (GLU-style)
 - [ ] `SwiGLU` - SiLU gated FFN
@@ -116,6 +126,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `Expert` - single expert block (for MoE)
 
 ### Residual Connections
+
 - [ ] `Residual` - add(x, f(x))
 - [ ] `PreNormResidual` - norm → f(x) → add
 - [ ] `PostNormResidual` - f(x) → norm → add
@@ -123,11 +134,13 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `DenseConnection` - concatenate all previous layers
 
 ### Gating Mechanisms
+
 - [ ] `GLU` - gated linear unit
 - [ ] `LSTM-Gate` - forget/input/output gates
 - [ ] `GRU-Gate` - update/reset gates
 
 ### Positional Processing
+
 - [ ] `RelativePositionBias` - T5-style learned biases
 - [ ] `ConditionalPositionEncoding` - conditional position embeddings
 
@@ -138,6 +151,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Famous architectures broken into composable Neurons.**
 
 ### Transformer Family
+
 - [ ] `TransformerBlock` - attention + FFN + residuals
 - [ ] `TransformerEncoderBlock` - self-attention block
 - [ ] `TransformerDecoderBlock` - cross-attention block
@@ -146,6 +160,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `EncoderDecoder` - full transformer architecture
 
 ### Convolutional Architectures
+
 - [ ] `ResNetBlock` - residual block (basic/bottleneck)
 - [ ] `ResNeXtBlock` - grouped convolutions
 - [ ] `DenseBlock` - densely connected block
@@ -156,6 +171,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `BottleneckBlock` - 1x1 → 3x3 → 1x1 conv
 
 ### Recurrent/State Space
+
 - [ ] `LSTM` - long short-term memory
 - [ ] `GRU` - gated recurrent unit
 - [ ] `BiLSTM` / `BiGRU` - bidirectional variants
@@ -166,6 +182,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `RWKVBlock` - receptance weighted key value
 
 ### Vision-Specific
+
 - [ ] `ConvNeXtBlock` - modernized ResNet block
 - [ ] `SwinBlock` - shifted window attention
 - [ ] `ViTBlock` - vision transformer block
@@ -176,6 +193,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `ResUNetBlock` - residual U-Net block
 
 ### Generative
+
 - [ ] `VAEEncoder` - variational autoencoder encoder
 - [ ] `VAEDecoder` - VAE decoder
 - [ ] `GANGenerator` - GAN generator block
@@ -185,6 +203,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `NoiseScheduler` - diffusion noise scheduling
 
 ### Graph Neural Networks
+
 - [ ] `GCNLayer` - graph convolutional network
 - [ ] `GATLayer` - graph attention network
 - [ ] `GraphSAGE` - graph sample and aggregate
@@ -194,6 +213,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `GlobalPooling` - graph-level pooling
 
 ### Audio/Speech
+
 - [ ] `MelSpectrogram` - mel-scale spectrogram
 - [ ] `MFCC` - mel-frequency cepstral coefficients
 - [ ] `WaveNetBlock` - dilated causal convolution
@@ -202,6 +222,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `WhisperDecoder` - speech decoder block
 
 ### Normalization Variants
+
 - [ ] `AdaptiveLayerNorm` - adaptive LN (e.g., for diffusion)
 - [ ] `ConditionalLayerNorm` - class-conditional normalization
 - [ ] `SpectralNorm` - spectral normalization (GANs)
@@ -213,6 +234,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Entire models packaged as single Neurons. Embed GPT-2 in your architecture. Go wild.**
 
 ### Language Models
+
 - [ ] `GPT` - autoregressive language model (any size)
 - [ ] `BERT` - bidirectional encoder
 - [ ] `T5` - encoder-decoder model
@@ -225,6 +247,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `Phi` - Phi small language models
 
 ### Vision Models
+
 - [ ] `ResNet` - full ResNet (18/34/50/101/152)
 - [ ] `EfficientNet` - EfficientNet (B0-B7)
 - [ ] `ViT` - vision transformer
@@ -234,6 +257,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `DINOv2` - self-supervised vision model
 
 ### Multimodal
+
 - [ ] `CLIP` - contrastive language-image model
 - [ ] `BLIP` - bootstrapped language-image model
 - [ ] `Flamingo` - visual language model
@@ -241,6 +265,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `CoCa` - contrastive captioner
 
 ### Generative Models
+
 - [ ] `StableDiffusion-UNet` - diffusion model
 - [ ] `VAE-KL` - Kullback-Leibler VAE
 - [ ] `VQVAE` - vector quantized VAE
@@ -248,6 +273,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `ControlNet` - conditional diffusion control
 
 ### Audio Models
+
 - [ ] `Whisper` - speech recognition
 - [ ] `Wav2Vec2` - speech representation
 - [ ] `HuBERT` - hidden unit BERT
@@ -255,6 +281,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `AudioLDM` - audio latent diffusion
 
 ### Specialized
+
 - [ ] `AlphaFold-Evoformer` - protein folding
 - [ ] `ProteinMPNN` - protein design
 - [ ] `ESMFold` - protein language model
@@ -267,6 +294,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Neurons that orchestrate other Neurons.**
 
 ### Routing
+
 - [ ] `Switch` - conditional routing (if-else)
 - [ ] `Router` - learned routing (multi-path)
 - [ ] `MixtureOfExperts` (MoE) - sparse expert routing
@@ -275,6 +303,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `ConditionalCompute` - dynamic depth
 
 ### Composition
+
 - [ ] `Sequential` - linear chain of Neurons
 - [ ] `Parallel` - multiple Neurons in parallel
 - [ ] `Residual` - skip connection wrapper
@@ -284,17 +313,20 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `PrefixTuning` - prefix tuning wrapper
 
 ### Recursive/Dynamic
+
 - [ ] `RecurrentBlock` - apply block N times
 - [ ] `DynamicDepth` - variable-depth networks
 - [ ] `NeuralODE` - neural ordinary differential equations
 - [ ] `UniversalTransformer` - adaptive computation time
 
 ### Multi-Scale
+
 - [ ] `Pyramid` - multi-scale processing
 - [ ] `Cascade` - coarse-to-fine processing
 - [ ] `HierarchicalMerge` - merge across scales
 
 ### Utilities
+
 - [ ] `Checkpoint` - gradient checkpointing
 - [ ] `Quantize` - quantization (INT8/INT4)
 - [ ] `Prune` - structured/unstructured pruning
@@ -308,6 +340,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Import arbitrary models as Neurons.**
 
 ### Import Formats
+
 - [ ] `HuggingFaceModel` - any model from HF Hub
 - [ ] `TorchHubModel` - PyTorch Hub models
 - [ ] `ONNXModel` - ONNX models
@@ -318,30 +351,35 @@ Level 4: Meta (ensembles, routers, control flow)
 ## Domain-Specific Block Collections
 
 ### Computer Vision
+
 **Primitives:** Conv2d, MaxPool, BatchNorm, ReLU
 **Composite:** ResNetBlock, SEBlock, ViTBlock
 **Models:** ResNet50, EfficientNetB0, ViT-B/16
 **Meta:** FPN, CascadeRCNN
 
 ### Natural Language Processing
+
 **Primitives:** Embedding, Linear, LayerNorm, Dropout
 **Composite:** TransformerBlock, MambaBlock
 **Models:** GPT-2, BERT-base, LLaMA-7B
 **Meta:** MoE, LoRA, PrefixTuning
 
 ### Audio/Speech
+
 **Primitives:** Conv1d, MelSpectrogram, LSTM
 **Composite:** ConformerBlock, WaveNetBlock
 **Models:** Whisper-small, Wav2Vec2
 **Meta:** CTC, Attention
 
 ### Graphs
+
 **Primitives:** MessagePassing, EdgeConv
 **Composite:** GATLayer, GCNLayer
 **Models:** GraphSAGE, GIN
 **Meta:** GlobalPooling
 
 ### Reinforcement Learning
+
 - [ ] `PolicyHead` - policy network head
 - [ ] `ValueHead` - value network head
 - [ ] `ActorCritic` - actor-critic architecture
@@ -355,6 +393,7 @@ Level 4: Meta (ensembles, routers, control flow)
 **Make incompatible Neurons work together.**
 
 ### Shape Adapters
+
 - [ ] `DimensionAdapter` - change feature dimensions
 - [ ] `SequenceLengthAdapter` - resample sequence length
 - [ ] `BatchAdapter` - handle batch size changes
@@ -362,11 +401,13 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `SpatialAdapter` - resize spatial dimensions
 
 ### Type Adapters
+
 - [ ] `DTypeAdapter` - convert float32 ↔ float16 ↔ bfloat16
 - [ ] `QuantizationAdapter` - float ↔ int8/int4
 - [ ] `DeviceAdapter` - CPU ↔ GPU ↔ TPU
 
 ### Format Adapters
+
 - [ ] `ImageToPatches` - image → patch sequence
 - [ ] `PatchesToImage` - patch sequence → image
 - [ ] `TokensToEmbedding` - discrete → continuous
@@ -375,6 +416,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [ ] `SpectrogramToAudio` - frequency → waveform
 
 ### Connector Neurons
+
 - [ ] `Projection` - arbitrary shape transformation
 - [ ] `Upsampler` - increase resolution
 - [ ] `Downsampler` - decrease resolution
@@ -386,29 +428,34 @@ Level 4: Meta (ensembles, routers, control flow)
 ## Specialized/Exotic Neurons
 
 ### Memory/Context
+
 - [ ] `MemoryBank` - external memory (NTM, DNC)
 - [ ] `KNNMemory` - k-nearest neighbor lookup
 - [ ] `VectorDatabase` - embedding search
 - [ ] `ContextWindow` - sliding window buffer
 
 ### Symbolic/Neuro-Symbolic
+
 - [ ] `LogicGate` - differentiable logic
 - [ ] `ProgramSynthesis` - neural program synthesis
 - [ ] `TreeLSTM` - tree-structured LSTM
 - [ ] `GraphGrammar` - graph generation rules
 
 ### Equivariance/Invariance
+
 - [ ] `RotationEquivariant` - rotation equivariance (e.g., E(n) layers)
 - [ ] `TranslationInvariant` - translation invariance
 - [ ] `PermutationInvariant` - permutation invariance (Set Transformer)
 - [ ] `ScaleEquivariant` - scale equivariance
 
 ### Energy-Based
+
 - [ ] `EnergyFunction` - energy-based model
 - [ ] `Hopfield` - modern Hopfield network
 - [ ] `Boltzmann` - restricted Boltzmann machine
 
 ### Emerging Research
+
 - [ ] `KolmogorovArnold` (KAN) - KAN layers
 - [ ] `LiquidNeuron` - liquid time-constant networks
 - [ ] `HyperNetwork` - networks that generate networks
