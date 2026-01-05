@@ -434,27 +434,6 @@ pub struct Parser {
 
 // Shape is already defined above
 
-/// Pattern matching tokens for shapes.
-///
-/// - `Any`: wildcard `*` (binds axis if you capture it)
-/// - `Ignore`: wildcard `_` (ignore, don't bind)
-/// - `Lit(n)`: literal integer n
-/// - `Rest`: a trailing `...` wildcard that can match zero or more axes (like varargs)
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PatToken {
-    Any,
-    Ignore,
-    Lit(usize),
-    Rest,
-}
-
-/// A Pattern is a sequence of PatToken. `matches(shape)` returns true/false and
-/// optionally returns bound values for `Any` tokens if the user provides `capture=true`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pattern {
-    pub tokens: Vec<PatToken>,
-}
-
 /// Tracks the state of dimension variables during inference
 #[derive(Debug, Clone, Default)]
 pub struct InferenceContext {

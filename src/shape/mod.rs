@@ -7,7 +7,6 @@ pub mod algebra;
 pub mod inference;
 
 // Re-export public API
-pub use algebra::*;
 pub use inference::*;
 
 #[cfg(test)]
