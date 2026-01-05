@@ -1,4 +1,4 @@
-# Basic test of let/set bindings
+# Basic test of context bindings
 
 neuron SimpleNetwork(dim):
   in: [*, dim]

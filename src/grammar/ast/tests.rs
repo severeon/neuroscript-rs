@@ -193,9 +193,9 @@ fn test_compare_22_xor() {
 }
 
 #[test]
-fn test_compare_28_let_set() {
-    let input = include_str!("../../../examples/28-let_set_basic.ns");
-    compare_parsers(input, "28-let_set_basic.ns");
+fn test_compare_28_context() {
+    let input = include_str!("../../../examples/28-context_basic.ns");
+    compare_parsers(input, "28-context_basic.ns");
 }
 
 // Run comparison on all numbered example files

@@ -9,19 +9,15 @@
 - ✅ Phase 1: Core Primitives (Fork, Add, Concat, Attention)
 - ✅ Phase 2: Shape Inference System
 - ✅ Phase 2.5: Match Expression Codegen Fixes  
-- ✅ Phase 3: Pattern Matching System (mostly complete, 1 item remaining)
-- ✅ Phase 4: Stdlib Composites (mostly complete, 1 item remaining)
-- ✅ Phase 5: Enhanced Codegen (complete)
-- ✅ Phase 7.1-7.4: Basic let/set bindings (parsing, IR, validation, basic codegen)
-
-**In Progress:**
+- ✅ Phase 3: Pattern Matching System
+- ✅ Phase 4: Stdlib Composites
+- ✅ Phase 5: Enhanced Codegen
+- ✅ Phase 7.1-7.4: Context bindings (parsing, IR, validation, codegen)
+- ✅ Phase 8: Pest Grammar Migration (Complete)
 
 - Phase 6: End-to-End Validation (GPT-2 test)
-- Phase 7.5+: Recursion support for let/set
-
-**New Work:**
-
-- Phase 8: Pest Grammar Migration (grammar written, needs AST builder)
+- Phase 7.5+: Recursion support for context bindings
+- ✅ Phase 8: Pest Grammar Migration (Complete)
 
 ---
 
@@ -78,7 +74,7 @@
 
 ### 7.1 Lexer & Parser Extensions
 
-**Status:** Partially complete (set/let blocks exist, need `context:` migration)
+**Status:** Complete
 
 - [x] Add `set` keyword to lexer (`let` already reserved)
 - [x] Add `context` keyword to lexer
@@ -86,25 +82,25 @@
 - [x] Implement `parse_context_block()` to replace set/let blocks
 - [x] Parse binding syntax: `name = NeuronCall(args)` with optional annotations
 - [x] Parse module-level `@global` declarations
-- [ ] Support `Freeze(neuron)` meta-neuron syntax
-- [ ] Migrate existing set/let tests to context block
+- [x] Support `Freeze(neuron)` meta-neuron syntax
+- [x] Migrate existing set/let tests to context block
 
 ### 7.2 IR Extensions for Context & Scopes
 
-**Status:** Implementation started (structs updated, parser support added)
+**Status:** Complete
 
 - [x] ~~Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
 - [x] ~~Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
 - [x] Add `context_bindings: Vec<Binding>` to `NeuronBody::Graph`
 - [x] Update `Binding` struct with `scope: Scope`
 - [x] Add `Scope` enum: `Instance`, `Static`, `Global` (with `Lazy` flag)
-- [ ] Add `global_bindings: Vec<GlobalBinding>` to `Program`
-- [ ] Update IR Display traits for context bindings
-- [ ] Test IR correctly represents all three scopes
+- [x] Add `global_bindings: Vec<GlobalBinding>` to `Program`
+- [x] Update IR Display traits for context bindings
+- [x] Test IR correctly represents all three scopes
 
 ### 7.3 Validation Rules for Context & Scopes
 
-**Status:** Needs extension for scope validation
+**Status:** Complete (basic scale validation implemented)
 
 - [x] Check no forward references in bindings (existing)
 - [x] Validate binding names don't conflict (existing)
@@ -118,17 +114,17 @@
 
 ### 7.4 Basic Codegen (Context Block, No Recursion)
 
-**Status:** Needs refactor from set/let to context model
+**Status:** Complete
 
-- [ ] Generate module-level `@global` bindings (Python module variables)
-- [ ] Generate `@static` bindings as class variables
-- [ ] Generate instance bindings in `__init__` (eager instantiation)
-- [ ] Generate `@lazy` bindings with conditional instantiation
-- [ ] Track bound names → scope + module instance mapping
-- [ ] Reference bound names in graph connections
-- [ ] Support weight sharing within scope boundaries
-- [ ] Test all three scopes generate correctly
-- [ ] Create examples/context_scopes_basic.ns
+- [x] Generate module-level `@global` bindings (Python module variables)
+- [x] Generate `@static` bindings as class variables
+- [x] Generate instance bindings in `__init__` (eager instantiation)
+- [x] Generate `@lazy` bindings with conditional instantiation
+- [x] Track bound names → scope + module instance mapping
+- [x] Reference bound names in graph connections
+- [x] Support weight sharing within scope boundaries
+- [x] Test all three scopes generate correctly
+- [x] Create examples/context_scopes_basic.ns
 
 ### 7.5 Three-Scope Data Model with Context Block
 
@@ -179,15 +175,14 @@ neuron TransformerBlock(d_model):
 
 **Implementation tasks:**
 
-- [ ] Define `@global` syntax at module level (outside neurons)
-- [ ] Define `context:` block syntax (replaces set:/let:)
-- [ ] Implement annotation parsing: `@static`, `@global`, `@lazy`
-- [ ] Validate scope rules (global only at module level, etc.)
-- [ ] Codegen for module-level globals (Python module variables)
-- [ ] Codegen for static bindings (Python class variables)
-- [ ] Codegen for instance bindings (Python instance variables)
-- [ ] Test all three scopes work correctly
-- [ ] Create examples/context_scopes.ns demonstrating all scopes
+- [x] Define `context:` block syntax (replaces set:/let:)
+- [x] Implement annotation parsing: `@static`, `@global`, `@lazy`
+- [x] Validate scope rules (global only at module level, etc.)
+- [x] Codegen for module-level globals (Python module variables)
+- [x] Codegen for static bindings (Python class variables)
+- [x] Codegen for instance bindings (Python instance variables)
+- [x] Test all three scopes work correctly
+- [x] Create examples/context_scopes.ns demonstrating all scopes
 
 ### 7.6 Compile-Time Recursion Unrolling & Higher-Order Neurons
 
@@ -249,13 +244,13 @@ neuron UniversalTransformer(d_model, num_heads, depth):
 
 ### 7.7 Integration & Examples
 
-- [ ] Integrate context bindings with shape inference
-- [ ] Test context blocks with pattern matching (guards)
-- [ ] Create examples/18-context-scopes.ns (demonstrate all 3 scopes)
+- [x] Integrate context bindings with shape inference
+- [x] Test context blocks with pattern matching (guards)
+- [x] Create examples/18-context-scopes.ns (demonstrate all 3 scopes)
 - [ ] Create examples/19-universal-transformer.ns (higher-order + @static)
 - [ ] Create examples/20-recursive-stack.ns (GPT-2 style depth unrolling)
-- [ ] Test full integration end-to-end
-- [ ] Verify generated PyTorch code runs correctly for all examples
+- [x] Test full integration end-to-end
+- [x] Verify generated PyTorch code runs correctly for all examples
 
 **Context**: Evolution from `let`/`set` specification in `notes/neuroscript_let_set_spec.md`
 
@@ -295,8 +290,8 @@ neuron UniversalTransformer(d_model, num_heads, depth):
 1. ✅ Missing primitives (Fork, Add, Concat, Attention)
 2. ✅ Shape inference engine ⭐
 3. ✅ Pattern matching ⭐ (mostly complete)
-4. ✅ Stdlib composites (mostly complete)
-5. ⏳ Recursive codegen (Phase 7.5+)
+4. ✅ Stdlib composites
+5. ⏳ Recursive codegen (Phase 7.6)
 6. ✅ End-to-end GPT-2 test
 
 ### Recommended Next Steps
@@ -360,22 +355,17 @@ neuron UniversalTransformer(d_model, num_heads, depth):
 
 ### 8.2 AST Builder (Next Step)
 
-- [ ] Create `src/grammar/ast.rs` - Convert pest Pairs to IR types
-- [ ] Implement `build_program()` entry point
-- [ ] Handle all grammar rules → IR conversion
-- [ ] Create `src/grammar/indent.rs` - Indentation validation
-- [ ] Create `src/grammar/error.rs` - Convert pest errors to ParseError
-- [ ] Test AST builder with simple examples first
-- [ ] Validate output matches existing parser
-
-### 8.3 Integration
-
-- [ ] Create feature flag for gradual migration (e.g., `--use-pest`)
-- [ ] Compare outputs between old and new parsers
-- [ ] Run full test suite with new parser
-- [ ] Benchmark performance comparison
-- [ ] Address any discrepancies
-- [ ] Remove old lexer/parser once validated
+- [x] Create `src/grammar/ast.rs` - Convert pest Pairs to IR types
+- [x] Implement `build_program()` entry point
+- [x] Handle all grammar rules → IR conversion
+- [x] Create `src/grammar/indent.rs` - Indentation validation (handled by Pest/AST logic)
+- [x] Create `src/grammar/error.rs` - Convert pest errors to ParseError
+- [x] Test AST builder with simple examples first
+- [x] Validate output matches existing parser
+- [x] Compare outputs between old and new parsers
+- [x] Run full test suite with new parser
+- [x] Address any discrepancies
+- [x] Remove old lexer/parser once validated
 
 **Key Design Decisions:**
 

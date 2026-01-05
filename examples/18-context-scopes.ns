@@ -1,0 +1,23 @@
+@global vocab_dim = 100
+@global hidden_dim = 256
+
+neuron LayerNorm(dim):
+  in: [*, dim]
+  out: [*, dim]
+  impl: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+neuron MyModel(d_model):
+  in: [batch, seq, d_model]
+  out: [batch, seq, @global hidden_dim]
+
+  context:
+    @static shared_norm = LayerNorm(d_model)
+    @lazy output_proj = Linear(d_model, @global hidden_dim)
+    
+  graph:
+    in -> shared_norm -> output_proj -> out
