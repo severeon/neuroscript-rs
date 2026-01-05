@@ -21,6 +21,8 @@ pub enum Dim {
     Variadic(String),
     /// Computed: dim * 4
     Expr(Box<DimExpr>),
+    /// Global: @global hidden_dim
+    Global(String),
 }
 
 impl Dim {
@@ -137,6 +139,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Name(String),
+    Global(String),
     BinOp {
         op: BinOp,
         left: Box<Value>,

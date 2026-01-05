@@ -1,0 +1,31 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ConditionalNetwork(dim, use_extra):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  context:
+    @lazy extra = Linear(...)
+    main = Linear(...)
+  graph:
+    in -> match:
+      [*, dim] where use_extra: extra -> main -> out
+      [*, dim]: main -> out
+
+neuron SimpleNetwork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  context:
+    norm = LayerNorm(...)
+    ffn = FFN(...)
+  graph:
+    in -> norm
+    norm -> ffn
+    ffn -> out

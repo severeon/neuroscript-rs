@@ -6,8 +6,8 @@ NeuroScript is a domain-specific language for defining composable neural network
 
 ## Status
 
-**Current:** Parser + IR + Validation + Standard Library + Codegen (Phase 0)
-**Next:** Shape Inference & Optimizations
+**Current:** Parser + IR + Validation + Standard Library + Codegen + Shape Inference
+**Next:** Compile-time Recursion & Advanced Optimizations
 
 ## Quick Start
 
@@ -121,7 +121,38 @@ graph:
     Dropout(0.1)
     Linear(dim * 4, dim)
     out
+
+### State & Scoping
+
+NeuroScript uses a unified `context` block for managing weight sharing and instantiation logic through explicit annotations:
+
+```neuroscript
+@global vocab_dim = 50257
+
+neuron Transformer(d_model):
+  in: [batch, seq]
+  out: [batch, seq, @global vocab_dim]
+
+  context:
+    # Instance scope (default): Unique weights per instance
+    embedding = Embedding(@global vocab_dim, d_model)
+    
+    # Static scope: Shared weights across ALL instances of this neuron type
+    @static shared_norm = LayerNorm(d_model)
+    
+    # Lazy scope: Instantiated only when used (useful for conditional branches)
+    @lazy extra_proj = Linear(d_model, d_model)
+
+  graph:
+    in -> embedding -> shared_norm -> out
 ```
+
+| Scope | Annotation | Description |
+| :--- | :--- | :--- |
+| **Global** | `@global` | Module-level constants or neurons shared across everything. |
+| **Static** | `@static` | Shared weights across all instances of a specific neuron type. |
+| **Instance** | (default) | Unique weights per instance (standard behavior). |
+| **Lazy** | `@lazy` | Deferred instantiation (e.g., for conditional match arms). |
 
 ### Tuple Unpacking
 
@@ -332,19 +363,23 @@ All 26 files (20 examples + 6 stdlib) parse successfully with zero errors.
 - [x] Standard library registry
 - [x] Comprehensive test suite
 
-### Phase 2: Codegen (In Progress)
+### Phase 2: Codegen & Shape Inference ✅
 
 - [x] IR → PyTorch nn.Module
 - [x] Import generation from stdlib_registry
-- [ ] Shape inference integration
+- [x] Shape inference integration
 - [x] Forward pass generation
 - [x] Parameter initialization
+- [x] Runtime shape assertions
 
 ### Phase 3: Advanced Features
 
-- [ ] Type inference for dimension variables
+- [x] Type inference for dimension variables
+- [x] Context blocks and explicit scoping
+- [x] Pattern matching system
 - [ ] Loop constructs for repeated layers
 - [ ] Higher-order neurons (neuron parameters)
+- [ ] Compile-time recursion unrolling
 - [ ] Optimization passes
 - [ ] Multiple backends (ONNX, JAX)
 

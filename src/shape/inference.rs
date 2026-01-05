@@ -63,6 +63,16 @@ impl InferenceContext {
                 self.solve_expr_for_unknown(expr, *n as usize)
             }
             (Dim::Wildcard, _) | (_, Dim::Wildcard) => Ok(()), // Wildcard matches anything
+            (Dim::Global(g1), Dim::Global(g2)) => {
+                if g1 == g2 {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Global dimension mismatch: @global {} != @global {}",
+                        g1, g2
+                    ))
+                }
+            }
             _ => {
                 // TODO: Handle more complex unifications (e.g. named vs expr)
                 Ok(())
@@ -253,6 +263,17 @@ impl InferenceContext {
             BinOp::Sub => left.checked_sub(right),
             BinOp::Mul => Some(left * right),
             BinOp::Div => left.checked_div(right),
+            _ => None,
+        }
+    }
+
+    /// Evaluate a dimension
+    pub fn evaluate_dim(&self, dim: &Dim) -> Option<usize> {
+        match dim {
+            Dim::Literal(n) => Some(*n as usize),
+            Dim::Named(name) => self.resolved_dims.get(name).copied(),
+            Dim::Expr(e) => self.evaluate_expr(e),
+            Dim::Global(_name) => None, // TODO
             _ => None,
         }
     }
@@ -1032,5 +1053,6 @@ pub(crate) fn is_dim_resolvable(dim: &Dim, ctx: &InferenceContext) -> bool {
         Dim::Expr(expr) => {
             is_dim_resolvable(&expr.left, ctx) && is_dim_resolvable(&expr.right, ctx)
         }
+        Dim::Global(_) => true,
     }
 }

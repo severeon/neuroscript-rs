@@ -39,17 +39,6 @@
 
 ## MVP Phase 4: Stdlib Composites
 
-### 4.1 Complete Standard Library Definitions
-
-- [x] Complete TransformerBlock.ns with full residual connections
-- [x] Implement MultiHeadAttention composite (not primitive)
-- [x] Build FFN variants
-- [x] Create TransformerStack composite
-- [x] Validate all composites with shape inference
-- [ ] Test composition correctness
-
-### 4.2 Implement Stdlib Loading ✅
-
 **summary**: Implement stdlib loading for transformers
 **to-do**: see @stdlib-production-ready.md
 
@@ -61,42 +50,11 @@
 
 **summary**: Implement end-to-end validation for transformers by generating and testing a GPT-2 model
 
-## MVP Phase 7: `context` Bindings, Scopes & Recursion ⭐ KILLER FEATURE
-
-**UPDATED DESIGN DECISIONS (2026-01-01):**
-
-- ✅ Higher-order neurons (neurons as parameters) - REQUIRED for Universal Transformer
-- ✅ Recursive calls unrolled at compile time (simple approach, max depth: 100)
-- ✅ Three scopes for data: global, static, instance
-- ✅ Single `context:` block with annotations: `@static`, `@global`, `@lazy`
-- ✅ Explicit dependencies: All cross-scope references declared in context block
-- ✅ No scope crossing in graph: Can't use `@global.var` or `@static.var` in pipelines
+## MVP Phase 7: `context` Bindings, Scopes & Recursion
 
 ### 7.1 Lexer & Parser Extensions
 
-**Status:** Complete
-
-- [x] Add `set` keyword to lexer (`let` already reserved)
-- [x] Add `context` keyword to lexer
-- [x] Add annotation tokens: `@static`, `@global`, `@lazy`
-- [x] Implement `parse_context_block()` to replace set/let blocks
-- [x] Parse binding syntax: `name = NeuronCall(args)` with optional annotations
-- [x] Parse module-level `@global` declarations
-- [x] Support `Freeze(neuron)` meta-neuron syntax
-- [x] Migrate existing set/let tests to context block
-
-### 7.2 IR Extensions for Context & Scopes
-
-**Status:** Complete
-
-- [x] ~~Add `set_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
-- [x] ~~Add `let_bindings: Vec<Binding>` to `NeuronBody::Graph`~~ (deprecated)
-- [x] Add `context_bindings: Vec<Binding>` to `NeuronBody::Graph`
-- [x] Update `Binding` struct with `scope: Scope`
-- [x] Add `Scope` enum: `Instance`, `Static`, `Global` (with `Lazy` flag)
-- [x] Add `global_bindings: Vec<GlobalBinding>` to `Program`
-- [x] Update IR Display traits for context bindings
-- [x] Test IR correctly represents all three scopes
+**summary**: Added context block and scopes to parser
 
 ### 7.3 Validation Rules for Context & Scopes
 
@@ -114,79 +72,15 @@
 
 ### 7.4 Basic Codegen (Context Block, No Recursion)
 
-**Status:** Complete
-
-- [x] Generate module-level `@global` bindings (Python module variables)
-- [x] Generate `@static` bindings as class variables
-- [x] Generate instance bindings in `__init__` (eager instantiation)
-- [x] Generate `@lazy` bindings with conditional instantiation
-- [x] Track bound names → scope + module instance mapping
-- [x] Reference bound names in graph connections
-- [x] Support weight sharing within scope boundaries
-- [x] Test all three scopes generate correctly
-- [x] Create examples/context_scopes_basic.ns
+**summary**: Added basic codegen for context block and scopes
 
 ### 7.5 Three-Scope Data Model with Context Block
 
-**Design:** Single `context:` block with three scopes via annotations
-
-**Syntax:**
-
-```neuroscript
-# Module level - only place for @global definitions
-@global vocab_table = Embedding(50257, 768)
-@global num_heads = 12
-
-neuron TransformerBlock(d_model):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-
-  context:
-    @static shared_norm = LayerNorm(d_model)              # Class-level (shared)
-    attn = MultiHeadAttention(d_model, @global num_heads) # Instance (references global)
-    @lazy ffn = FFN(d_model)                              # Instance, lazy-loaded
-
-  graph:
-    in -> shared_norm -> attn -> ffn -> out  # Only bound names, no @global.x
-```
-
-**Scope Rules:**
-
-1. **global scope**: Module-level only, `@global name = ...`
-   - Shared across ALL neurons in the module
-   - Cannot be defined inside neurons
-   - Referenced in context blocks via `@global name`
-
-2. **static scope**: Class-level, `@static name = ...` in `context:`
-   - Shared across all instances of THIS neuron type
-   - One copy per neuron class, not per instance
-   - Can reference `@global` bindings
-
-3. **instance scope**: Instance-level, `name = ...` in `context:` (default)
-   - Per-instance data (standard neural network weights)
-   - Can reference `@global` and `@static` bindings
-   - Can be marked `@lazy` for conditional instantiation
-
-**Strict Boundaries:**
-
-- Graph block can ONLY reference names bound in `context:` block
-- No direct `@global.x` or `@static.x` access in pipelines
-- All cross-scope dependencies explicit in `context:` declarations
-
-**Implementation tasks:**
-
-- [x] Define `context:` block syntax (replaces set:/let:)
-- [x] Implement annotation parsing: `@static`, `@global`, `@lazy`
-- [x] Validate scope rules (global only at module level, etc.)
-- [x] Codegen for module-level globals (Python module variables)
-- [x] Codegen for static bindings (Python class variables)
-- [x] Codegen for instance bindings (Python instance variables)
-- [x] Test all three scopes work correctly
-- [x] Create examples/context_scopes.ns demonstrating all scopes
+**summary**: Added three-scope data model with context block
 
 ### 7.6 Compile-Time Recursion Unrolling & Higher-Order Neurons
 
-**Design:** Simple unrolling approach with first-class neuron parameters
+<!-- **summary**: Added compile-time recursion unrolling and higher-order neurons -->
 
 **Recursion Requirements:**
 

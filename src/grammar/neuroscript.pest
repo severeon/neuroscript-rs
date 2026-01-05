@@ -112,6 +112,7 @@ dim_primary = {
   | star ~ ident  // *batch (variadic)
   | star          // * (wildcard)
   | integer       // 512
+  | global_ref
   | ident         // dim
 }
 
@@ -156,8 +157,12 @@ value_primary = {
   | string
   | bool
   | call_expr
+  | global_ref
   | ident
 }
+
+// Global reference: @global vocab_size
+global_ref = { at ~ keyword_global ~ ident }
 
 // Call expression: Foo(1, 2, x=3)
 call_expr = {

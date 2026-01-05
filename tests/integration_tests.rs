@@ -141,6 +141,7 @@ fn format_shape(shape: &Shape) -> String {
             Dim::Wildcard => "*".to_string(),
             Dim::Variadic(name) => format!("*{}", name),
             Dim::Expr(expr) => format_dim_expr(expr),
+            Dim::Global(name) => format!("@global {}", name),
         })
         .collect();
 
@@ -163,6 +164,7 @@ fn format_dim(dim: &Dim) -> String {
         Dim::Wildcard => "*".to_string(),
         Dim::Variadic(name) => format!("*{}", name),
         Dim::Expr(expr) => format_dim_expr(expr),
+        Dim::Global(name) => format!("@global {}", name),
     }
 }
 
@@ -173,6 +175,7 @@ fn format_value(value: &Value) -> String {
         Value::String(s) => format!("\"{}\"", s),
         Value::Bool(b) => b.to_string(),
         Value::Name(name) => name.clone(),
+        Value::Global(name) => format!("@global {}", name),
         Value::BinOp { op, left, right } => {
             format!(
                 "({} {} {})",

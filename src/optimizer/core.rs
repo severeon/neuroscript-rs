@@ -82,6 +82,7 @@ fn pattern_specificity(arm: &MatchArm) -> (usize, bool) {
             Dim::Literal(_) => score += 100,
             Dim::Named(_) => score += 10, // Named captures less specific than literals
             Dim::Expr(_) => score += 50,  // Expressions moderately specific
+            Dim::Global(_) => score += 80, // Globals quite specific
             Dim::Wildcard => score += 1,  // Wildcards least specific
             Dim::Variadic(_) => score += 0, // Variadics are catch-all
         }
@@ -218,6 +219,15 @@ fn pattern_matches_shape(pattern: &Shape, concrete: &Shape, ctx: &InferenceConte
         match pat_dim {
             Dim::Wildcard => continue,       // Always matches
             Dim::Variadic(_) => return true, // Matches rest of shape
+            Dim::Global(pat_name) => {
+                let concrete_name = match concrete_dim {
+                    Dim::Global(n) => Some(n),
+                    _ => None,
+                };
+                if concrete_name != Some(pat_name) {
+                    return false;
+                }
+            }
             Dim::Literal(pat_val) => {
                 let concrete_val = match concrete_dim {
                     Dim::Literal(v) => Some(*v as usize),
@@ -291,6 +301,7 @@ fn evaluate_value(val: &Value, ctx: &InferenceContext) -> Option<i64> {
                 _ => return None,
             })
         }
+        Value::Global(_) => None, // TODO: look up global
         _ => None,
     }
 }

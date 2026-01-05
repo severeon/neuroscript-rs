@@ -52,6 +52,9 @@ pub(super) fn dims_compatible(source: &Dim, dest: &Dim) -> bool {
         (Dim::Expr(_), _) | (_, Dim::Expr(_)) => true,
         // Mixed named/literal: incompatible (can't unify 512 with a variable)
         (Dim::Named(_), Dim::Literal(_)) | (Dim::Literal(_), Dim::Named(_)) => false,
+        // Global dimensions: compatible if same name (conservative)
+        (Dim::Global(n1), Dim::Global(n2)) => n1 == n2,
+        (Dim::Global(_), _) | (_, Dim::Global(_)) => true,
     }
 }
 
@@ -176,6 +179,7 @@ pub(super) fn substitute_dim(dim: &Dim, bindings: &HashMap<String, i64>) -> Dim 
                 }))
             }
         }
+        Dim::Global(_) => dim.clone(),
         _ => dim.clone(),
     }
 }
@@ -199,7 +203,7 @@ pub fn is_catch_all_pattern(pattern: &Shape) -> bool {
         return !pattern.dims.iter().any(|d| matches!(d, Dim::Literal(_)));
     }
 
-    // Non-variadic patterns are catch-all if all dims are wildcards or named (no literals)
+    // Non-variadic patterns are catch-all if all dims are wildcards or named (no literals/globals)
     pattern
         .dims
         .iter()
@@ -264,6 +268,13 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             (Dim::Expr(_), _) => continue, // TODO: implement expression subsumption
             // Variadic should have been handled above
             (Dim::Variadic(_), _) => continue,
+            // Global (conservative check)
+            (Dim::Global(g), Dim::Global(s)) => {
+                if g != s {
+                    return false;
+                }
+            }
+            (Dim::Global(_), _) => return false,
         }
     }
 

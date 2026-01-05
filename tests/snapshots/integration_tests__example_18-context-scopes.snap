@@ -1,0 +1,34 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MyModel(d_model):
+  inputs:
+    default: [batch, seq, d_model]
+  outputs:
+    default: [batch, seq, @global hidden_dim]
+  context:
+    @static shared_norm = LayerNorm(...)
+    @lazy output_proj = Linear(...)
+  graph:
+    in -> shared_norm
+    shared_norm -> output_proj
+    output_proj -> out

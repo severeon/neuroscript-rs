@@ -495,6 +495,10 @@ impl Parser {
                 unreachable!()
             };
             Ok(Dim::Literal(n))
+        } else if self.at(&TokenKind::AtGlobal) {
+            self.advance();
+            let name = self.ident()?;
+            Ok(Dim::Global(name))
         } else if self.at(&TokenKind::Ident("".into())) {
             let name = self.ident()?;
 
@@ -979,6 +983,11 @@ impl Parser {
                 } else {
                     Ok(Value::Name(name))
                 }
+            }
+            TokenKind::AtGlobal => {
+                self.advance();
+                let name = self.ident()?;
+                Ok(Value::Global(name))
             }
             TokenKind::LParen => {
                 self.advance();

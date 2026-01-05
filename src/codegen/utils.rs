@@ -14,6 +14,7 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
         Value::String(s) => format!("\"{}\"", s),
         Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
         Value::Name(n) => n.clone(),
+        Value::Global(n) => n.clone(),
         Value::BinOp { op, left, right } => {
             let op_str = match op {
                 BinOp::Add => "+",
@@ -123,6 +124,7 @@ pub(super) fn has_captured_dimensions_impl(value: &Value, params: &HashSet<Strin
                     .iter()
                     .any(|(_, v)| has_captured_dimensions_impl(v, params))
         }
+        Value::Global(_) => false,
         _ => false,
     }
 }
@@ -222,6 +224,7 @@ impl<'a> CodeGenerator<'a> {
                         return None;
                     }
                 }
+                Dim::Global(name) => name.clone(),
                 Dim::Wildcard => return None, // Can't assert on wildcard
                 Dim::Variadic(_) => return None, // Can't assert on variadic
                 Dim::Expr(expr) => {
@@ -262,6 +265,7 @@ impl<'a> CodeGenerator<'a> {
                         name.clone()
                     }
                 }
+                Dim::Global(name) => format!("@global {}", name),
                 Dim::Wildcard => "*".to_string(),
                 Dim::Variadic(name) => format!("*{}", name),
                 Dim::Expr(expr) => {
@@ -334,6 +338,7 @@ fn dim_to_value(dim: &Dim) -> Value {
             left: Box::new(dim_to_value(&expr.left)),
             right: Box::new(dim_to_value(&expr.right)),
         },
+        Dim::Global(name) => Value::Global(name.clone()),
         _ => Value::Name("None".to_string()), // Shouldn't happen
     }
 }

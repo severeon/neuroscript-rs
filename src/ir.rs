@@ -68,6 +68,7 @@ impl std::fmt::Display for Dim {
             Dim::Wildcard => write!(f, "*"),
             Dim::Variadic(s) => write!(f, "*{}", s),
             Dim::Expr(e) => write!(f, "({} {} {})", e.left, e.op, e.right),
+            Dim::Global(s) => write!(f, "@global {}", s),
         }
     }
 }
@@ -110,6 +111,7 @@ impl std::fmt::Display for Value {
             Value::String(s) => write!(f, "`{}`", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Name(s) => write!(f, "{}", s),
+            Value::Global(s) => write!(f, "@global {}", s),
             Value::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
             Value::Call { name, args, kwargs } => {
                 write!(f, "{}(", name)?;

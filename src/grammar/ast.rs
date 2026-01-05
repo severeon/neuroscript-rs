@@ -407,6 +407,14 @@ impl AstBuilder {
                 Ok(Dim::Literal(n))
             }
             Rule::ident => Ok(Dim::Named(first.as_str().to_string())),
+            Rule::global_ref => {
+                let mut inner = first.clone().into_inner();
+                // Skip '@', 'global'
+                inner.next();
+                inner.next();
+                let ident = inner.next().unwrap().as_str().to_string();
+                Ok(Dim::Global(ident))
+            }
             Rule::dim => self.build_dim(first.clone()),
             _ => Ok(Dim::Wildcard),
         }
@@ -1071,6 +1079,14 @@ impl AstBuilder {
             Rule::call_expr => {
                 let (name, args, kwargs) = self.build_call_expr(inner)?;
                 Ok(Value::Call { name, args, kwargs })
+            }
+            Rule::global_ref => {
+                let mut inner_pairs = inner.into_inner();
+                // Skip '@', 'global'
+                inner_pairs.next();
+                inner_pairs.next();
+                let ident = inner_pairs.next().unwrap().as_str().to_string();
+                Ok(Value::Global(ident))
             }
             Rule::ident => Ok(Value::Name(inner.as_str().to_string())),
             Rule::value => self.build_value(inner),
