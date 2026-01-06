@@ -63,12 +63,12 @@
 - [x] Check no forward references in bindings (existing)
 - [x] Validate binding names don't conflict (existing)
 - [x] Validate bound neuron names exist (existing)
-- [ ] **NEW:** Validate `@global` only appears at module level (not in neurons)
-- [ ] **NEW:** Validate `@static`/`@lazy` only appear in `context:` blocks
-- [ ] **NEW:** Validate graph connections only reference context-bound names (no `@global.x`)
-- [ ] **NEW:** Validate instance bindings can't reference static bindings of same neuron
-- [ ] **NEW:** Validate static bindings can reference globals and other statics
-- [ ] Test validation catches scope violations
+- [x] **NEW:** Validate `@global` only appears at module level (not in neurons)
+- [x] **NEW:** Validate `@static`/`@lazy` only appear in `context:` blocks
+- [x] **NEW:** Validate graph connections only reference context-bound names (no `@global.x`)
+- [x] **NEW:** Validate instance bindings can't reference static bindings of same neuron
+- [x] **NEW:** Validate static bindings can reference globals and other statics
+- [x] Test validation catches scope violations
 
 ### 7.4 Basic Codegen (Context Block, No Recursion)
 
