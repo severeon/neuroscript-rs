@@ -17,6 +17,7 @@
 //! ```
 
 pub mod codegen;
+pub mod doc_parser;
 pub mod grammar;
 pub mod interfaces;
 pub mod ir;

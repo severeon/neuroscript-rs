@@ -54,6 +54,7 @@ fn test_optimize_matches_basic() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -122,6 +123,7 @@ fn test_optimize_matches_shadowing() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -196,6 +198,7 @@ fn test_optimize_matches_guards_prevent_pruning() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -280,6 +283,7 @@ fn test_optimize_matches_multiple_unreachable() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -347,6 +351,7 @@ fn test_optimize_matches_disabled() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -435,6 +440,7 @@ fn test_optimize_matches_nested() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],
@@ -505,6 +511,7 @@ fn test_count_matches() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -614,6 +621,7 @@ fn test_reorder_match_arms() {
         inputs: vec![],
         outputs: vec![],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![connection],

@@ -389,6 +389,7 @@ impl Parser {
             outputs,
             body,
             max_cycle_depth,
+            doc: None, // Old parser doesn't support doc comments yet
         })
     }
 

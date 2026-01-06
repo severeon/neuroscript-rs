@@ -1,0 +1,73 @@
+---
+source: tests/integration_tests.rs
+assertion_line: 687
+expression: formatted
+---
+=== Neurons ===
+
+neuron LlamaBlock(dim, num_heads, intermediate_size):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#10()
+    Fork#10() -> (skip1, norm1)
+    norm1 -> RMSNorm#11(dim)
+    RMSNorm#11(dim) -> LlamaRotaryAttention#12(dim, num_heads)
+    LlamaRotaryAttention#12(dim, num_heads) -> attn_out
+    (skip1, attn_out) -> Add#13()
+    Add#13() -> residual1
+    residual1 -> Fork#14()
+    Fork#14() -> (skip2, norm2)
+    norm2 -> RMSNorm#15(dim)
+    RMSNorm#15(dim) -> SwiGLU#16(dim, intermediate_size)
+    SwiGLU#16(dim, intermediate_size) -> ffn_out
+    (skip2, ffn_out) -> Add#17()
+    Add#17() -> out
+
+neuron LlamaRotaryAttention(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> q_proj
+    in -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> k_proj
+    in -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> v_proj
+    (q_proj, k_proj) -> RotaryEmbedding#3(dim=64)
+    RotaryEmbedding#3(dim=64) -> (q_rot, k_rot)
+    in -> out
+
+neuron MiniLlama(vocab_size, dim, num_heads, layers):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#18(vocab_size, dim)
+    Embedding#18(vocab_size, dim) -> LlamaBlock#19(dim, num_heads, (dim * 4))
+    LlamaBlock#19(dim, num_heads, (dim * 4)) -> RMSNorm#20(dim)
+    RMSNorm#20(dim) -> Linear#21(dim, vocab_size)
+    Linear#21(dim, vocab_size) -> out
+
+neuron SwiGLU(dim, hidden_dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#4()
+    Fork#4() -> (gate_path, val_path)
+    gate_path -> Linear#5(dim, hidden_dim)
+    Linear#5(dim, hidden_dim) -> SiLU#6()
+    SiLU#6() -> gate
+    val_path -> Linear#7(dim, hidden_dim)
+    Linear#7(dim, hidden_dim) -> val
+    (gate, val) -> Multiply#8()
+    Multiply#8() -> hidden
+    hidden -> Linear#9(hidden_dim, dim)
+    Linear#9(hidden_dim, dim) -> out

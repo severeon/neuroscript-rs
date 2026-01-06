@@ -1,5 +1,20 @@
 # Layer Normalization
-# Normalize across features (commonly used in transformers)
+#
+# Normalizes inputs across the feature dimension, computing mean and
+# variance over the last dimension. Essential component in transformer architectures.
+#
+# Parameters:
+# - dim: Normalization dimension (size of the feature axis)
+#
+# Shape Contract:
+# - Input: [*shape, dim] where dim is the normalized dimension
+# - Output: [*shape, dim] same shape as input
+#
+# Notes:
+# - Normalizes over last dimension only (per-example normalization)
+# - Includes learnable scale (gamma) and shift (beta) parameters
+# - More stable than BatchNorm for variable-length sequences
+# - Standard in transformers (BERT, GPT, etc.)
 
 neuron LayerNorm(dim):
     in: [*shape, dim]

@@ -18,7 +18,8 @@ fn simple_neuron(name: &str, in_shape: Shape, out_shape: Shape) -> NeuronDef {
             source: "test".to_string(),
             path: "test".to_string(),
         }),
-        max_cycle_depth: None, // Primitives don't allow cycles
+        max_cycle_depth: None,
+        doc: None, // Primitives don't allow cycles
     }
 }
 
@@ -33,7 +34,8 @@ fn multi_port_neuron(name: &str, inputs: Vec<Port>, outputs: Vec<Port>) -> Neuro
             source: "test".to_string(),
             path: "test".to_string(),
         }),
-        max_cycle_depth: None, // Primitives don't allow cycles
+        max_cycle_depth: None,
+        doc: None, // Primitives don't allow cycles
     }
 }
 
@@ -75,6 +77,7 @@ fn test_missing_neuron_in_call() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -115,6 +118,7 @@ fn test_missing_neuron_in_match() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -194,6 +198,7 @@ fn test_arity_mismatch_call_to_call() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -251,6 +256,7 @@ fn test_arity_mismatch_tuple_unpacking() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -340,6 +346,7 @@ fn test_arity_mismatch_tuple_to_call() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -419,6 +426,7 @@ fn test_shape_mismatch_literal() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -473,6 +481,7 @@ fn test_shape_mismatch_multi_dim() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -527,6 +536,7 @@ fn test_shape_match_exact() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -577,6 +587,7 @@ fn test_simple_cycle() {
             shape: wildcard(),
         }],
         max_cycle_depth: None,
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -664,6 +675,7 @@ fn test_cycle_through_unpacked_ports() {
             shape: wildcard(),
         }],
         max_cycle_depth: None,
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -783,6 +795,7 @@ fn test_no_cycle_valid_residual() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -876,6 +889,7 @@ fn test_empty_graph() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![],
@@ -902,6 +916,7 @@ fn test_simple_passthrough() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -938,6 +953,7 @@ fn test_valid_pipeline() {
             shape: wildcard(),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![
@@ -1002,6 +1018,7 @@ fn test_match_exhaustiveness_with_catchall() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -1051,6 +1068,7 @@ fn test_match_exhaustiveness_without_catchall() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -1102,6 +1120,7 @@ fn test_match_pattern_shadowing() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {

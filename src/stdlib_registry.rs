@@ -81,6 +81,42 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "Bias",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.operations",
+                "Bias",
+                "Additive bias",
+            ),
+        );
+
+        self.register(
+            "Scale",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.operations",
+                "Scale",
+                "Multiplicative scale",
+            ),
+        );
+
+        self.register(
+            "MatMul",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.operations",
+                "MatMul",
+                "Matrix multiplication",
+            ),
+        );
+
+        self.register(
+            "Einsum",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.operations",
+                "Einsum",
+                "Einstein summation",
+            ),
+        );
+
         // Level 0: Activations
         self.register(
             "GELU",
@@ -136,6 +172,33 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "Mish",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "Mish",
+                "Mish activation",
+            ),
+        );
+
+        self.register(
+            "PReLU",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "PReLU",
+                "Parametric ReLU",
+            ),
+        );
+
+        self.register(
+            "ELU",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "ELU",
+                "Exponential Linear Unit",
+            ),
+        );
+
         // Level 0: Normalizations
         self.register(
             "LayerNorm",
@@ -173,6 +236,15 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "InstanceNorm",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.normalization",
+                "InstanceNorm",
+                "Instance normalization",
+            ),
+        );
+
         // Level 0: Regularization
         self.register(
             "Dropout",
@@ -203,11 +275,56 @@ impl StdlibRegistry {
 
         // Level 0: Convolutions
         self.register(
+            "Conv1d",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "Conv1d",
+                "1D convolution layer",
+            ),
+        );
+
+        self.register(
             "Conv2d",
             ImplRef::with_desc(
                 "neuroscript_runtime.primitives.convolutions",
                 "Conv2d",
                 "2D convolution layer",
+            ),
+        );
+
+        self.register(
+            "Conv3d",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "Conv3d",
+                "3D convolution layer",
+            ),
+        );
+
+        self.register(
+            "DepthwiseConv",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "DepthwiseConv",
+                "Depthwise convolution layer",
+            ),
+        );
+
+        self.register(
+            "SeparableConv",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "SeparableConv",
+                "Separable convolution layer",
+            ),
+        );
+
+        self.register(
+            "TransposedConv",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "TransposedConv",
+                "Transposed convolution layer",
             ),
         );
 
@@ -248,6 +365,24 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "AdaptiveMaxPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "AdaptiveMaxPool",
+                "Adaptive max pooling (output size fixed)",
+            ),
+        );
+
+        self.register(
+            "GlobalMaxPool",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.pooling",
+                "GlobalMaxPool",
+                "Global max pooling (reduces spatial dims to 1x1)",
+            ),
+        );
+
         // Level 0: Embeddings
         self.register(
             "Embedding",
@@ -273,6 +408,15 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.embeddings",
                 "LearnedPositionalEmbedding",
                 "Learned positional embeddings (BERT/GPT style)",
+            ),
+        );
+
+        self.register(
+            "RotaryEmbedding",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.embeddings",
+                "RotaryEmbedding",
+                "Rotary Position Embedding (RoPE)",
             ),
         );
 
@@ -355,6 +499,33 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.structural",
                 "Flatten",
                 "Flattens a contiguous range of dims into a tensor",
+            ),
+        );
+
+        self.register(
+            "Split",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Split",
+                "Split tensor into chunks",
+            ),
+        );
+
+        self.register(
+            "Slice",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Slice",
+                "Slice tensor along a dimension",
+            ),
+        );
+
+        self.register(
+            "Pad",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Pad",
+                "Pad tensor with value",
             ),
         );
 

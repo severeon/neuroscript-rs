@@ -5,11 +5,11 @@
 //! 2. Connection endpoints match (tuple arity, port names, shapes)
 //! 3. No cycles in the dependency graph
 
-mod symbol_table;
-mod shapes;
-mod cycles;
 mod bindings;
 pub mod core;
+mod cycles;
+mod shapes;
+mod symbol_table;
 
 // Re-export public API
 pub use core::Validator;

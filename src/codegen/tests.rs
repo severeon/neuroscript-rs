@@ -17,6 +17,7 @@ fn test_codegen_match() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -88,6 +89,7 @@ fn test_codegen_match_with_captured_dims() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -190,6 +192,7 @@ fn test_codegen_match_guards_with_bindings() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -253,6 +256,7 @@ fn test_codegen_optimized_match_fewer_branches() {
                 shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
             }],
             max_cycle_depth: Some(10),
+            doc: None,
             body: NeuronBody::Graph {
                 context_bindings: vec![],
                 connections: vec![Connection {
@@ -426,6 +430,7 @@ fn test_codegen_optimized_match_with_guards() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {
@@ -565,6 +570,7 @@ fn test_codegen_if_else() {
             shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]), // Simplified output shape
         }],
         max_cycle_depth: Some(10),
+        doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
             connections: vec![Connection {

@@ -246,7 +246,9 @@ class PositionalEncoding(nn.Module):
 
     def extra_repr(self) -> str:
         """String representation for debugging."""
-        return f"d_model={self.d_model}, max_len={self.max_len}, dropout={self.dropout.p}"
+        return (
+            f"d_model={self.d_model}, max_len={self.max_len}, dropout={self.dropout.p}"
+        )
 
 
 class LearnedPositionalEmbedding(nn.Module):
@@ -305,8 +307,7 @@ class LearnedPositionalEmbedding(nn.Module):
         """
         if input.size(-1) != self.d_model:
             raise ValueError(
-                f"Input last dimension must be {self.d_model}, "
-                f"got {input.size(-1)}"
+                f"Input last dimension must be {self.d_model}, got {input.size(-1)}"
             )
 
         seq_len = input.size(-2)
@@ -327,3 +328,113 @@ class LearnedPositionalEmbedding(nn.Module):
     def extra_repr(self) -> str:
         """String representation for debugging."""
         return f"max_len={self.max_len}, d_model={self.d_model}"
+
+
+class RotaryEmbedding(nn.Module):
+    """
+    Rotary Position Embedding (RoPE).
+
+    Rotates query and key tensors to encode relative positional information.
+    Based on "RoFormer: Enhanced Transformer with Rotary Position Embedding".
+
+    NeuroScript signature:
+        neuron RotaryEmbedding(dim, max_position_embeddings=2048, base=10000.0):
+            in query: [*batch, seq, num_heads, head_dim]
+            in key: [*batch, seq, num_heads, head_dim]
+            out q_out: [*batch, seq, num_heads, head_dim]
+            out k_out: [*batch, seq, num_heads, head_dim]
+            impl: neuroscript_runtime.primitives.embeddings.RotaryEmbedding
+
+    Args:
+        dim (int): Embedding dimension (head_dim).
+        max_position_embeddings (int): Maximum sequence length to pre-compute. Default: 2048
+        base (float): Base for the geometric progression of frequencies. Default: 10000.0
+    """
+
+    def __init__(
+        self, dim: int, max_position_embeddings: int = 2048, base: float = 10000.0
+    ):
+        super().__init__()
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+
+        # Compute cos and sin cache
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+        # Build initial cache
+        self._set_cos_sin_cache(max_position_embeddings)
+
+    def _set_cos_sin_cache(self, seq_len, device=None, dtype=None):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(
+            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
+        )
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+
+        # Different from paper, but common in implementations:
+        # Concatenate freqs to match dimension
+        emb = torch.cat((freqs, freqs), dim=-1)
+
+        self.register_buffer(
+            "cos_cached", emb.cos()[None, None, :, :], persistent=False
+        )
+        self.register_buffer(
+            "sin_cached", emb.sin()[None, None, :, :], persistent=False
+        )
+
+    def forward(
+        self, q: torch.Tensor, k: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Apply RoPE to query and key.
+
+        Args:
+            q: Query tensor [*batch, num_heads, seq_len, head_dim]
+            k: Key tensor [*batch, num_heads, seq_len, head_dim]
+
+        Returns:
+            Tuple of rotated query and key
+        """
+        # q, k shape: [batch, num_heads, seq_len, head_dim]
+        # or [batch, seq_len, num_heads, head_dim] depending on format
+        # Standard implementation usually assumes [batch, num_heads, seq_len, head_dim]
+        # But let's support generic last dim being head_dim
+
+        seq_len = q.shape[-2]
+
+        # Extend cache if needed
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len, device=q.device, dtype=q.dtype)
+
+        # Get cos and sin for current sequence length
+        # cached shape: [1, 1, max_len, dim]
+        # We slice to: [1, 1, seq_len, dim]
+        cos = self.cos_cached[:, :, :seq_len, ...].to(dtype=q.dtype, device=q.device)
+        sin = self.sin_cached[:, :, :seq_len, ...].to(dtype=q.dtype, device=q.device)
+
+        return (
+            self._apply_rotary_pos_emb(q, cos, sin),
+            self._apply_rotary_pos_emb(k, cos, sin),
+        )
+
+    def _rotate_half(self, x):
+        """Rotates half the hidden dims of the input."""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def _apply_rotary_pos_emb(self, x, cos, sin):
+        """Applies Rotary Position Embedding to the input tensor."""
+        # x: [batch, num_heads, seq_len, head_dim]
+        # cos, sin: [1, 1, seq_len, head_dim]
+        # Need to ensure broadcasting works.
+        # If x is [batch, seq_len, num_heads, head_dim], we might need to unsqueeze differently.
+        # Assuming standard [batch, num_heads, seq_len, head_dim] or [batch, seq_len, num_heads, head_dim]
+        # where seq_len is -2.
+
+        # If standard layout:
+        # x: [..., seq_len, head_dim]
+        # cos: [..., seq_len, head_dim]
+        return (x * cos) + (self._rotate_half(x) * sin)

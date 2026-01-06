@@ -100,7 +100,7 @@ class LayerNorm(nn.Module):
             ValueError: If input shape doesn't match normalized_shape
         """
         # Validate input shape matches normalized_shape
-        if input.shape[-len(self.normalized_shape):] != self.normalized_shape:
+        if input.shape[-len(self.normalized_shape) :] != self.normalized_shape:
             raise ValueError(
                 f"Input shape {list(input.shape)} doesn't match normalized_shape "
                 f"{list(self.normalized_shape)}. Last {len(self.normalized_shape)} "
@@ -195,7 +195,7 @@ class RMSNorm(nn.Module):
             )
 
         # Compute RMS: sqrt(mean(x^2) + eps)
-        rms = torch.sqrt(torch.mean(input ** 2, dim=-1, keepdim=True) + self.eps)
+        rms = torch.sqrt(torch.mean(input**2, dim=-1, keepdim=True) + self.eps)
 
         # Normalize and scale
         return input / rms * self.weight
@@ -314,5 +314,24 @@ class GroupNorm(nn.Module):
 
     @property
     def bias(self) -> torch.Tensor:
-        """Learnable shift parameter."""
         return self.group_norm.bias
+
+
+class InstanceNorm(nn.Module):
+    """Instance normalization - normalizes each sample across spatial dimensions."""
+
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-5,
+        affine: bool = True,
+    ) -> None:
+        super().__init__()
+        self.instance_norm = nn.InstanceNorm2d(
+            num_features=num_features,
+            eps=eps,
+            affine=affine,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.instance_norm(input)
