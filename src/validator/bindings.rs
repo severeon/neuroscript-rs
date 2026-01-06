@@ -95,5 +95,85 @@ pub(super) fn validate_bindings(
         }
     }
 
+    // 2. Validate scope dependencies
+    for binding in context_bindings {
+        // Find what this binding is calling
+        // It could be a neuron name or another binding name
+        if let Some(called_binding) = context_bindings
+            .iter()
+            .find(|b| b.name == binding.call_name)
+        {
+            match (&binding.scope, &called_binding.scope) {
+                // Task 7.3.4: Instance bindings can't reference static bindings
+                (Scope::Instance { .. }, Scope::Static) => {
+                    errors.push(ValidationError::Custom(format!(
+                        "Instance binding '{}' in neuron '{}' cannot reference @static binding '{}'.",
+                        binding.name, neuron.name, called_binding.name
+                    )));
+                }
+                // Static bindings can reference globals and other statics
+                (Scope::Static, Scope::Instance { .. }) => {
+                    errors.push(ValidationError::Custom(format!(
+                        "Static binding '{}' in neuron '{}' cannot reference instance binding '{}'.",
+                        binding.name, neuron.name, called_binding.name
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        // Check arguments for scope violations
+        for arg in &binding.args {
+            check_value_scope(arg, &binding.scope, context_bindings, neuron, &mut errors);
+        }
+        for (_, val) in &binding.kwargs {
+            check_value_scope(val, &binding.scope, context_bindings, neuron, &mut errors);
+        }
+    }
+
     errors
+}
+
+/// Check if a value is compatible with the given scope
+fn check_value_scope(
+    value: &Value,
+    current_scope: &Scope,
+    context_bindings: &[Binding],
+    neuron: &NeuronDef,
+    errors: &mut Vec<ValidationError>,
+) {
+    match value {
+        Value::Name(name) => {
+            if let Some(called_binding) = context_bindings.iter().find(|b| b.name == *name) {
+                match (current_scope, &called_binding.scope) {
+                    (Scope::Instance { .. }, Scope::Static) => {
+                        errors.push(ValidationError::Custom(format!(
+                            "Instance scope in neuron '{}' cannot reference @static binding '{}'.",
+                            neuron.name, name
+                        )));
+                    }
+                    (Scope::Static, Scope::Instance { .. }) => {
+                        errors.push(ValidationError::Custom(format!(
+                            "Static scope in neuron '{}' cannot reference instance binding '{}'.",
+                            neuron.name, name
+                        )));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Value::BinOp { left, right, .. } => {
+            check_value_scope(left, current_scope, context_bindings, neuron, errors);
+            check_value_scope(right, current_scope, context_bindings, neuron, errors);
+        }
+        Value::Call { args, kwargs, .. } => {
+            for arg in args {
+                check_value_scope(arg, current_scope, context_bindings, neuron, errors);
+            }
+            for (_, val) in kwargs {
+                check_value_scope(val, current_scope, context_bindings, neuron, errors);
+            }
+        }
+        _ => {}
+    }
 }

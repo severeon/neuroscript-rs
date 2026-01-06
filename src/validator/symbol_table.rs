@@ -110,7 +110,10 @@ where
                 id: 0,
                 frozen: binding.frozen,
             };
-            if let Some(ports) = resolve_endpoint_partial(&endpoint, &ctx, &table, true, errors) {
+            // Context bindings ARE allowed to reference globals
+            if let Some(ports) =
+                resolve_endpoint_partial(&endpoint, &ctx, &table, true, true, errors)
+            {
                 table.add_node(binding.name.clone(), ports);
             }
         }
@@ -144,7 +147,9 @@ fn process_destination_for_symbol_table<F>(
         // Tuple unpacking: source -> (a, b, c)
         Endpoint::Tuple(port_refs) => {
             // Source must resolve to multiple ports
-            if let Some(source_ports) = resolve_endpoint_partial(source, ctx, table, true, errors) {
+            if let Some(source_ports) =
+                resolve_endpoint_partial(source, ctx, table, true, false, errors)
+            {
                 if source_ports.len() != port_refs.len() {
                     errors.push(ValidationError::ArityMismatch {
                         expected: port_refs.len(),
@@ -164,7 +169,7 @@ fn process_destination_for_symbol_table<F>(
             // This creates an intermediate node if it's not already in the table
             if table.get_ports(&port_ref.node).is_none() {
                 if let Some(source_ports) =
-                    resolve_endpoint_partial(source, ctx, table, true, errors)
+                    resolve_endpoint_partial(source, ctx, table, true, false, errors)
                 {
                     // Add the intermediate node with the source's output ports
                     table.add_node(port_ref.node.clone(), source_ports);
@@ -209,12 +214,13 @@ pub(super) fn resolve_endpoint_partial<F>(
     ctx: &ResolutionContext<F>,
     table: &SymbolTable,
     is_source: bool,
+    allow_globals: bool,
     errors: &mut Vec<ValidationError>,
 ) -> Option<Vec<Port>>
 where
     F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
 {
-    match resolve_endpoint(endpoint, ctx, table, is_source) {
+    match resolve_endpoint(endpoint, ctx, table, is_source, allow_globals) {
         Ok(ports) => Some(ports),
         Err(e) => {
             errors.push(*e);
@@ -229,6 +235,7 @@ pub(super) fn resolve_endpoint<F>(
     ctx: &ResolutionContext<F>,
     symbol_table: &SymbolTable,
     is_source: bool,
+    allow_globals: bool,
 ) -> Result<Vec<Port>, Box<ValidationError>>
 where
     F: Fn(&[Port], &[Param], &[Value]) -> Vec<Port>,
@@ -250,32 +257,45 @@ where
             }
 
             // 2. Look up global names
-            if let Some(global) = ctx.program.globals.iter().find(|g| &g.name == name) {
-                match &global.value {
-                    Value::Call {
-                        name: c_name,
-                        args: c_args,
-                        kwargs: _,
-                    } => {
-                        // Nested call resolution for global neurons
-                        let sub_endpoint = Endpoint::Call {
-                            name: c_name.clone(),
-                            args: c_args.clone(),
-                            kwargs: vec![],
-                            id: 0,
-                            frozen: false,
-                        };
-                        return resolve_endpoint(&sub_endpoint, ctx, symbol_table, is_source);
+            if allow_globals {
+                if let Some(global) = ctx.program.globals.iter().find(|g| &g.name == name) {
+                    match &global.value {
+                        Value::Call {
+                            name: c_name,
+                            args: c_args,
+                            kwargs: _,
+                        } => {
+                            // Nested call resolution for global neurons
+                            let sub_endpoint = Endpoint::Call {
+                                name: c_name.clone(),
+                                args: c_args.clone(),
+                                kwargs: vec![],
+                                id: 0,
+                                frozen: false,
+                            };
+                            return resolve_endpoint(
+                                &sub_endpoint,
+                                ctx,
+                                symbol_table,
+                                is_source,
+                                true,
+                            );
+                        }
+                        _ => {
+                            return Err(Box::new(ValidationError::Custom(format!(
+                                "Global name '{}' is a value, not a neuron",
+                                name
+                            ))));
+                        }
                     }
-                    _ => {
-                        // For simple global values (int, float, etc.),
-                        // they don't have ports. This should probably error
-                        // if used as a neuron call.
-                        return Err(Box::new(ValidationError::Custom(format!(
-                            "Global name '{}' is a value, not a neuron",
-                            name
-                        ))));
-                    }
+                }
+            } else {
+                // Task 7.3.3: Direct global access forbidden in graph connections
+                if ctx.program.globals.iter().any(|g| &g.name == name) {
+                    return Err(Box::new(ValidationError::Custom(format!(
+                        "Direct access to @global '{}' in neuron '{}' graph is forbidden. Bind it in context: instead.",
+                        name, ctx.neuron.name
+                    ))));
                 }
             }
 
@@ -325,6 +345,7 @@ where
                     ctx,
                     symbol_table,
                     is_source,
+                    allow_globals,
                 )?;
                 ports.extend(resolved);
             }
@@ -343,7 +364,13 @@ where
                     arm.pipeline.first()
                 };
                 if let Some(ep) = ep {
-                    all_arm_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                    all_arm_ports.push(resolve_endpoint(
+                        ep,
+                        ctx,
+                        symbol_table,
+                        is_source,
+                        allow_globals,
+                    )?);
                 } else {
                     all_arm_ports.push(vec![]);
                 }
@@ -365,7 +392,13 @@ where
                     branch.pipeline.first()
                 };
                 if let Some(ep) = ep {
-                    all_branch_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                    all_branch_ports.push(resolve_endpoint(
+                        ep,
+                        ctx,
+                        symbol_table,
+                        is_source,
+                        allow_globals,
+                    )?);
                 } else {
                     all_branch_ports.push(vec![]);
                 }
@@ -378,7 +411,13 @@ where
                     else_branch.first()
                 };
                 if let Some(ep) = ep {
-                    all_branch_ports.push(resolve_endpoint(ep, ctx, symbol_table, is_source)?);
+                    all_branch_ports.push(resolve_endpoint(
+                        ep,
+                        ctx,
+                        symbol_table,
+                        is_source,
+                        allow_globals,
+                    )?);
                 } else {
                     all_branch_ports.push(vec![]);
                 }

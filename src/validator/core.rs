@@ -125,13 +125,15 @@ impl Validator {
                 &connection.source,
                 &res_ctx,
                 &symbol_table,
-                true, // is_source
+                true,  // is_source
+                false, // allow_globals (no direct global access in connections)
             );
             let dest_resolution = symbol_table::resolve_endpoint(
                 &connection.destination,
                 &res_ctx,
                 &symbol_table,
                 false, // is_source
+                false, // allow_globals (no direct global access in connections)
             );
 
             match (source_resolution, dest_resolution) {

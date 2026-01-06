@@ -5,8 +5,10 @@
 ## Priority 1: Critical Issues (Blocking Production)
 
 ### 1.1 Fix Validation Errors in Stdlib Files
+
 **Why**: 126+ validation errors prevent stdlib neurons from being used
 **Tasks**:
+
 - [x] Audit all 6 stdlib files for validation errors:
   - [x] FFN.ns - Port mismatch issues with primitives
   - [x] Residual.ns - Arity mismatch in tuple unpacking
@@ -21,8 +23,10 @@
 **Acceptance Criteria**: `./target/release/neuroscript validate examples/test_stdlib.ns` passes without errors
 
 ### 1.2 Define Primitive Neuron Signatures
+
 **Why**: Current dummy port `[]` causes shape validation failures
 **Options**:
+
 - **Option A**: Create .ns files with primitive signatures in stdlib/primitives/
 - **Option B**: Hard-code primitive signatures in StdlibRegistry
 - **Option C**: Add primitive_signatures.toml config file
@@ -30,6 +34,7 @@
 **Recommended**: Option A (most flexible, user-facing)
 
 **Tasks**:
+
 - [x] Create stdlib/primitives/ directory
 - [x] Define signatures for core primitives:
   - [x] Linear.ns - `in: [*, in_dim], out: [*, out_dim]`
@@ -45,8 +50,10 @@
 **Acceptance Criteria**: `SimpleModel` using `Linear -> GELU -> Linear` validates without port mismatches
 
 ### 1.3 Update Integration Tests
+
 **Why**: Snapshot test is failing due to validator changes
 **Tasks**:
+
 - [x] Review snapshot diff for `example_28-let_set_basic`
 - [x] Run `cargo insta review` and accept/reject changes
 - [x] Ensure all 10 integration tests pass
@@ -57,7 +64,9 @@
 ## Priority 2: User Experience (Critical for Usability)
 
 ### 2.1 Improve Error Messages
+
 **Tasks**:
+
 - [ ] Better stdlib loading errors:
   - [ ] Show which stdlib file failed to parse (with line numbers)
   - [ ] Suggest running with `--no-stdlib` if stdlib is broken
@@ -70,7 +79,9 @@
 **Acceptance Criteria**: Users can quickly identify if error is in their code or stdlib
 
 ### 2.2 Add CLI Improvements
+
 **Tasks**:
+
 - [ ] Add `--stdlib-path <DIR>` flag to use custom stdlib location
 - [ ] Add `neuroscript list-stdlib` command to show available stdlib neurons
 - [ ] Show stdlib loading status in verbose mode (already done ✓)
@@ -79,7 +90,9 @@
 **Acceptance Criteria**: Users can easily discover and use stdlib neurons
 
 ### 2.3 Documentation
+
 **Tasks**:
+
 - [ ] Update CLAUDE.md with stdlib usage examples
 - [ ] Create stdlib/README.md documenting:
   - [ ] How to use stdlib neurons
@@ -94,7 +107,9 @@
 ## Priority 3: Testing & Validation (Quality Assurance)
 
 ### 3.1 Comprehensive Test Suite
+
 **Tasks**:
+
 - [ ] Add unit tests for stdlib.rs:
   - [ ] Test stdlib directory discovery
   - [ ] Test parsing all stdlib files
@@ -114,7 +129,9 @@
 **Acceptance Criteria**: 95%+ test coverage for stdlib loading code
 
 ### 3.2 End-to-End Validation
+
 **Tasks**:
+
 - [ ] Create working examples that use stdlib:
   - [ ] examples/gpt2_from_stdlib.ns (using TransformerStack)
   - [ ] examples/bert_from_stdlib.ns (using BERT neurons)
@@ -128,7 +145,9 @@
 ## Priority 4: Performance & Scalability (Optimization)
 
 ### 4.1 Optimize Stdlib Loading
+
 **Tasks**:
+
 - [ ] Profile stdlib loading time
 - [ ] Add caching mechanism:
   - [ ] Cache parsed stdlib in ~/.cache/neuroscript/
@@ -140,7 +159,9 @@
 **Acceptance Criteria**: Stdlib loading adds <50ms to compilation time
 
 ### 4.2 Reduce Validation Overhead
+
 **Tasks**:
+
 - [ ] Skip validation of stdlib neurons if already validated
 - [ ] Only validate stdlib neurons that are actually used
 - [ ] Add --trust-stdlib flag to skip stdlib validation
@@ -151,7 +172,9 @@
 ## Priority 5: Advanced Features (Nice-to-Have)
 
 ### 5.1 Stdlib Versioning
+
 **Tasks**:
+
 - [ ] Add version to stdlib directory (e.g., stdlib/v1/)
 - [ ] Support multiple stdlib versions
 - [ ] Add `use stdlib::v2` syntax for version selection
@@ -160,7 +183,9 @@
 **Acceptance Criteria**: Users can pin to specific stdlib version
 
 ### 5.2 Stdlib Package Manager
+
 **Tasks**:
+
 - [ ] Define .neuroscript package format
 - [ ] Support downloading stdlib from remote sources
 - [ ] Add `neuroscript install <package>` command
@@ -169,7 +194,9 @@
 **Acceptance Criteria**: Users can share and reuse neuron libraries
 
 ### 5.3 Stdlib Precompilation
+
 **Tasks**:
+
 - [ ] Add --precompile-stdlib flag
 - [ ] Generate optimized IR for stdlib neurons
 - [ ] Ship precompiled stdlib with binary
@@ -180,6 +207,7 @@
 ## Quick Wins (Can Do Now)
 
 ### Immediate Tasks (1-2 hours each)
+
 - [x] Accept failing snapshot test: `cargo insta accept`
 - [ ] Fix top 5 most-used stdlib neurons (FFN, Residual, etc.)
 - [ ] Add examples/stdlib_demo.ns showing stdlib usage
@@ -187,12 +215,14 @@
 - [ ] Add warning when stdlib validation fails
 
 ### Medium Tasks (half day each)
+
 - [ ] Create primitive neuron definitions for top 10 primitives
 - [ ] Add `neuroscript list-stdlib` command
 - [ ] Write stdlib/README.md with usage guide
 - [ ] Add 10 unit tests for stdlib.rs
 
 ### Large Tasks (1-2 days each)
+
 - [ ] Fix all validation errors in stdlib files
 - [ ] Create complete primitive definitions (30+ files)
 - [ ] End-to-end testing with PyTorch execution
@@ -212,6 +242,7 @@
 ## Current Status Summary
 
 **Working**:
+
 - ✅ Stdlib discovery and loading
 - ✅ Program merging
 - ✅ Primitive neuron recognition
@@ -219,6 +250,7 @@
 - ✅ Error handling and graceful fallback
 
 **Needs Work**:
+
 - ⬜ Stdlib validation errors (126+ errors)
 - ⬜ Primitive shape validation (dummy ports)
 - ⬜ Integration test snapshots
@@ -226,6 +258,7 @@
 - ⬜ End-to-end examples
 
 **Priority Order for Implementation**:
+
 1. Fix primitive shape validation (blocks everything else)
 2. Fix stdlib validation errors (makes stdlib usable)
 3. Update integration tests (ensures quality)

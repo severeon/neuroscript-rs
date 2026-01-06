@@ -1198,3 +1198,250 @@ fn test_is_catch_all_pattern() {
     let pattern5 = Shape::new(vec![]);
     assert!(!Validator::is_catch_all_pattern(&pattern5));
 }
+
+// ========== SCOPE & CONTEXT VALIDATION TESTS ==========
+
+#[test]
+fn test_global_ref_forbidden_in_graph() {
+    let mut program = Program::new();
+    program.globals.push(GlobalBinding {
+        name: "vocab".to_string(),
+        value: Value::Call {
+            name: "Embedding".to_string(),
+            args: vec![Value::Int(50000), Value::Int(512)],
+            kwargs: vec![],
+        },
+    });
+
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: wildcard(),
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: wildcard(),
+        }],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![],
+            connections: vec![Connection {
+                source: Endpoint::Ref(PortRef::new("in")),
+                // Direct access to global "vocab" - should be forbidden
+                destination: Endpoint::Call {
+                    name: "vocab".to_string(),
+                    args: vec![],
+                    kwargs: vec![],
+                    id: 0,
+                    frozen: false,
+                },
+            }],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors
+        .iter()
+        .any(|e| e.to_string().contains("Direct access to @global 'vocab'")));
+}
+
+#[test]
+fn test_global_annotation_forbidden_in_context() {
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![],
+        outputs: vec![],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![Binding {
+                name: "g".to_string(),
+                call_name: "Linear".to_string(),
+                args: vec![],
+                kwargs: vec![],
+                scope: Scope::Global, // Forbidden in context block
+                frozen: false,
+            }],
+            connections: vec![],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors
+        .iter()
+        .any(|e| e.to_string().contains("cannot be marked @global")));
+}
+
+#[test]
+fn test_instance_cannot_reference_static() {
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![],
+        outputs: vec![],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![
+                Binding {
+                    name: "S".to_string(),
+                    call_name: "Linear".to_string(),
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Static,
+                    frozen: false,
+                },
+                Binding {
+                    name: "I".to_string(),
+                    call_name: "S".to_string(), // Referencing static S
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: false },
+                    frozen: false,
+                },
+            ],
+            connections: vec![],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors.iter().any(|e| e
+        .to_string()
+        .contains("cannot reference @static binding 'S'")));
+}
+
+#[test]
+fn test_static_cannot_reference_instance() {
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![],
+        outputs: vec![],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![
+                Binding {
+                    name: "I".to_string(),
+                    call_name: "Linear".to_string(),
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: false },
+                    frozen: false,
+                },
+                Binding {
+                    name: "S".to_string(),
+                    call_name: "I".to_string(), // Static referencing instance I
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Static,
+                    frozen: false,
+                },
+            ],
+            connections: vec![],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors.iter().any(|e| e
+        .to_string()
+        .contains("cannot reference instance binding 'I'")));
+}
+
+#[test]
+fn test_static_can_reference_static() {
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![],
+        outputs: vec![],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![
+                Binding {
+                    name: "S1".to_string(),
+                    call_name: "Linear".to_string(),
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Static,
+                    frozen: false,
+                },
+                Binding {
+                    name: "S2".to_string(),
+                    call_name: "S1".to_string(), // Static referencing static S1
+                    args: vec![],
+                    kwargs: vec![],
+                    scope: Scope::Static,
+                    frozen: false,
+                },
+            ],
+            connections: vec![],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    // This should not have scope errors (might have other errors if Linear doesn't exist, so we use Registry)
+    if let Err(errors) = result {
+        assert!(!errors
+            .iter()
+            .any(|e| e.to_string().contains("cannot reference")));
+    }
+}
+
+#[test]
+fn test_static_can_reference_global() {
+    let mut program = Program::new();
+    program.globals.push(GlobalBinding {
+        name: "vocab_table".to_string(),
+        value: Value::Call {
+            name: "Embedding".to_string(),
+            args: vec![Value::Int(50000), Value::Int(512)],
+            kwargs: vec![],
+        },
+    });
+
+    let neuron = NeuronDef {
+        name: "Test".to_string(),
+        params: vec![],
+        inputs: vec![],
+        outputs: vec![],
+        max_cycle_depth: Some(10),
+        body: NeuronBody::Graph {
+            context_bindings: vec![Binding {
+                name: "E".to_string(),
+                call_name: "vocab_table".to_string(), // Referencing global
+                args: vec![],
+                kwargs: vec![],
+                scope: Scope::Static,
+                frozen: false,
+            }],
+            connections: vec![],
+        },
+    };
+    program.neurons.insert("Test".to_string(), neuron);
+
+    let result = Validator::validate(&mut program);
+    if let Err(errors) = result {
+        // We only care about scope errors here
+        assert!(!errors
+            .iter()
+            .any(|e| e.to_string().contains("cannot reference")));
+    }
+}

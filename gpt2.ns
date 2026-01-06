@@ -5,38 +5,6 @@ use core,activations/*
 use core,regularization/*
 use core,structural/*
 
-# TransformerBlock from stdlib
-# impl shown here for completeness
-# and because it's sexy
-neuron TransformerBlock(d_model, num_heads, d_ff):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
-    graph:
-        # First residual-attention with pre-norm
-        in -> Fork() -> (skip1, attn_path)
-
-        attn_path ->
-            LayerNorm(d_model)
-            MultiHeadSelfAttention(d_model, num_heads)
-            Dropout(0.1)
-            attn_out
-
-        # Add residual
-        (skip1, attn_out) -> Add() -> attn_residual
-
-        # Second residual-forward with pre-norm
-        attn_residual -> Fork() -> (skip2, ffn_path)
-
-        ffn_path ->
-            LayerNorm(d_model)
-            FFN(d_model, d_ff)
-            Dropout(0.1)
-            ffn_out
-
-        # Add residual
-        (skip2, ffn_out) -> Add() -> out
-
-
 neuron TransformerStack12(dim, num_heads, d_ff):
     in: [batch, seq, dim]
     out: [batch, seq, dim]
@@ -56,7 +24,6 @@ neuron TransformerStack12(dim, num_heads, d_ff):
             TransformerBlock(dim, num_heads, d_ff)
             out
 
-# GPT-2 Small: Single layer for testing
 neuron GPT2Small(vocab_size):
     in: [batch, seq]
     out: [*, vocab_size]
