@@ -1,0 +1,7 @@
+# ELU Activation
+# Exponential Linear Unit
+
+neuron ELU(alpha):
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ELU

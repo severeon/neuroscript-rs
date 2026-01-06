@@ -198,3 +198,86 @@ class Softmax(nn.Module):
     def extra_repr(self) -> str:
         """String representation for debugging."""
         return f"dim={self.dim}"
+
+
+class Mish(nn.Module):
+    """
+    Mish activation: Mish(x) = x * tanh(softplus(x))
+
+    Self-regularized non-monotonic activation function.
+    Mish tends to work better than ReLU and Swish in many deep networks.
+
+    Shape:
+        - Input: [*shape] arbitrary shape
+        - Output: [*shape] same shape as input
+
+    Examples:
+        >>> mish = Mish()
+        >>> x = torch.randn(32, 512)
+        >>> out = mish(x)
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Apply Mish activation."""
+        return F.mish(input)
+
+
+class PReLU(nn.Module):
+    """
+    Parametric ReLU activation: PReLU(x) = max(0, x) + a * min(0, x)
+
+    Args:
+        num_parameters: Number of learnable parameters. Default: 1
+        init: Initial value of the parameters. Default: 0.25
+
+    Shape:
+        - Input: [*shape] arbitrary shape
+        - Output: [*shape] same shape as input
+
+    Examples:
+        >>> prelu = PReLU(num_parameters=1)
+        >>> x = torch.randn(32, 512)
+        >>> out = prelu(x)
+    """
+
+    def __init__(self, num_parameters: int = 1, init: float = 0.25) -> None:
+        super().__init__()
+        self.prelu = nn.PReLU(num_parameters=num_parameters, init=init)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Apply PReLU activation."""
+        return self.prelu(input)
+
+
+class ELU(nn.Module):
+    """
+    Exponential Linear Unit activation:
+    ELU(x) = max(0, x) + min(0, alpha * (exp(x) - 1))
+
+    Args:
+        alpha: Scale for the negative factor. Default: 1.0
+
+    Shape:
+        - Input: [*shape] arbitrary shape
+        - Output: [*shape] same shape as input
+
+    Examples:
+        >>> elu = ELU(alpha=1.0)
+        >>> x = torch.randn(32, 512)
+        >>> out = elu(x)
+    """
+
+    def __init__(self, alpha: float = 1.0) -> None:
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Apply ELU activation."""
+        return F.elu(input, alpha=self.alpha)
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"alpha={self.alpha}"

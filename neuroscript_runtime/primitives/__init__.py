@@ -18,6 +18,9 @@ from neuroscript_runtime.primitives.activations import (
     Sigmoid,
     SiLU,
     Softmax,
+    Mish,
+    PReLU,
+    ELU,
 )
 
 # Normalization
@@ -71,6 +74,9 @@ __all__ = [
     "Sigmoid",
     "SiLU",
     "Softmax",
+    "Mish",
+    "PReLU",
+    "ELU",
     # Normalization
     "LayerNorm",
     "RMSNorm",

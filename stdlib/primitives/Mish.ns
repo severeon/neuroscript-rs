@@ -1,0 +1,7 @@
+# Mish Activation
+# Self-regularized non-monotonic activation: x * tanh(softplus(x))
+
+neuron Mish:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Mish

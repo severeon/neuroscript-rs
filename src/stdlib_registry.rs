@@ -168,6 +168,33 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "Mish",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "Mish",
+                "Mish activation function (self-regularized non-monotonic)",
+            ),
+        );
+
+        self.register(
+            "PReLU",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "PReLU",
+                "Parametric ReLU activation function",
+            ),
+        );
+
+        self.register(
+            "ELU",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.activations",
+                "ELU",
+                "Exponential Linear Unit activation function",
+            ),
+        );
+
         // Level 0: Normalizations
         self.register(
             "LayerNorm",

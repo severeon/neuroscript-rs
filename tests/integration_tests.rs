@@ -453,6 +453,18 @@ fn test_stdlib_loading_with_primitives() {
         stdlib.neurons.contains_key("Add"),
         "Add primitive not found"
     );
+    assert!(
+        stdlib.neurons.contains_key("Mish"),
+        "Mish primitive not found"
+    );
+    assert!(
+        stdlib.neurons.contains_key("PReLU"),
+        "PReLU primitive not found"
+    );
+    assert!(
+        stdlib.neurons.contains_key("ELU"),
+        "ELU primitive not found"
+    );
 
     // Verify Linear has proper shape signature
     let linear = &stdlib.neurons["Linear"];

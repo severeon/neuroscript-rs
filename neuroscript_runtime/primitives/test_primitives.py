@@ -22,6 +22,9 @@ from neuroscript_runtime.primitives import (
     Sigmoid,
     SiLU,
     Softmax,
+    Mish,
+    PReLU,
+    ELU,
     # Normalization
     LayerNorm,
     RMSNorm,
@@ -133,6 +136,31 @@ class TestActivations:
         # Check that probabilities sum to 1 along last dimension
         sums = out.sum(dim=-1)
         assert torch.allclose(sums, torch.ones_like(sums), atol=1e-6)
+
+    def test_mish(self, sample_input):
+        """Test Mish activation."""
+        mish = Mish()
+        out = mish(sample_input)
+        assert out.shape == sample_input.shape
+
+    def test_prelu(self, sample_input):
+        """Test PReLU activation."""
+        prelu = PReLU(num_parameters=1)
+        out = prelu(sample_input)
+        assert out.shape == sample_input.shape
+
+    def test_prelu_multi(self):
+        """Test PReLU with multiple parameters."""
+        x = torch.randn(32, 16, 128)
+        prelu = PReLU(num_parameters=16)
+        out = prelu(x)
+        assert out.shape == x.shape
+
+    def test_elu(self, sample_input):
+        """Test ELU activation."""
+        elu = ELU(alpha=1.0)
+        out = elu(sample_input)
+        assert out.shape == sample_input.shape
 
 
 class TestNormalization:

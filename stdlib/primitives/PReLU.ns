@@ -1,0 +1,7 @@
+# Parametric ReLU Activation
+# PReLU(x) = max(0, x) + a * min(0, x)
+
+neuron PReLU(num_parameters, init):
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/PReLU
