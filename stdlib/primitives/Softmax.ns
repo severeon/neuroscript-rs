@@ -1,22 +1,21 @@
-# Softmax Activation
-#
-# Normalizes input into a probability distribution along the specified dimension.
-# Output values sum to 1 and are all positive, making it ideal for classification.
-#
-# Parameters:
-# - dim: Dimension along which softmax is computed (typically last dimension)
-#
-# Shape Contract:
-# - Input: [*, dim] where dim is the dimension to normalize
-# - Output: [*, dim] same shape as input, normalized along dim
-#
-# Notes:
-# - Formula: softmax(x_i) = exp(x_i) / sum(exp(x_j))
-# - Output sums to 1.0 along the specified dimension
-# - Used for multi-class classification and attention weights
-# - Numerically stable implementations subtract max(x) before exp
-# - Cross-entropy loss often includes built-in softmax (use raw logits)
-
+/// Softmax Activation
+///
+/// Normalizes input into a probability distribution along the specified dimension.
+/// Output values sum to 1 and are all positive, making it ideal for classification.
+///
+/// Parameters:
+/// - dim: Dimension along which softmax is computed (typically last dimension)
+///
+/// Shape Contract:
+/// - Input: [*, dim] where dim is the dimension to normalize
+/// - Output: [*, dim] same shape as input, normalized along dim
+///
+/// Notes:
+/// - Formula: softmax(x_i) = exp(x_i) / sum(exp(x_j))
+/// - Output sums to 1.0 along the specified dimension
+/// - Used for multi-class classification and attention weights
+/// - Numerically stable implementations subtract max(x) before exp
+/// - Cross-entropy loss often includes built-in softmax (use raw logits)
 neuron Softmax(dim):
     in: [*, dim]
     out: [*, dim]

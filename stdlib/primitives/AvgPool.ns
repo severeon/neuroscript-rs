@@ -1,24 +1,23 @@
-# 2D Average Pooling
-#
-# Downsamples by computing the average value in each pooling window.
-# Provides smoother downsampling compared to max pooling.
-#
-# Parameters:
-# - kernel_size: Size of the pooling window
-# - stride: Stride of the pooling window (default: 1)
-# - padding: Zero-padding added to input (default: 0)
-#
-# Shape Contract:
-# - Input: [batch, channels, height, width]
-# - Output: [batch, channels, out_height, out_width]
-#
-# Notes:
-# - Output size: floor((input + 2*padding - kernel_size) / stride) + 1
-# - Smoother than MaxPool, preserves more spatial information
-# - Used in ResNet final pooling and some attention mechanisms
-# - No learnable parameters
-# - Preserves channel count
-
+/// 2D Average Pooling
+///
+/// Downsamples by computing the average value in each pooling window.
+/// Provides smoother downsampling compared to max pooling.
+///
+/// Parameters:
+/// - kernel_size: Size of the pooling window
+/// - stride: Stride of the pooling window (default: 1)
+/// - padding: Zero-padding added to input (default: 0)
+///
+/// Shape Contract:
+/// - Input: [batch, channels, height, width]
+/// - Output: [batch, channels, out_height, out_width]
+///
+/// Notes:
+/// - Output size: floor((input + 2*padding - kernel_size) / stride) + 1
+/// - Smoother than MaxPool, preserves more spatial information
+/// - Used in ResNet final pooling and some attention mechanisms
+/// - No learnable parameters
+/// - Preserves channel count
 neuron AvgPool(kernel_size, stride=1, padding=0):
     in: [batch, channels, height, width]
     out: [batch, channels, *, *]

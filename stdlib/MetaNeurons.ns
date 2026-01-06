@@ -7,7 +7,7 @@
 # tuple unpacking require implementation of primitive port signatures.
 # See primitives.ns for Identity() and other routing operations.
 
-# Parallel FFN branches
+/// Parallel FFN branches
 neuron ParallelFFN(dim):
     in: [*, dim]
     out: [*, dim]
