@@ -1,23 +1,22 @@
-# Split
-#
-# Splits a tensor into multiple chunks along a specified dimension.
-#
-# Parameters:
-# - num_splits: Number of equal-sized chunks to create
-# - dim: Dimension along which to split (default: -1)
-#
-# Shape Contract:
-# - Input: [*shape] tensor to split
-# - Output a: [*shape_a] first chunk
-# - Output b: [*shape_b] second chunk (if num_splits >= 2)
-#
-# Notes:
-# - Input size along dim must be divisible by num_splits
-# - Returns tuple of tensors
-# - No learnable parameters (pure structural operation)
-# - Inverse of Concat
-# - Commonly used to split heads in attention or features
-
+/// Split
+///
+/// Splits a tensor into multiple chunks along a specified dimension.
+///
+/// Parameters:
+/// - num_splits: Number of equal-sized chunks to create
+/// - dim: Dimension along which to split (default: -1)
+///
+/// Shape Contract:
+/// - Input: [*shape] tensor to split
+/// - Output a: [*shape_a] first chunk
+/// - Output b: [*shape_b] second chunk (if num_splits >= 2)
+///
+/// Notes:
+/// - Input size along dim must be divisible by num_splits
+/// - Returns tuple of tensors
+/// - No learnable parameters (pure structural operation)
+/// - Inverse of Concat
+/// - Commonly used to split heads in attention or features
 neuron Split(num_splits, dim=-1):
     in: [*shape]
     out a: [*shape_a]

@@ -1,11 +1,10 @@
-# Feed-Forward Network (FFN) / Multi-Layer Perceptron (MLP)
-#
-# Standard two-layer feed-forward network with expansion and projection.
-# Commonly used in transformers and other architectures.
-#
-# Pattern: Linear (expand) → Activation → Linear (project back)
-# Typical expansion factor: 4x (e.g., 512 → 2048 → 512)
-
+/// Feed-Forward Network (FFN) / Multi-Layer Perceptron (MLP)
+///
+/// Standard two-layer feed-forward network with expansion and projection.
+/// Commonly used in transformers and other architectures.
+///
+/// Pattern: Linear (expand) → Activation → Linear (project back)
+/// Typical expansion factor: 4x (e.g., 512 → 2048 → 512)
 neuron FFN(dim, expansion):
     in: [*shape, dim]
     out: [*shape, dim]
@@ -17,7 +16,7 @@ neuron FFN(dim, expansion):
             out
 
 
-# Variant with explicit hidden dimension
+/// Variant with explicit hidden dimension
 neuron FFNWithHidden(in_dim, hidden_dim, out_dim):
     in: [*shape, in_dim]
     out: [*shape, out_dim]

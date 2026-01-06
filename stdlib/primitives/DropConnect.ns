@@ -1,23 +1,22 @@
-# DropConnect Regularization
-#
-# Randomly zeros individual weights (connections) during training rather than
-# activations. Provides stronger regularization than standard Dropout.
-#
-# Parameters:
-# - drop_prob: Probability of a connection being zeroed (0 to 1)
-#
-# Shape Contract:
-# - Input: [*shape] arbitrary shape
-# - Output: [*shape] same shape as input
-#
-# Notes:
-# - Drops weights, not activations (unlike Dropout)
-# - Applied to the connection weights during forward pass
-# - More fine-grained than Dropout
-# - Only active during training
-# - Used in EfficientNet and some attention mechanisms
-# - Outputs scaled to maintain expected values
-
+/// DropConnect Regularization
+///
+/// Randomly zeros individual weights (connections) during training rather than
+/// activations. Provides stronger regularization than standard Dropout.
+///
+/// Parameters:
+/// - drop_prob: Probability of a connection being zeroed (0 to 1)
+///
+/// Shape Contract:
+/// - Input: [*shape] arbitrary shape
+/// - Output: [*shape] same shape as input
+///
+/// Notes:
+/// - Drops weights, not activations (unlike Dropout)
+/// - Applied to the connection weights during forward pass
+/// - More fine-grained than Dropout
+/// - Only active during training
+/// - Used in EfficientNet and some attention mechanisms
+/// - Outputs scaled to maintain expected values
 neuron DropConnect(drop_prob):
     in: [*shape]
     out: [*shape]

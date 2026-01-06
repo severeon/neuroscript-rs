@@ -1,13 +1,12 @@
-# Rotary Position Embedding (RoPE)
-#
-# Rotates query and key tensors to encode relative positional information.
-# Based on "RoFormer: Enhanced Transformer with Rotary Position Embedding".
-#
-# Parameters:
-# - dim: Embedding dimension (head_dim)
-# - max_position_embeddings: Maximum sequence length to pre-compute (default: 2048)
-# - base: Base for the geometric progression of frequencies (default: 10000.0)
-
+/// Rotary Position Embedding (RoPE)
+///
+/// Rotates query and key tensors to encode relative positional information.
+/// Based on "RoFormer: Enhanced Transformer with Rotary Position Embedding".
+///
+/// Parameters:
+/// - dim: Embedding dimension (head_dim)
+/// - max_position_embeddings: Maximum sequence length to pre-compute (default: 2048)
+/// - base: Base for the geometric progression of frequencies (default: 10000.0)
 neuron RotaryEmbedding(dim, max_position_embeddings=2048, base=10000):
     in query: [*batch, seq, num_heads, dim]
     in key: [*batch, seq, num_heads, dim]

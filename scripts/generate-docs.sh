@@ -18,18 +18,7 @@ DOC_BINARY="./target/release/neuroscript-doc"
 echo -e "${BLUE}Generating primitive documentation...${NC}"
 
 # Generate docs for primitives
-PRIMITIVE_FILES=(
-    "stdlib/primitives/Linear.ns"
-    "stdlib/primitives/GELU.ns"
-    "stdlib/primitives/Dropout.ns"
-    "stdlib/primitives/LayerNorm.ns"
-    "stdlib/primitives/Embedding.ns"
-    "stdlib/primitives/ReLU.ns"
-    "stdlib/primitives/Flatten.ns"
-    "stdlib/primitives/Concat.ns"
-    "stdlib/primitives/Conv2d.ns"
-    "stdlib/primitives/BatchNorm.ns"
-)
+PRIMITIVE_FILES=(stdlib/**/*.ns)
 
 PRIMITIVES_GENERATED=0
 
