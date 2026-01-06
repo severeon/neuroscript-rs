@@ -28,6 +28,9 @@ from neuroscript_runtime.primitives.normalization import (
     LayerNorm,
     RMSNorm,
     GroupNorm,
+    BatchNorm,
+    InstanceNorm,
+    WeightNorm,
 )
 
 # Regularization
@@ -81,6 +84,9 @@ __all__ = [
     "LayerNorm",
     "RMSNorm",
     "GroupNorm",
+    "BatchNorm",
+    "InstanceNorm",
+    "WeightNorm",
     # Regularization
     "Dropout",
     "DropPath",

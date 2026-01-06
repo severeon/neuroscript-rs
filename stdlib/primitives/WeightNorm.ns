@@ -1,0 +1,7 @@
+# Weight Normalization (Activation-side)
+# Normalizes input tensor by its L2 norm
+
+neuron WeightNorm(dim = -1):
+    in: [*shape]
+    out: [*shape]
+    impl: core,normalization/WeightNorm

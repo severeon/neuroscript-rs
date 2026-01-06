@@ -316,3 +316,170 @@ class GroupNorm(nn.Module):
     def bias(self) -> torch.Tensor:
         """Learnable shift parameter."""
         return self.group_norm.bias
+
+
+class BatchNorm(nn.Module):
+    """
+    Batch Normalization.
+
+    Normalizes across the batch and spatial dimensions.
+    Automatically handles 1D, 2D, or 3D spatial data based on input rank.
+
+    Args:
+        num_features: Number of features (C)
+        eps: Small constant for numerical stability. Default: 1e-5
+        momentum: Momentum for running stats. Default: 0.1
+        affine: If True, learnable affine parameters. Default: True
+        track_running_stats: If True, tracks running mean/var. Default: True
+
+    Shape:
+        - Input: [N, C, *]
+        - Output: [N, C, *] same shape as input
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-5,
+        momentum: float = 0.1,
+        affine: bool = True,
+        track_running_stats: bool = True,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
+    ) -> None:
+        super().__init__()
+        self.num_features = num_features
+        self.eps = eps
+        self.momentum = momentum
+        self.affine = affine
+        self.track_running_stats = track_running_stats
+
+        # We'll use 2D as default, but it can work for 1D/3D if we're careful 
+        # or if we wrap the specific versions. Many PyTorch BatchNorms share 
+        # the same parameter structure.
+        self.batch_norm = nn.BatchNorm2d(
+            num_features=num_features,
+            eps=eps,
+            momentum=momentum,
+            affine=affine,
+            track_running_stats=track_running_stats,
+            device=device,
+            dtype=dtype,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Apply batch normalization."""
+        if input.dim() == 2 or input.dim() == 3:
+            # Re-wrap if needed for 1D
+            if not isinstance(self.batch_norm, nn.BatchNorm1d):
+                self.batch_norm = nn.BatchNorm1d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+        elif input.dim() == 4:
+            if not isinstance(self.batch_norm, nn.BatchNorm2d):
+                self.batch_norm = nn.BatchNorm2d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+        elif input.dim() == 5:
+            if not isinstance(self.batch_norm, nn.BatchNorm3d):
+                self.batch_norm = nn.BatchNorm3d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+
+        return self.batch_norm(input)
+
+
+class InstanceNorm(nn.Module):
+    """
+    Instance Normalization.
+
+    Normalizes across the spatial dimensions per channel and per instance.
+    Common in style transfer and generative models.
+
+    Args:
+        num_features: Number of features (C)
+        eps: Small constant for numerical stability. Default: 1e-5
+        momentum: Momentum for running stats. Default: 0.1
+        affine: If True, learnable affine parameters. Default: False
+        track_running_stats: If True, tracks running mean/var. Default: False
+
+    Shape:
+        - Input: [N, C, *]
+        - Output: [N, C, *] same shape as input
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-5,
+        momentum: float = 0.1,
+        affine: bool = False,
+        track_running_stats: bool = False,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
+    ) -> None:
+        super().__init__()
+        self.num_features = num_features
+        self.eps = eps
+        self.momentum = momentum
+        self.affine = affine
+        self.track_running_stats = track_running_stats
+
+        self.instance_norm = nn.InstanceNorm2d(
+            num_features=num_features,
+            eps=eps,
+            momentum=momentum,
+            affine=affine,
+            track_running_stats=track_running_stats,
+            device=device,
+            dtype=dtype,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Apply instance normalization."""
+        if input.dim() == 3:
+            if not isinstance(self.instance_norm, nn.InstanceNorm1d):
+                self.instance_norm = nn.InstanceNorm1d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+        elif input.dim() == 4:
+            if not isinstance(self.instance_norm, nn.InstanceNorm2d):
+                self.instance_norm = nn.InstanceNorm2d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+        elif input.dim() == 5:
+            if not isinstance(self.instance_norm, nn.InstanceNorm3d):
+                self.instance_norm = nn.InstanceNorm3d(
+                    self.num_features, self.eps, self.momentum, self.affine, 
+                    self.track_running_stats
+                ).to(input.device).to(input.dtype)
+
+        return self.instance_norm(input)
+
+
+class WeightNorm(nn.Module):
+    """
+    Weight Normalization (activation-side).
+    
+    Normalizes the input tensor by its L2 norm along a given dimension.
+    This is often used as a simpler alternative or component of weight norm 
+    mechanisms that can be applied directly in the computation graph.
+
+    Args:
+        dim: Dimension to normalize over. Default: -1
+        eps: Small constant for numerical stability. Default: 1e-12
+    """
+
+    def __init__(self, dim: int = -1, eps: float = 1e-12) -> None:
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Normalize input by its L2 norm."""
+        return input / (input.norm(p=2, dim=self.dim, keepdim=True) + self.eps)

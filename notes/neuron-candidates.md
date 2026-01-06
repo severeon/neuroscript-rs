@@ -25,10 +25,10 @@ Level 4: Meta (ensembles, routers, control flow)
 ### Core Operations
 
 - [x] `Linear` - dense/fully-connected layer
-- [ ] `Bias` - additive bias
-- [ ] `Scale` - multiplicative scaling
-- [ ] `MatMul` - matrix multiplication
-- [ ] `Einsum` - Einstein summation (generalized tensor operations)
+- [x] `Bias` - additive bias
+- [x] `Scale` - multiplicative scaling
+- [x] `MatMul` - matrix multiplication
+- [x] `Einsum` - Einstein summation (generalized tensor operations)
 
 ### Activations
 
@@ -38,9 +38,9 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `Tanh` - hyperbolic tangent
 - [x] `Sigmoid` - logistic function
 - [x] `Softmax` - normalized exponential
-- [ ] `Mish` - self-regularized non-monotonic activation
-- [ ] `PReLU` - parametric ReLU
-- [ ] `ELU` - exponential linear unit
+- [x] `Mish` - self-regularized non-monotonic activation
+- [x] `PReLU` - parametric ReLU
+- [x] `ELU` - exponential linear unit
 
 ### Normalizations
 
@@ -48,8 +48,8 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `BatchNorm` - batch normalization
 - [x] `RMSNorm` - root mean square normalization
 - [x] `GroupNorm` - group normalization
-- [ ] `InstanceNorm` - instance normalization
-- [ ] `WeightNorm` - weight normalization
+- [x] `InstanceNorm` - instance normalization
+- [x] `WeightNorm` - weight normalization
 
 ### Regularization
 

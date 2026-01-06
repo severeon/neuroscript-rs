@@ -29,6 +29,9 @@ from neuroscript_runtime.primitives import (
     LayerNorm,
     RMSNorm,
     GroupNorm,
+    BatchNorm,
+    InstanceNorm,
+    WeightNorm,
     # Regularization
     Dropout,
     DropPath,
@@ -205,6 +208,30 @@ class TestNormalization:
         """Test GroupNorm with invalid channel configuration."""
         with pytest.raises(ValueError, match="must be divisible"):
             GroupNorm(num_groups=8, num_channels=30)  # 30 not divisible by 8
+
+    def test_batch_norm(self):
+        """Test BatchNorm."""
+        batch_norm = BatchNorm(32)
+        x = torch.randn(16, 32, 64, 64)
+        out = batch_norm(x)
+        assert out.shape == x.shape
+
+    def test_instance_norm(self):
+        """Test InstanceNorm."""
+        instance_norm = InstanceNorm(32)
+        x = torch.randn(16, 32, 64, 64)
+        out = instance_norm(x)
+        assert out.shape == x.shape
+
+    def test_weight_norm(self):
+        """Test WeightNorm (activation side)."""
+        weight_norm = WeightNorm(dim=1)
+        x = torch.randn(16, 32, 64, 64)
+        out = weight_norm(x)
+        assert out.shape == x.shape
+        # Check that norm is indeed 1 (approximately)
+        norms = out.norm(p=2, dim=1)
+        assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
 
 
 class TestRegularization:

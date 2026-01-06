@@ -232,6 +232,24 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "InstanceNorm",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.normalization",
+                "InstanceNorm",
+                "Instance normalization",
+            ),
+        );
+
+        self.register(
+            "WeightNorm",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.normalization",
+                "WeightNorm",
+                "Weight normalization (activation-side)",
+            ),
+        );
+
         // Level 0: Regularization
         self.register(
             "Dropout",

@@ -1,0 +1,24 @@
+use core,normalization/InstanceNorm
+use core,normalization/WeightNorm
+use core,normalization/LayerNorm
+use core,convolutions/Conv2d
+use core,activations/ReLU
+
+# A demo of various normalization techniques in NeuroScript
+neuron NormalizationDemo(in_channels, width, height):
+    in: [batch, in_channels, height, width]
+    out: [batch, in_channels, height, width]
+
+    context:
+        # InstanceNorm is common for style transfer or generative tasks
+        inorm = InstanceNorm(in_channels)
+        
+        # WeightNorm can be applied to activations for L2-style normalization
+        wnorm = WeightNorm(dim=1) # Normalize across channels
+        
+        # Conv layer to show we can mix them
+        conv = Conv2d(in_channels, in_channels, 3, padding=1)
+        relu = ReLU()
+
+    graph:
+        in -> inorm -> conv -> relu -> wnorm -> out

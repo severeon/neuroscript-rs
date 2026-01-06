@@ -1,0 +1,7 @@
+# Instance Normalization
+# Normalizes across spatial dimensions per channel and instance
+
+neuron InstanceNorm(num_features):
+    in: [batch, num_features, *spatial]
+    out: [batch, num_features, *spatial]
+    impl: core,normalization/InstanceNorm
