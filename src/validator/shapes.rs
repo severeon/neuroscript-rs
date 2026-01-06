@@ -257,7 +257,11 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             // Named dimensions match anything (they capture)
             (Dim::Named(_), _) => continue,
             // Literal must match exactly
-            (Dim::Literal(g_lit), Dim::Literal(s_lit)) => return g_lit != s_lit,
+            (Dim::Literal(g_lit), Dim::Literal(s_lit)) => {
+                if g_lit != s_lit {
+                    return false;
+                }
+            }
             // Literal in general, but wildcard/named in specific - not subsumed
             (Dim::Literal(_), _) => return false,
             // Expression dimensions - conservative check
@@ -265,7 +269,11 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             // Variadic should have been handled above
             (Dim::Variadic(_), _) => continue,
             // Global (conservative check)
-            (Dim::Global(g), Dim::Global(s)) => return g != s,
+            (Dim::Global(g), Dim::Global(s)) => {
+                if g != s {
+                    return false;
+                }
+            }
             (Dim::Global(_), _) => return false,
         }
     }

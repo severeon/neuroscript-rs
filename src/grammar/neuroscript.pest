@@ -324,13 +324,13 @@ indented_pipeline_item = {
 endpoint = {
     match_expr
   | tuple_endpoint
-  | call_endpoint
   | ref_endpoint
+  | call_endpoint
 }
 
 // Reference endpoint: in, out, foo, foo.bar
 ref_endpoint = {
-    (keyword_in | keyword_out | ident) ~ (dot ~ ident)?
+    (keyword_in | keyword_out | ident) ~ (dot ~ ident)? ~ !lparen
 }
 
 // Call endpoint: Linear(512, 256)

@@ -4,9 +4,6 @@ version = "0.2.0"
 edition = "2021"
 description = "Neural architecture composition language"
 
-[features]
-default = []
-pest-parser = []  # Use new pest-based parser instead of handwritten lexer/parser
 
 [dependencies]
 thiserror = "1.0"      # Clean error types

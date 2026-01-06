@@ -1,6 +1,5 @@
 use super::*;
 use crate::grammar::NeuroScriptParser;
-use crate::interfaces::Parser as OldParser;
 use pest::Parser;
 
 fn parse_program(input: &str) -> Result<Program, ParseError> {
@@ -61,162 +60,79 @@ fn test_composite_neuron() {
     }
 }
 
-// === Comparison tests: pest vs handwritten parser ===
+// === Build tests for example files ===
 
-fn compare_parsers(input: &str, name: &str) {
-    let pest_result = parse_program(input);
-    let old_result = OldParser::parse(input);
-
-    match (&pest_result, &old_result) {
-        (Ok(pest_prog), Ok(old_prog)) => {
-            // Compare neuron counts
-            assert_eq!(
-                pest_prog.neurons.len(),
-                old_prog.neurons.len(),
-                "{}: neuron count mismatch",
-                name
-            );
-
-            // Compare use statement counts
-            assert_eq!(
-                pest_prog.uses.len(),
-                old_prog.uses.len(),
-                "{}: use statement count mismatch",
-                name
-            );
-
-            // Compare each neuron
-            for (neuron_name, old_neuron) in &old_prog.neurons {
-                let pest_neuron = pest_prog
-                    .neurons
-                    .get(neuron_name)
-                    .unwrap_or_else(|| panic!("{}: missing neuron {}", name, neuron_name));
-
-                // Compare params
-                assert_eq!(
-                    pest_neuron.params.len(),
-                    old_neuron.params.len(),
-                    "{}: param count mismatch for {}",
-                    name,
-                    neuron_name
-                );
-
-                // Compare inputs
-                assert_eq!(
-                    pest_neuron.inputs.len(),
-                    old_neuron.inputs.len(),
-                    "{}: input count mismatch for {}",
-                    name,
-                    neuron_name
-                );
-
-                // Compare outputs
-                assert_eq!(
-                    pest_neuron.outputs.len(),
-                    old_neuron.outputs.len(),
-                    "{}: output count mismatch for {}",
-                    name,
-                    neuron_name
-                );
-
-                // Compare body type
-                match (&pest_neuron.body, &old_neuron.body) {
-                    (NeuronBody::Primitive(_), NeuronBody::Primitive(_)) => {}
-                    (
-                        NeuronBody::Graph {
-                            connections: pc, ..
-                        },
-                        NeuronBody::Graph {
-                            connections: oc, ..
-                        },
-                    ) => {
-                        assert_eq!(
-                            pc.len(),
-                            oc.len(),
-                            "{}: connection count mismatch for {}",
-                            name,
-                            neuron_name
-                        );
-                    }
-                    _ => panic!(
-                        "{}: body type mismatch for {}: {:?} vs {:?}",
-                        name,
-                        neuron_name,
-                        std::mem::discriminant(&pest_neuron.body),
-                        std::mem::discriminant(&old_neuron.body)
-                    ),
-                }
-            }
-        }
-        (Err(e), Ok(_)) => panic!("{}: pest failed but old succeeded: {:?}", name, e),
-        (Ok(_), Err(e)) => panic!("{}: old failed but pest succeeded: {:?}", name, e),
-        (Err(_), Err(_)) => {
-            // Both failed - that's ok, they might have the same error
-        }
-    }
+fn test_build(input: &str, name: &str) {
+    let build_result = parse_program(input);
+    assert!(
+        build_result.is_ok(),
+        "{}: build failed: {:?}",
+        name,
+        build_result.err()
+    );
 }
 
 #[test]
-fn test_compare_residual() {
+fn test_build_residual() {
     let input = include_str!("../../../examples/residual.ns");
-    compare_parsers(input, "residual.ns");
+    test_build(input, "residual.ns");
 }
 
 #[test]
-fn test_compare_01_comments() {
+fn test_build_01_comments() {
     let input = include_str!("../../../examples/01-comments.ns");
-    compare_parsers(input, "01-comments.ns");
+    test_build(input, "01-comments.ns");
 }
 
 #[test]
-fn test_compare_03_parameters() {
+fn test_build_03_parameters() {
     let input = include_str!("../../../examples/03-parameters.ns");
-    compare_parsers(input, "03-parameters.ns");
+    test_build(input, "03-parameters.ns");
 }
 
 #[test]
-fn test_compare_07_pipelines() {
+fn test_build_07_pipelines() {
     let input = include_str!("../../../examples/07-pipelines.ns");
-    compare_parsers(input, "07-pipelines.ns");
+    test_build(input, "07-pipelines.ns");
 }
 
 #[test]
-fn test_compare_10_match() {
+fn test_build_10_match() {
     let input = include_str!("../../../examples/10-match.ns");
-    compare_parsers(input, "10-match.ns");
+    test_build(input, "10-match.ns");
 }
 
 #[test]
-fn test_compare_22_xor() {
+fn test_build_22_xor() {
     let input = include_str!("../../../examples/22-xor.ns");
-    compare_parsers(input, "22-xor.ns");
+    test_build(input, "22-xor.ns");
 }
 
 #[test]
-fn test_compare_28_context() {
+fn test_build_28_context() {
     let input = include_str!("../../../examples/28-context_basic.ns");
-    compare_parsers(input, "28-context_basic.ns");
+    test_build(input, "28-context_basic.ns");
 }
 
-// Run comparison on all numbered example files
-macro_rules! compare_example {
+// Run build check on all numbered example files
+macro_rules! check_example_build {
     ($name:ident, $file:expr) => {
         #[test]
         fn $name() {
             let input = include_str!(concat!("../../../examples/", $file));
-            compare_parsers(input, $file);
+            test_build(input, $file);
         }
     };
 }
 
-compare_example!(compare_02_imports, "02-imports.ns");
-compare_example!(compare_04_shapes, "04-shapes.ns");
-compare_example!(compare_05_ports, "05-ports.ns");
-compare_example!(compare_06_impl_refs, "06-impl-refs.ns");
-compare_example!(compare_08_tuples, "08-tuples.ns");
-compare_example!(compare_09_port_access, "09-port-access.ns");
-compare_example!(compare_11_calls, "11-calls.ns");
-compare_example!(compare_12_expressions, "12-expressions.ns");
-compare_example!(compare_13_values, "13-values.ns");
-compare_example!(compare_14_composite, "14-composite.ns");
-compare_example!(compare_15_edge_cases, "15-edge-cases.ns");
+check_example_build!(build_02_imports, "02-imports.ns");
+check_example_build!(build_04_shapes, "04-shapes.ns");
+check_example_build!(build_05_ports, "05-ports.ns");
+check_example_build!(build_06_impl_refs, "06-impl-refs.ns");
+check_example_build!(build_08_tuples, "08-tuples.ns");
+check_example_build!(build_09_port_access, "09-port-access.ns");
+check_example_build!(build_11_calls, "11-calls.ns");
+check_example_build!(build_12_expressions, "12-expressions.ns");
+check_example_build!(build_13_values, "13-values.ns");
+check_example_build!(build_14_composite, "14-composite.ns");
+check_example_build!(build_15_edge_cases, "15-edge-cases.ns");

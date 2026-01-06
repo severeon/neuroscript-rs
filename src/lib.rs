@@ -20,9 +20,7 @@ pub mod codegen;
 pub mod grammar;
 pub mod interfaces;
 pub mod ir;
-pub mod lexer;
 pub mod optimizer;
-pub mod parser;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
@@ -30,22 +28,11 @@ pub mod validator;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
 pub use codegen::generate_pytorch;
-pub use interfaces::Parser;
 pub use interfaces::*;
 // Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
 
-/// Parse a NeuroScript source string into a Program.
-///
-/// By default, uses the handwritten lexer/parser. Enable the `pest-parser`
-/// feature to use the new pest-based parser instead.
-#[cfg(not(feature = "pest-parser"))]
-pub fn parse(source: &str) -> Result<Program, ParseError> {
-    Parser::parse(source)
-}
-
 /// Parse a NeuroScript source string into a Program using the pest grammar.
-#[cfg(feature = "pest-parser")]
 pub fn parse(source: &str) -> Result<Program, ParseError> {
     grammar::NeuroScriptParser::parse_program(source)
 }
