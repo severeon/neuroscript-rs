@@ -1,0 +1,9 @@
+# Einstein Summation
+# Performs Einstein summation for generalized tensor operations.
+
+neuron Einsum(equation):
+    # Note: Shape inference for einsum is dynamic based on the equation.
+    # For now, we use variadic/generic shapes.
+    in: [*shape]
+    out: [*shape]
+    impl: core,matrix/Einsum

@@ -1,0 +1,9 @@
+# MatMul Demo
+# Demonstrates usage of the MatMul primitive.
+
+neuron MatMulDemo(i, j, k):
+    in left: [*shape, i, j]
+    in right: [*shape, j, k]
+    out: [*shape, i, k]
+    graph:
+        (left, right) -> MatMul() -> out

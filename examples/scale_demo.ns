@@ -1,0 +1,8 @@
+# Scale Demo
+# Demonstrates usage of the Scale primitive.
+
+neuron ScaleDemo(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> Scale(dim) -> out

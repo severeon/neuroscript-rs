@@ -1,0 +1,7 @@
+# Multiplicative Scale
+# Multiplies the input tensor by a learnable scale vector.
+
+neuron Scale(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    impl: core,arithmetic/Scale

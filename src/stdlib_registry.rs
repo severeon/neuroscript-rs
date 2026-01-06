@@ -80,6 +80,38 @@ impl StdlibRegistry {
                 "Dense/fully-connected layer with shape tracking",
             ),
         );
+        self.register(
+            "Bias",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.arithmetic",
+                "Bias",
+                "Additive learnable bias",
+            ),
+        );
+        self.register(
+            "Scale",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.arithmetic",
+                "Scale",
+                "Multiplicative learnable scaling",
+            ),
+        );
+        self.register(
+            "MatMul",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.matrix",
+                "MatMul",
+                "Matrix multiplication between two tensors",
+            ),
+        );
+        self.register(
+            "Einsum",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.matrix",
+                "Einsum",
+                "Einstein summation for generalized tensor operations",
+            ),
+        );
 
         // Level 0: Activations
         self.register(

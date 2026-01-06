@@ -1,0 +1,8 @@
+# Einsum Demo
+# Demonstrates usage of the Einsum primitive.
+
+neuron EinsumDemo:
+    in: [*shape, i, j]
+    out: [*shape, j, i]
+    graph:
+        in -> Einsum(`...ij->...ji`) -> out

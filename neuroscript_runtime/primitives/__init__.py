@@ -7,6 +7,8 @@ Each primitive maps to a NeuroScript neuron with `impl:` reference.
 
 # Core Operations
 from neuroscript_runtime.primitives.linear import Linear
+from neuroscript_runtime.primitives.arithmetic import Bias, Scale
+from neuroscript_runtime.primitives.matrix import MatMul, Einsum
 
 # Activations
 from neuroscript_runtime.primitives.activations import (
@@ -58,6 +60,10 @@ from neuroscript_runtime.primitives.attention import (
 __all__ = [
     # Core Operations
     "Linear",
+    "Bias",
+    "Scale",
+    "MatMul",
+    "Einsum",
     # Activations
     "GELU",
     "ReLU",

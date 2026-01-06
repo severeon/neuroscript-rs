@@ -1,0 +1,7 @@
+# Additive Bias
+# Adds a learnable bias vector to the input tensor.
+
+neuron Bias(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    impl: core,arithmetic/Bias

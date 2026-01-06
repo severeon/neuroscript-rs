@@ -1,0 +1,8 @@
+# Matrix Multiplication
+# Performs matrix multiplication between two tensors.
+
+neuron MatMul:
+    in left: [*shape, i, j]
+    in right: [*shape, j, k]
+    out: [*shape, i, k]
+    impl: core,matrix/MatMul

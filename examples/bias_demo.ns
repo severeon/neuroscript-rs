@@ -1,0 +1,8 @@
+# Bias Demo
+# Demonstrates usage of the Bias primitive.
+
+neuron BiasDemo(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> Bias(dim) -> out

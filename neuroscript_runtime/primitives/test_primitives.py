@@ -11,6 +11,10 @@ import torch.nn as nn
 from neuroscript_runtime.primitives import (
     # Core Operations
     Linear,
+    Bias,
+    Scale,
+    MatMul,
+    Einsum,
     # Activations
     GELU,
     ReLU,
@@ -612,6 +616,116 @@ class TestAttention:
         # So output magnitude should be bounded by value magnitudes
         assert output.shape == (16, 10, 64)
         assert torch.isfinite(output).all()
+
+
+class TestArithmetic:
+    """Test arithmetic primitives (Bias, Scale)."""
+
+    def test_bias_basic(self):
+        """Test basic Bias operation."""
+        bias = Bias(512)
+        x = torch.randn(32, 512)
+        out = bias(x)
+        assert out.shape == (32, 512)
+        assert torch.allclose(out, x)  # Initial bias is zeros
+
+    def test_bias_learnable(self):
+        """Test that Bias is learnable."""
+        bias = Bias(512)
+        x = torch.randn(32, 512)
+        # Update bias parameter manually
+        with torch.no_grad():
+            bias.bias.fill_(1.0)
+        out = bias(x)
+        assert torch.allclose(out, x + 1.0)
+
+    def test_bias_invalid_dim(self):
+        """Test Bias error on dimension mismatch."""
+        bias = Bias(512)
+        x = torch.randn(32, 256)
+        with pytest.raises(ValueError, match="Input dimension mismatch"):
+            bias(x)
+
+    def test_scale_basic(self):
+        """Test basic Scale operation."""
+        scale = Scale(512)
+        x = torch.randn(32, 512)
+        out = scale(x)
+        assert out.shape == (32, 512)
+        assert torch.allclose(out, x)  # Initial scale is ones
+
+    def test_scale_learnable(self):
+        """Test that Scale is learnable."""
+        scale = Scale(512)
+        x = torch.randn(32, 512)
+        # Update scale parameter manually
+        with torch.no_grad():
+            scale.scale.fill_(2.0)
+        out = scale(x)
+        assert torch.allclose(out, x * 2.0)
+
+    def test_scale_invalid_dim(self):
+        """Test Scale error on dimension mismatch."""
+        scale = Scale(512)
+        x = torch.randn(32, 256)
+        with pytest.raises(ValueError, match="Input dimension mismatch"):
+            scale(x)
+
+
+class TestMatrix:
+    """Test matrix primitives (MatMul, Einsum)."""
+
+    def test_matmul_basic(self):
+        """Test basic MatMul operation."""
+        matmul = MatMul()
+        x = torch.randn(32, 10, 64)
+        y = torch.randn(32, 64, 128)
+        out = matmul((x, y))
+        assert out.shape == (32, 10, 128)
+        assert torch.allclose(out, x @ y)
+
+    def test_matmul_incompatible_shapes(self):
+        """Test MatMul error on incompatible shapes."""
+        matmul = MatMul()
+        x = torch.randn(32, 10, 64)
+        y = torch.randn(32, 32, 128)  # 64 != 32
+        with pytest.raises(ValueError, match="Cannot multiply tensors"):
+            matmul((x, y))
+
+    def test_einsum_basic(self):
+        """Test basic Einsum operation."""
+        # Matrix multiplication using einsum
+        einsum = Einsum("ij,jk->ik")
+        x = torch.randn(10, 64)
+        y = torch.randn(64, 128)
+        out = einsum((x, y))
+        assert out.shape == (10, 128)
+        assert torch.allclose(out, x @ y)
+
+    def test_einsum_batched(self):
+        """Test batched Einsum."""
+        einsum = Einsum("bij,bjk->bik")
+        x = torch.randn(32, 10, 64)
+        y = torch.randn(32, 64, 128)
+        out = einsum((x, y))
+        assert out.shape == (32, 10, 128)
+        assert torch.allclose(out, x @ y)
+
+    def test_einsum_transpose(self):
+        """Test Einsum for transpose."""
+        einsum = Einsum("ij->ji")
+        x = torch.randn(10, 64)
+        out = einsum(x)
+        assert out.shape == (64, 10)
+        assert torch.allclose(out, x.t())
+
+    def test_einsum_invalid_equation(self):
+        """Test Einsum error on invalid equation."""
+        einsum = Einsum("ij,jk->il")  # Output 'l' is undefined
+        x = torch.randn(10, 64)
+        y = torch.randn(64, 128)
+        with pytest.raises(ValueError, match="Einsum failed"):
+            einsum((x, y))
 
 
 if __name__ == "__main__":
