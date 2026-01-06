@@ -1,5 +1,17 @@
-# GELU Activation
-# Gaussian Error Linear Unit - smooth approximation of ReLU
+# Gaussian Error Linear Unit (GELU)
+#
+# A smooth approximation of ReLU commonly used in transformer models.
+# GELU(x) = x * CDF(x) where CDF is the cumulative distribution function
+# of the standard Gaussian distribution.
+#
+# Shape Contract:
+# - Input: [*shape] arbitrary shape
+# - Output: [*shape] same shape as input
+#
+# Notes:
+# - Used in BERT, GPT-2, and many modern transformers
+# - Smoother than ReLU, which can help with gradient flow
+# - Element-wise operation (preserves all dimensions)
 
 neuron GELU:
     in: [*shape]

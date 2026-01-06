@@ -9,6 +9,10 @@
 WHITESPACE = _{ " " | "\t" }
 NEWLINE = { "\n" | "\r\n" }
 COMMENT = { "#" ~ (!NEWLINE ~ ANY)* }
+DOC_COMMENT = { "///" ~ (!NEWLINE ~ ANY)* }
+
+// Documentation block: one or more doc comment lines
+doc_block = { (DOC_COMMENT ~ NEWLINE)+ }
 
 // ============================================================================
 // Keywords (atomic - no whitespace allowed within)
@@ -399,8 +403,9 @@ neuron_section = {
 }
 
 // Neuron definition: neuron Foo(params): ...
+// Optionally preceded by documentation comments
 neuron_def = {
-    keyword_neuron ~ ident ~ params? ~ colon ~ NEWLINE ~ 
+    doc_block? ~ keyword_neuron ~ ident ~ params? ~ colon ~ NEWLINE ~
     (NEWLINE* ~ neuron_section)+
 }
 

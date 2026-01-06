@@ -1,5 +1,19 @@
 # Element-wise Multiplication
-# Multiplies two tensors element-wise (for gating mechanisms)
+#
+# Multiplies two tensors element-by-element. Fundamental operation for
+# gating mechanisms, attention weighting, and feature modulation.
+#
+# Shape Contract:
+# - Input a: [*shape] first tensor
+# - Input b: [*shape] second tensor (must match shape of a)
+# - Output: [*shape] element-wise product
+#
+# Notes:
+# - No learnable parameters (pure element-wise operation)
+# - Both inputs must have identical shapes
+# - Used in: gating (LSTM, GRU), attention weighting, feature scaling
+# - Common pattern: x * sigmoid(gate) for learned gating
+# - Supports broadcasting if shapes are compatible
 
 neuron Multiply:
     in a: [*shape]

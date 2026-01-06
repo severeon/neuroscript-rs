@@ -30,6 +30,7 @@ from neuroscript_runtime.primitives import (
     Embedding,
     PositionalEncoding,
     LearnedPositionalEmbedding,
+    RotaryEmbedding,
     # Structural Operations
     Fork,
     Fork3,
@@ -89,7 +90,7 @@ class TestActivations:
 
     def test_gelu_approximate(self, sample_input):
         """Test GELU with tanh approximation."""
-        gelu = GELU(approximate='tanh')
+        gelu = GELU(approximate="tanh")
         out = gelu(sample_input)
         assert out.shape == sample_input.shape
 
@@ -296,6 +297,69 @@ class TestEmbeddings:
         x = torch.randn(32, 150, 512)
         with pytest.raises(ValueError, match="exceeds max_len"):
             pos_emb(x)
+
+    def test_rotary_embedding(self):
+        """Test RotaryEmbedding (RoPE)."""
+        # Create RoPE with small dimension for testing
+        rope = RotaryEmbedding(dim=64, max_position_embeddings=100)
+
+        # Create dummy query and key [batch, num_heads, seq, dim]
+        # Standard shape used in our implementation: [batch, num_heads, seq, dim]
+        # Note: Our implementation assumes seq_len is -2 if 4D
+        batch, heads, seq, dim = 2, 4, 10, 64
+        q = torch.randn(batch, heads, seq, dim)
+        k = torch.randn(batch, heads, seq, dim)
+
+        # Apply RoPE
+        q_rot, k_rot = rope(q, k)
+
+        # Check shapes
+        assert q_rot.shape == q.shape
+        assert k_rot.shape == k.shape
+
+        # Check that values changed (rotation applied)
+        assert not torch.allclose(q_rot, q)
+        assert not torch.allclose(k_rot, k)
+
+        # Test property: Dot product should encode relative position
+        # For small rotation, q @ k.T should depend on position diff
+        # This is hard to test deterministically without exact math checks,
+        # but we can verify that rotation is position-dependent.
+
+        # Slice at pos 0 and pos 1
+        q_pos0 = q[:, :, 0:1, :]
+        q_pos1 = q[:, :, 1:2, :]
+
+        # If we feed them as single-token sequences to RoPE, they get pos 0 encoding
+        q_pos0_rot, _ = rope(q_pos0, q_pos0)
+        q_pos1_rot_as_0, _ = rope(q_pos1, q_pos1)
+
+        # But in the full sequence, q_pos1 gets pos 1 encoding
+        # So q_rot[:,:,1:2,:] should differ from q_pos1_rot_as_0
+        assert not torch.allclose(q_rot[:, :, 1:2, :], q_pos1_rot_as_0)
+
+        # And q_rot[:,:,0:1,:] should match q_pos0_rot (since both are pos 0)
+        assert torch.allclose(q_rot[:, :, 0:1, :], q_pos0_rot)
+
+    def test_rotary_embedding_caching(self):
+        """Test RoPE caching mechanism."""
+        rope = RotaryEmbedding(dim=64, max_position_embeddings=10)
+
+        # Initial forward pass with length < max
+        q = torch.randn(2, 4, 5, 64)
+        k = torch.randn(2, 4, 5, 64)
+        rope(q, k)
+
+        # Check cache size
+        assert rope.max_seq_len_cached == 10
+
+        # Forward pass with length > max (should trigger resize)
+        q_long = torch.randn(2, 4, 20, 64)
+        k_long = torch.randn(2, 4, 20, 64)
+        rope(q_long, k_long)
+
+        # Check cache resized
+        assert rope.max_seq_len_cached >= 20
 
 
 class TestIntegration:
@@ -518,7 +582,7 @@ class TestAttention:
         attn = ScaledDotProductAttention()
         q = torch.randn(32, 10, 64)  # batch=32, seq_q=10, d_k=64
         k = torch.randn(32, 20, 64)  # batch=32, seq_k=20, d_k=64
-        v = torch.randn(32, 20, 128) # batch=32, seq_k=20, d_v=128
+        v = torch.randn(32, 20, 128)  # batch=32, seq_k=20, d_v=128
 
         output = attn((q, k, v))
 

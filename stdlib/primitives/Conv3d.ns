@@ -1,0 +1,27 @@
+# 3D Convolutional Layer
+#
+# Applies 3D convolution over volumetric data (video, 3D medical imaging).
+#
+# Parameters:
+# - in_channels: Number of channels in input
+# - out_channels: Number of channels produced by convolution
+# - kernel_size: Size of the convolving kernel (int or (d, h, w))
+# - stride: Stride of the convolution (default: 1)
+# - padding: Zero-padding added to all sides (default: 0)
+# - dilation: Spacing between kernel elements (default: 1)
+# - groups: Number of blocked connections (default: 1)
+# - bias: If true, adds learnable bias (default: true)
+#
+# Shape Contract:
+# - Input: [batch, in_channels, depth, height, width]
+# - Output: [batch, out_channels, out_depth, out_height, out_width]
+#
+# Notes:
+# - Output size per dim: (size + 2*padding - dilation*(kernel-1) - 1) / stride + 1
+# - Used for video understanding, 3D medical imaging, point clouds
+# - Memory intensive due to 5D tensors
+
+neuron Conv3d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=true):
+    in: [batch, in_channels, depth, height, width]
+    out: [batch, out_channels, *, *, *]
+    impl: core,convolutions/Conv3d

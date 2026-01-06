@@ -196,5 +196,37 @@ class Softmax(nn.Module):
         return F.softmax(input, dim=self.dim)
 
     def extra_repr(self) -> str:
-        """String representation for debugging."""
         return f"dim={self.dim}"
+
+
+class Mish(nn.Module):
+    """Mish(x) = x * tanh(softplus(x)) - self-regularized non-monotonic activation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return F.mish(input)
+
+
+class PReLU(nn.Module):
+    """Parametric ReLU with learnable slope for negative values."""
+
+    def __init__(self, num_parameters: int = 1, init: float = 0.25) -> None:
+        super().__init__()
+        self.prelu = nn.PReLU(num_parameters=num_parameters, init=init)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.prelu(input)
+
+
+class ELU(nn.Module):
+    """Exponential Linear Unit: ELU(x) = x if x > 0, else alpha * (exp(x) - 1)."""
+
+    def __init__(self, alpha: float = 1.0, inplace: bool = False) -> None:
+        super().__init__()
+        self.alpha = alpha
+        self.inplace = inplace
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return F.elu(input, alpha=self.alpha, inplace=self.inplace)

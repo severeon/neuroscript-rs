@@ -275,6 +275,28 @@ pub struct Param {
     pub default: Option<Value>,
 }
 
+/// Documentation extracted from triple-slash comments
+#[derive(Debug, Clone, PartialEq)]
+pub struct Documentation {
+    /// Raw markdown content (all doc comment lines joined)
+    pub content: String,
+    /// Parsed sections (e.g., "Parameters", "Shape Contract", "Example")
+    pub sections: HashMap<String, String>,
+    /// Source span for the documentation block
+    pub span: Option<SourceSpan>,
+}
+
+impl Documentation {
+    /// Create empty documentation
+    pub fn empty() -> Self {
+        Self {
+            content: String::new(),
+            sections: HashMap::new(),
+            span: None,
+        }
+    }
+}
+
 /// A complete neuron definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct NeuronDef {
@@ -286,6 +308,8 @@ pub struct NeuronDef {
     /// Allow cycles up to this depth (for unrolled loops/recursion)
     /// None means no cycles allowed, Some(n) allows cycles up to depth n
     pub max_cycle_depth: Option<usize>,
+    /// Optional documentation from triple-slash comments
+    pub doc: Option<Documentation>,
 }
 
 /// An import statement: use core,nn/*

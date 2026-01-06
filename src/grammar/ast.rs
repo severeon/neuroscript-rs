@@ -5,12 +5,13 @@
 
 use pest::iterators::Pair;
 
+use crate::doc_parser;
 use crate::grammar::error;
 use crate::grammar::Rule;
 use crate::interfaces::{
-    BinOp, Binding, Connection, Dim, DimExpr, Endpoint, GlobalBinding, ImplRef, MatchArm,
-    MatchExpr, NeuronBody, NeuronDef, Param, ParseError, Port, PortRef, Program, Shape, UseStmt,
-    Value,
+    BinOp, Binding, Connection, Dim, DimExpr, Documentation, Endpoint, GlobalBinding, ImplRef,
+    MatchArm, MatchExpr, NeuronBody, NeuronDef, Param, ParseError, Port, PortRef, Program, Shape,
+    UseStmt, Value,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -153,11 +154,26 @@ impl AstBuilder {
 
         let mut inner = pair.into_inner();
 
-        // Skip keyword_neuron
-        inner.next();
+        // Check for optional doc_block
+        let mut doc: Option<Documentation> = None;
+        let mut next = inner.next();
+
+        if let Some(ref p) = next {
+            if p.as_rule() == Rule::doc_block {
+                doc = Some(self.build_doc_block(p.clone())?);
+                next = inner.next(); // Move to keyword_neuron
+            }
+        }
+
+        // Skip keyword_neuron (it's in 'next' if no doc_block, or we already moved past it)
+        if let Some(ref p) = next {
+            if p.as_rule() == Rule::keyword_neuron {
+                next = inner.next(); // Move to ident
+            }
+        }
 
         // Get name
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(next.unwrap())?;
 
         // Check for params (optional)
         let mut params = vec![];
@@ -204,7 +220,28 @@ impl AstBuilder {
             outputs: state.outputs,
             body,
             max_cycle_depth,
+            doc,
         })
+    }
+
+    /// Build Documentation from a doc_block pair
+    fn build_doc_block(&mut self, pair: Pair<Rule>) -> Result<Documentation, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::doc_block);
+
+        let mut doc_lines = Vec::new();
+        let span_start = pair.as_span().start();
+        let span_end = pair.as_span().end();
+
+        // Extract all DOC_COMMENT lines
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::DOC_COMMENT {
+                doc_lines.push(inner.as_str().to_string());
+            }
+        }
+
+        // Parse the doc comments using our doc_parser
+        let span = Some((span_start, span_end - span_start).into());
+        Ok(doc_parser::parse_doc_comments(doc_lines, span))
     }
 
     /// Process a neuron_section and update the appropriate vectors

@@ -1,14 +1,9 @@
 """
 Primitive neurons - Level 0 building blocks.
-
-These are the atomic operations that all composite neurons are built from.
-Each primitive maps to a NeuroScript neuron with `impl:` reference.
 """
 
-# Core Operations
 from neuroscript_runtime.primitives.linear import Linear
 
-# Activations
 from neuroscript_runtime.primitives.activations import (
     GELU,
     ReLU,
@@ -16,75 +11,124 @@ from neuroscript_runtime.primitives.activations import (
     Sigmoid,
     SiLU,
     Softmax,
+    Mish,
+    PReLU,
+    ELU,
 )
 
-# Normalization
 from neuroscript_runtime.primitives.normalization import (
     LayerNorm,
     RMSNorm,
     GroupNorm,
+    InstanceNorm,
 )
 
-# Regularization
 from neuroscript_runtime.primitives.regularization import (
     Dropout,
     DropPath,
     DropConnect,
 )
 
-# Embeddings
 from neuroscript_runtime.primitives.embeddings import (
     Embedding,
     PositionalEncoding,
     LearnedPositionalEmbedding,
+    RotaryEmbedding,
 )
 
-# Structural Operations
 from neuroscript_runtime.primitives.structural import (
     Fork,
     Fork3,
     Add,
+    Multiply,
     Concat,
     Reshape,
     Transpose,
+    Split,
+    Slice,
+    Pad,
 )
 
-# Attention
 from neuroscript_runtime.primitives.attention import (
     ScaledDotProductAttention,
     MultiHeadSelfAttention,
 )
 
+from neuroscript_runtime.primitives.operations import (
+    Bias,
+    Scale,
+    MatMul,
+    Einsum,
+    Identity,
+)
+
+from neuroscript_runtime.primitives.convolutions import (
+    Conv1d,
+    Conv2d,
+    Conv3d,
+    DepthwiseConv,
+    SeparableConv,
+    TransposedConv,
+)
+
+from neuroscript_runtime.primitives.pooling import (
+    MaxPool,
+    AvgPool,
+    AdaptiveAvgPool,
+    AdaptiveMaxPool,
+    GlobalAvgPool,
+    GlobalMaxPool,
+)
+
 __all__ = [
-    # Core Operations
     "Linear",
-    # Activations
     "GELU",
     "ReLU",
     "Tanh",
     "Sigmoid",
     "SiLU",
     "Softmax",
-    # Normalization
+    "Mish",
+    "PReLU",
+    "ELU",
     "LayerNorm",
     "RMSNorm",
     "GroupNorm",
-    # Regularization
+    "InstanceNorm",
     "Dropout",
     "DropPath",
     "DropConnect",
-    # Embeddings
     "Embedding",
     "PositionalEncoding",
     "LearnedPositionalEmbedding",
-    # Structural Operations
+    "RotaryEmbedding",
     "Fork",
     "Fork3",
     "Add",
+    "Multiply",
     "Concat",
     "Reshape",
     "Transpose",
-    # Attention
+    "Split",
+    "Slice",
+    "Pad",
     "ScaledDotProductAttention",
     "MultiHeadSelfAttention",
+    "Bias",
+    "Scale",
+    "MatMul",
+    "Einsum",
+    "Identity",
+    "Conv1d",
+    "Conv2d",
+    "Conv3d",
+    "DepthwiseConv",
+    "SeparableConv",
+    "TransposedConv",
+    "MaxPool",
+    "AvgPool",
+    "AdaptiveAvgPool",
+    "AdaptiveMaxPool",
+    "GlobalAvgPool",
+    "GlobalMaxPool",
 ]

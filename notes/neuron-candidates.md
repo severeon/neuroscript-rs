@@ -25,10 +25,10 @@ Level 4: Meta (ensembles, routers, control flow)
 ### Core Operations
 
 - [x] `Linear` - dense/fully-connected layer
-- [ ] `Bias` - additive bias
-- [ ] `Scale` - multiplicative scaling
-- [ ] `MatMul` - matrix multiplication
-- [ ] `Einsum` - Einstein summation (generalized tensor operations)
+- [x] `Bias` - additive bias
+- [x] `Scale` - multiplicative scaling
+- [x] `MatMul` - matrix multiplication
+- [x] `Einsum` - Einstein summation (generalized tensor operations)
 
 ### Activations
 
@@ -38,9 +38,9 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `Tanh` - hyperbolic tangent
 - [x] `Sigmoid` - logistic function
 - [x] `Softmax` - normalized exponential
-- [ ] `Mish` - self-regularized non-monotonic activation
-- [ ] `PReLU` - parametric ReLU
-- [ ] `ELU` - exponential linear unit
+- [x] `Mish` - self-regularized non-monotonic activation
+- [x] `PReLU` - parametric ReLU
+- [x] `ELU` - exponential linear unit
 
 ### Normalizations
 
@@ -48,7 +48,7 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `BatchNorm` - batch normalization
 - [x] `RMSNorm` - root mean square normalization
 - [x] `GroupNorm` - group normalization
-- [ ] `InstanceNorm` - instance normalization
+- [x] `InstanceNorm` - instance normalization
 - [ ] `WeightNorm` - weight normalization
 
 ### Regularization
@@ -61,12 +61,12 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Convolutions
 
-- [ ] `Conv1d` - 1D convolution (sequences)
+- [x] `Conv1d` - 1D convolution (sequences)
 - [x] `Conv2d` - 2D convolution (images)
-- [ ] `Conv3d` - 3D convolution (video/volumetric)
-- [ ] `DepthwiseConv` - channel-wise convolution
-- [ ] `SeparableConv` - depthwise + pointwise
-- [ ] `TransposedConv` / `Deconv` - upsampling convolution
+- [x] `Conv3d` - 3D convolution (video/volumetric)
+- [x] `DepthwiseConv` - channel-wise convolution
+- [x] `SeparableConv` - depthwise + pointwise
+- [x] `TransposedConv` / `Deconv` - upsampling convolution
 - [ ] `DilatedConv` - atrous convolution
 
 ### Pooling
@@ -74,16 +74,16 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `MaxPool` - max pooling
 - [x] `AvgPool` - average pooling
 - [x] `AdaptiveAvgPool` - output-size-adaptive pooling
-- [ ] `AdaptiveMaxPool` - output-size-adaptive max pooling
+- [x] `AdaptiveMaxPool` - output-size-adaptive max pooling
 - [x] `GlobalAvgPool` - spatial averaging
-- [ ] `GlobalMaxPool` - spatial max
+- [x] `GlobalMaxPool` - spatial max
 
 ### Embeddings
 
 - [x] `Embedding` - discrete token → dense vector
 - [x] `PositionalEncoding` - sinusoidal position embeddings
 - [x] `LearnedPositionalEmbedding` - trainable positions
-- [ ] `RotaryEmbedding` (RoPE) - rotary position embeddings
+- [x] `RotaryEmbedding` (RoPE) - rotary position embeddings
 - [ ] `ALiBi` - attention with linear biases
 
 ### Utility
@@ -91,9 +91,10 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `Reshape` - tensor reshaping
 - [x] `Transpose` - dimension permutation
 - [x] `Concatenate` - tensor concatenation
-- [ ] `Split` - tensor splitting
-- [ ] `Slice` - tensor slicing
-- [ ] `Pad` - tensor padding
+- [x] `Split` - tensor splitting
+- [x] `Slice` - tensor slicing
+- [x] `Pad` - tensor padding
+- [x] `Flatten` - flatten dimensions
 - [ ] `Crop` - tensor cropping
 - [ ] `Cast` - dtype conversion
 - [ ] `Clone` - tensor duplication
@@ -107,9 +108,9 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Attention Mechanisms
 
-- [ ] `ScaledDotProductAttention` - core attention operation
-- [ ] `MultiHeadAttention` - parallel attention heads
-- [ ] `SelfAttention` - query=key=value
+- [x] `ScaledDotProductAttention` - core attention operation
+- [x] `MultiHeadAttention` - parallel attention heads
+- [x] `SelfAttention` - query=key=value
 - [ ] `CrossAttention` - query ≠ key=value
 - [ ] `FlashAttention` - memory-efficient attention
 - [ ] `SparseAttention` - local/strided/block-sparse patterns
@@ -119,7 +120,7 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Feed-Forward Networks
 
-- [ ] `FFN` / `MLP` - linear → activation → linear
+- [x] `FFN` / `MLP` - linear → activation → linear
 - [ ] `GatedFFN` - gating mechanism (GLU-style)
 - [ ] `SwiGLU` - SiLU gated FFN
 - [ ] `GeGLU` - GELU gated FFN
@@ -152,7 +153,7 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Transformer Family
 
-- [ ] `TransformerBlock` - attention + FFN + residuals
+- [x] `TransformerBlock` - attention + FFN + residuals
 - [ ] `TransformerEncoderBlock` - self-attention block
 - [ ] `TransformerDecoderBlock` - cross-attention block
 - [ ] `TransformerStack` - N stacked transformer Neurons

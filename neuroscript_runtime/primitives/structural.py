@@ -89,7 +89,9 @@ class Fork3(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, input: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Fork the input tensor into three references.
 
@@ -281,9 +283,7 @@ class Concat(nn.Module):
             ValueError: If fewer than 2 tensors provided or shapes incompatible
         """
         if len(inputs) < 2:
-            raise ValueError(
-                f"Concat requires at least 2 tensors, got {len(inputs)}"
-            )
+            raise ValueError(f"Concat requires at least 2 tensors, got {len(inputs)}")
 
         try:
             result = torch.cat(inputs, dim=self.dim)
@@ -427,4 +427,64 @@ class Transpose(nn.Module):
         return result
 
 
-__all__ = ["Fork", "Fork3", "Add", "Multiply", "Concat", "Reshape", "Transpose"]
+class Split(nn.Module):
+    """Splits tensor into chunks along a dimension."""
+
+    def __init__(self, num_splits: int, dim: int = -1) -> None:
+        super().__init__()
+        self.num_splits = num_splits
+        self.dim = dim
+
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+        return tuple(torch.chunk(input, self.num_splits, dim=self.dim))
+
+
+class Slice(nn.Module):
+    """Extracts a slice from tensor along a dimension."""
+
+    def __init__(self, dim: int, start: int, end: int) -> None:
+        super().__init__()
+        self.dim = dim
+        self.start = start
+        self.end = end if end != -1 else None
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        slices = [slice(None)] * input.ndim
+        slices[self.dim] = slice(self.start, self.end)
+        return input[tuple(slices)]
+
+
+class Pad(nn.Module):
+    """Pads tensor with specified value."""
+
+    def __init__(
+        self,
+        padding: Tuple[int, ...],
+        value: float = 0,
+        mode: str = "constant",
+    ) -> None:
+        super().__init__()
+        self.padding = padding
+        self.value = value
+        self.mode = mode
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        import torch.nn.functional as F
+
+        if self.mode == "constant":
+            return F.pad(input, self.padding, mode=self.mode, value=self.value)
+        return F.pad(input, self.padding, mode=self.mode)
+
+
+__all__ = [
+    "Fork",
+    "Fork3",
+    "Add",
+    "Multiply",
+    "Concat",
+    "Reshape",
+    "Transpose",
+    "Split",
+    "Slice",
+    "Pad",
+]

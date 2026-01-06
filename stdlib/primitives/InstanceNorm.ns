@@ -1,0 +1,25 @@
+# Instance Normalization
+#
+# Normalizes each sample independently across spatial dimensions.
+# Commonly used in style transfer and image generation.
+#
+# Parameters:
+# - num_features: Number of channels (C dimension)
+# - eps: Small constant for numerical stability (default: 1e-5)
+# - affine: If true, learnable scale and shift (default: true)
+#
+# Shape Contract:
+# - Input: [batch, num_features, *spatial] feature maps
+# - Output: [batch, num_features, *spatial] same shape as input
+#
+# Notes:
+# - Normalizes across spatial dimensions only (not batch or channel)
+# - Each instance (sample) normalized independently
+# - Equivalent to GroupNorm with num_groups=num_features
+# - Removes style information from features
+# - Used in neural style transfer, GANs, image-to-image translation
+
+neuron InstanceNorm(num_features, eps=0.00001, affine=true):
+    in: [batch, num_features, *spatial]
+    out: [batch, num_features, *spatial]
+    impl: core,normalization/InstanceNorm
