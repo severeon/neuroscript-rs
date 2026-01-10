@@ -37,6 +37,10 @@ neuron Identity()
 ## Implementation
 
 ```
+"from core import structural/Identity"
+```
+
+```
 Source { source: "core", path: "structural/Identity" }
 ```
 

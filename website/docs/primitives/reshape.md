@@ -40,6 +40,10 @@ neuron Reshape(target_shape)
 ## Implementation
 
 ```
+"from core import structural/Reshape"
+```
+
+```
 Source { source: "core", path: "structural/Reshape" }
 ```
 

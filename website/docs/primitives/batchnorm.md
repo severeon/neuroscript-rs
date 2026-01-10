@@ -40,6 +40,10 @@ neuron BatchNorm(num_features)
 ## Implementation
 
 ```
+"from core import normalization/BatchNorm"
+```
+
+```
 Source { source: "core", path: "normalization/BatchNorm" }
 ```
 

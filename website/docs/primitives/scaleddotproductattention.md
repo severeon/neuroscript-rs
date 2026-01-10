@@ -43,6 +43,10 @@ neuron ScaledDotProductAttention(d_k)
 ## Implementation
 
 ```
+"from core import attention/ScaledDotProductAttention"
+```
+
+```
 Source { source: "core", path: "attention/ScaledDotProductAttention" }
 ```
 

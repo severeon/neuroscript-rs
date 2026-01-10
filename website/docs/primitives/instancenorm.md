@@ -42,6 +42,10 @@ neuron InstanceNorm(num_features, eps=Float(1e-5), affine=Bool(true))
 ## Implementation
 
 ```
+"from core import normalization/InstanceNorm"
+```
+
+```
 Source { source: "core", path: "normalization/InstanceNorm" }
 ```
 

@@ -44,6 +44,10 @@ neuron Conv1d(in_channels, out_channels, kernel_size, stride=Int(1), padding=Int
 ## Implementation
 
 ```
+"from core import convolutions/Conv1d"
+```
+
+```
 Source { source: "core", path: "convolutions/Conv1d" }
 ```
 

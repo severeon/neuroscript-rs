@@ -40,6 +40,10 @@ neuron Add()
 ## Implementation
 
 ```
+"from core import structural/Add"
+```
+
+```
 Source { source: "core", path: "structural/Add" }
 ```
 

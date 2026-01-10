@@ -40,6 +40,10 @@ neuron AdaptiveAvgPool(output_size)
 ## Implementation
 
 ```
+"from core import pooling/AdaptiveAvgPool"
+```
+
+```
 Source { source: "core", path: "pooling/AdaptiveAvgPool" }
 ```
 

@@ -40,6 +40,10 @@ neuron Concat(dim)
 ## Implementation
 
 ```
+"from core import structural/Concat"
+```
+
+```
 Source { source: "core", path: "structural/Concat" }
 ```
 

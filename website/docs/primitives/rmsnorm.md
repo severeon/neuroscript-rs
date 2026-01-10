@@ -41,6 +41,10 @@ neuron RMSNorm(dim)
 ## Implementation
 
 ```
+"from core import normalization/RMSNorm"
+```
+
+```
 Source { source: "core", path: "normalization/RMSNorm" }
 ```
 

@@ -44,6 +44,10 @@ neuron DepthwiseConv(channels, kernel_size, stride=Int(1), padding=Int(0), dilat
 ## Implementation
 
 ```
+"from core import convolutions/DepthwiseConv"
+```
+
+```
 Source { source: "core", path: "convolutions/DepthwiseConv" }
 ```
 

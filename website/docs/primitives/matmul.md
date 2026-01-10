@@ -39,6 +39,10 @@ neuron MatMul()
 ## Implementation
 
 ```
+"from core import operations/MatMul"
+```
+
+```
 Source { source: "core", path: "operations/MatMul" }
 ```
 

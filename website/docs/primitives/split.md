@@ -42,6 +42,10 @@ neuron Split(num_splits, dim=BinOp { op: Sub, left: Int(0), right: Int(1) })
 ## Implementation
 
 ```
+"from core import structural/Split"
+```
+
+```
 Source { source: "core", path: "structural/Split" }
 ```
 

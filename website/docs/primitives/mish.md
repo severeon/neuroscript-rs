@@ -38,6 +38,10 @@ neuron Mish()
 ## Implementation
 
 ```
+"from core import activations/Mish"
+```
+
+```
 Source { source: "core", path: "activations/Mish" }
 ```
 

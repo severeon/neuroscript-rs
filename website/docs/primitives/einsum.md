@@ -44,6 +44,10 @@ neuron Einsum(equation)
 ## Implementation
 
 ```
+"from core import operations/Einsum"
+```
+
+```
 Source { source: "core", path: "operations/Einsum" }
 ```
 

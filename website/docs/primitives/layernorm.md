@@ -39,6 +39,10 @@ neuron LayerNorm(dim)
 ## Implementation
 
 ```
+"from core import normalization/LayerNorm"
+```
+
+```
 Source { source: "core", path: "normalization/LayerNorm" }
 ```
 

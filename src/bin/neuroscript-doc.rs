@@ -208,6 +208,10 @@ fn generate_markdown(
     if matches!(category, Category::Primitives) {
         if let neuroscript::NeuronBody::Primitive(impl_ref) = &neuron.body {
             md.push_str("## Implementation\n\n");
+            md.push_str(&format!(
+                "```\n{:?}\n```\n\n",
+                impl_ref.import_statement().as_str()
+            ));
             md.push_str(&format!("```\n{:?}\n```\n\n", impl_ref));
         }
     }

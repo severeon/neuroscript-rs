@@ -44,6 +44,10 @@ neuron Pad(padding, value=Int(0), mode=Name("constant"))
 ## Implementation
 
 ```
+"from core import structural/Pad"
+```
+
+```
 Source { source: "core", path: "structural/Pad" }
 ```
 

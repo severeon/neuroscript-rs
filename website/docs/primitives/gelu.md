@@ -36,6 +36,10 @@ neuron GELU()
 ## Implementation
 
 ```
+"from core import activations/GELU"
+```
+
+```
 Source { source: "core", path: "activations/GELU" }
 ```
 

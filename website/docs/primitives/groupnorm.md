@@ -42,6 +42,10 @@ neuron GroupNorm(num_groups, num_channels)
 ## Implementation
 
 ```
+"from core import normalization/GroupNorm"
+```
+
+```
 Source { source: "core", path: "normalization/GroupNorm" }
 ```
 

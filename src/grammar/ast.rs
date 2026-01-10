@@ -983,8 +983,32 @@ impl AstBuilder {
     fn build_call_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::call_endpoint);
 
-        let neuron_expr = pair.into_inner().next().unwrap();
-        let (name, args, kwargs, frozen) = self.build_neuron_expr(neuron_expr)?;
+        let mut inner = pair.into_inner();
+        let first = inner.next().unwrap();
+
+        let (name, args, kwargs, frozen) = match first.as_rule() {
+            Rule::call_expr => {
+                let (name, args, kwargs) = self.build_call_expr(first)?;
+                (name, args, kwargs, false)
+            }
+            Rule::keyword_freeze => {
+                inner.next(); // Skip lparen
+                let sub_expr = inner.next().unwrap();
+                let (sub_name, sub_args, sub_kwargs, _) = self.build_neuron_expr(sub_expr)?;
+
+                (
+                    "Freeze".to_string(),
+                    vec![Value::Call {
+                        name: sub_name,
+                        args: sub_args,
+                        kwargs: sub_kwargs,
+                    }],
+                    vec![],
+                    true,
+                )
+            }
+            _ => unreachable!("Unexpected rule in call_endpoint: {:?}", first.as_rule()),
+        };
 
         Ok(Endpoint::Call {
             name,

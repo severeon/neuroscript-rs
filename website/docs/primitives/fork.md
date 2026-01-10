@@ -39,6 +39,10 @@ neuron Fork()
 ## Implementation
 
 ```
+"from core import structural/Fork"
+```
+
+```
 Source { source: "core", path: "structural/Fork" }
 ```
 

@@ -44,6 +44,10 @@ neuron MaxPool(kernel_size, stride=Int(1), padding=Int(0), dilation=Int(1))
 ## Implementation
 
 ```
+"from core import pooling/MaxPool"
+```
+
+```
 Source { source: "core", path: "pooling/MaxPool" }
 ```
 

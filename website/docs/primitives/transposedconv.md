@@ -47,6 +47,10 @@ neuron TransposedConv(in_channels, out_channels, kernel_size, stride=Int(1), pad
 ## Implementation
 
 ```
+"from core import convolutions/TransposedConv"
+```
+
+```
 Source { source: "core", path: "convolutions/TransposedConv" }
 ```
 

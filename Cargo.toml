@@ -4,11 +4,15 @@ version = "0.2.0"
 edition = "2021"
 description = "Neural architecture composition language"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [features]
-default = []
+default = ["pest-parser"]
 pest-parser = []  # Use new pest-based parser instead of handwritten lexer/parser
 
 [dependencies]
+wasm-bindgen = "0.2"
 thiserror = "1.0"      # Clean error types
 miette = { version = "7", features = ["fancy"] }  # Beautiful error reporting
 num-bigint = "0.4"     # Arbitrary precision integers for shape algebra
