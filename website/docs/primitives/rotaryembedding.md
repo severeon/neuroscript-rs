@@ -33,6 +33,10 @@ neuron RotaryEmbedding(dim, max_position_embeddings=Int(2048), base=Int(10000))
 ## Implementation
 
 ```
+"from neuroscript import embeddings/RotaryEmbedding"
+```
+
+```
 Source { source: "neuroscript", path: "embeddings/RotaryEmbedding" }
 ```
 

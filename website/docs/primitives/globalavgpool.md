@@ -38,6 +38,10 @@ neuron GlobalAvgPool()
 ## Implementation
 
 ```
+"from core import pooling/GlobalAvgPool"
+```
+
+```
 Source { source: "core", path: "pooling/GlobalAvgPool" }
 ```
 

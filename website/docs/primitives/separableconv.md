@@ -45,6 +45,10 @@ neuron SeparableConv(in_channels, out_channels, kernel_size, stride=Int(1), padd
 ## Implementation
 
 ```
+"from core import convolutions/SeparableConv"
+```
+
+```
 Source { source: "core", path: "convolutions/SeparableConv" }
 ```
 

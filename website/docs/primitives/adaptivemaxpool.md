@@ -40,6 +40,10 @@ neuron AdaptiveMaxPool(output_size)
 ## Implementation
 
 ```
+"from core import pooling/AdaptiveMaxPool"
+```
+
+```
 Source { source: "core", path: "pooling/AdaptiveMaxPool" }
 ```
 

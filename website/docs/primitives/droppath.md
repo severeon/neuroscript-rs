@@ -42,6 +42,10 @@ neuron DropPath(drop_prob)
 ## Implementation
 
 ```
+"from core import regularization/DropPath"
+```
+
+```
 Source { source: "core", path: "regularization/DropPath" }
 ```
 

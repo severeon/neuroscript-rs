@@ -1,0 +1,6 @@
+---
+source: tests/integration_tests.rs
+assertion_line: 651
+expression: error_text
+---
+Expected { expected: "COMMENT, colon, or lparen", found: "unexpected input", span: SourceSpan { offset: SourceOffset(91), length: 1 } }

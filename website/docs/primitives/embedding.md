@@ -39,6 +39,10 @@ neuron Embedding(num_embeddings, embedding_dim)
 ## Implementation
 
 ```
+"from core import embeddings/Embedding"
+```
+
+```
 Source { source: "core", path: "embeddings/Embedding" }
 ```
 

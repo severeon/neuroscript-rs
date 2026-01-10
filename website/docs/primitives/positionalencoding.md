@@ -42,6 +42,10 @@ neuron PositionalEncoding(dim, max_len)
 ## Implementation
 
 ```
+"from core import embeddings/PositionalEncoding"
+```
+
+```
 Source { source: "core", path: "embeddings/PositionalEncoding" }
 ```
 

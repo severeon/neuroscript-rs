@@ -40,6 +40,10 @@ neuron Softmax(dim)
 ## Implementation
 
 ```
+"from core import activations/Softmax"
+```
+
+```
 Source { source: "core", path: "activations/Softmax" }
 ```
 

@@ -38,6 +38,10 @@ neuron Dropout(p)
 ## Implementation
 
 ```
+"from core import regularization/Dropout"
+```
+
+```
 Source { source: "core", path: "regularization/Dropout" }
 ```
 

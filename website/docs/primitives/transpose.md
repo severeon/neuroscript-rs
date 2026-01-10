@@ -40,6 +40,10 @@ neuron Transpose(dims)
 ## Implementation
 
 ```
+"from core import structural/Transpose"
+```
+
+```
 Source { source: "core", path: "structural/Transpose" }
 ```
 

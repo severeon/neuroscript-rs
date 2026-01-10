@@ -28,6 +28,8 @@ pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
 pub mod validator;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
 pub use codegen::generate_pytorch;

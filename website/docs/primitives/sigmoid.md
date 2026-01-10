@@ -38,6 +38,10 @@ neuron Sigmoid()
 ## Implementation
 
 ```
+"from core import activations/Sigmoid"
+```
+
+```
 Source { source: "core", path: "activations/Sigmoid" }
 ```
 

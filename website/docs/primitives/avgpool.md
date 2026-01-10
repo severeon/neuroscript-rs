@@ -42,6 +42,10 @@ neuron AvgPool(kernel_size, stride=Int(1), padding=Int(0))
 ## Implementation
 
 ```
+"from core import pooling/AvgPool"
+```
+
+```
 Source { source: "core", path: "pooling/AvgPool" }
 ```
 

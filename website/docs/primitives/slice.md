@@ -41,6 +41,10 @@ neuron Slice(dim, start, end)
 ## Implementation
 
 ```
+"from core import structural/Slice"
+```
+
+```
 Source { source: "core", path: "structural/Slice" }
 ```
 

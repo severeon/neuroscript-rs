@@ -40,6 +40,10 @@ neuron Linear(in_dim, out_dim)
 ## Implementation
 
 ```
+"external"
+```
+
+```
 External { kwargs: [] }
 ```
 

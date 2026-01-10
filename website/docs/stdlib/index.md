@@ -10,6 +10,7 @@ The NeuroScript standard library provides high-level, composable neural network 
 
 ### Feed-Forward Networks
 - FFN - Feed-forward network with configurable layers
+- ParallelFFN - Parallel feed-forward processing
 
 ### Attention Mechanisms
 - MultiHeadAttention - Multi-head self-attention
@@ -23,6 +24,7 @@ The NeuroScript standard library provides high-level, composable neural network 
 ### Transformer Components
 - TransformerBlock - Complete transformer layer
 - TransformerStack - Multi-layer transformer
+- SequentialTransformer - Sequentially stacked transformer blocks
 
 ### Meta Neurons
 - Fork - Split data into multiple paths

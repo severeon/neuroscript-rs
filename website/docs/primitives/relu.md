@@ -37,6 +37,10 @@ neuron ReLU()
 ## Implementation
 
 ```
+"from core import activations/ReLU"
+```
+
+```
 Source { source: "core", path: "activations/ReLU" }
 ```
 

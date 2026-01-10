@@ -41,6 +41,10 @@ neuron DropConnect(drop_prob)
 ## Implementation
 
 ```
+"from core import regularization/DropConnect"
+```
+
+```
 Source { source: "core", path: "regularization/DropConnect" }
 ```
 

@@ -39,6 +39,10 @@ neuron Scale(dim)
 ## Implementation
 
 ```
+"from core import operations/Scale"
+```
+
+```
 Source { source: "core", path: "operations/Scale" }
 ```
 

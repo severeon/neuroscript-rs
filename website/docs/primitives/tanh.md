@@ -38,6 +38,10 @@ neuron Tanh()
 ## Implementation
 
 ```
+"from core import activations/Tanh"
+```
+
+```
 Source { source: "core", path: "activations/Tanh" }
 ```
 

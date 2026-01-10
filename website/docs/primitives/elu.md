@@ -41,6 +41,10 @@ neuron ELU(alpha=Float(1.0))
 ## Implementation
 
 ```
+"from core import activations/ELU"
+```
+
+```
 Source { source: "core", path: "activations/ELU" }
 ```
 

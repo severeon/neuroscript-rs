@@ -31,6 +31,57 @@ neuron FFN(dim, expansion):
 - **Type-safe**: Shape inference catches dimensional errors before runtime
 - **Declarative**: Focus on *what* you want, not *how* to implement it
 
+## Advanced Capabilities
+
+### Compatibility & Shape Inference
+NeuroScript ensures pipeline compatibility through its rigorous shape algebra system. Every connection is validated at compile time:
+
+```neuroscript
+# This will fail to compile if dimensions don't match
+neuron Incompatible:
+    in: [batch, 128]
+    graph:
+        in -> Linear(128, 64) -> Linear(32, 10) -> out
+        # Error: Shape mismatch! Expected [*, 32], got [*, 64]
+```
+
+### Lazy Loading
+Use the `@lazy` annotation to define components that are only instantiated when used. This is powerful for conditional architectures or dynamic routing:
+
+```neuroscript
+neuron DynamicBranch(dim):
+    context:
+        @lazy heavy_branch = StackedTransformer(dim, 12)
+        light_branch = Linear(dim, dim)
+    
+    graph:
+        in -> match:
+            [*, 1, dim]: heavy_branch -> out
+            [*, _, dim]: light_branch -> out
+```
+
+### Recursion
+NeuroScript supports recursive neuron definitions, enabling fractal architectures and repeated structures:
+
+```neuroscript
+neuron FractalNet(dim, depth):
+    in: [*, dim]
+    out: [*, dim]
+    
+    graph:
+        in -> match:
+            # Base case
+            if depth == 0:
+                Linear(dim, dim) -> out
+            
+            # Recursive step
+            else:
+                Fork() -> (left, right)
+                left -> FractalNet(dim, depth - 1) -> l_out
+                right -> FractalNet(dim, depth - 1) -> r_out
+                (l_out, r_out) -> Add() -> out
+```
+
 ## Getting Started
 
 1. **[Primitives](/docs/primitives)** - Low-level building blocks wrapping PyTorch operations

@@ -45,6 +45,10 @@ neuron Conv2d(in_channels, out_channels, kernel_size, stride=Int(1), padding=Int
 ## Implementation
 
 ```
+"from core import convolutions/Conv2d"
+```
+
+```
 Source { source: "core", path: "convolutions/Conv2d" }
 ```
 

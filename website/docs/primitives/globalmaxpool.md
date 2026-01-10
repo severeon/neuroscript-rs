@@ -38,6 +38,10 @@ neuron GlobalMaxPool()
 ## Implementation
 
 ```
+"from core import pooling/GlobalMaxPool"
+```
+
+```
 Source { source: "core", path: "pooling/GlobalMaxPool" }
 ```
 

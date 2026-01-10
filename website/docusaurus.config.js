@@ -54,11 +54,27 @@ const config = {
     ],
   ],
 
+  themes: [
+    [
+      require.resolve("@easyops-cn/docusaurus-search-local"),
+      ({
+        hashed: true,
+        language: ["en"],
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+      }),
+    ],
+  ],
+
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       // Replace with your project's social card
       image: 'img/docusaurus-social-card.jpg',
+      hashed: true,
+      language: ["en"],
+      highlightSearchTermsOnTargetPage: true,
+      explicitSearchResultPath: true,
       navbar: {
         title: 'NeuroScript',
         logo: {
@@ -71,6 +87,11 @@ const config = {
             sidebarId: 'docsSidebar',
             position: 'left',
             label: 'Documentation',
+          },
+          {
+            to: '/playground',
+            label: 'Playground',
+            position: 'left',
           },
           {
             href: 'https://github.com/neuroscript/neuroscript',
@@ -96,6 +117,10 @@ const config = {
               {
                 label: 'Standard Library',
                 to: '/docs/stdlib',
+              },
+              {
+                label: 'Playground',
+                to: '/playground',
               },
             ],
           },

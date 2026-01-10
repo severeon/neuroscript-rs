@@ -42,6 +42,10 @@ neuron LearnedPositionalEmbedding(max_positions, embedding_dim)
 ## Implementation
 
 ```
+"from core import embeddings/LearnedPositionalEmbedding"
+```
+
+```
 Source { source: "core", path: "embeddings/LearnedPositionalEmbedding" }
 ```
 

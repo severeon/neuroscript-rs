@@ -19,4 +19,4 @@
 neuron Linear(in_dim, out_dim):
     in: [*, in_dim]
     out: [*, out_dim]
-    impl: external(in_dim, out_dim)
+    impl: core,nn/Linear

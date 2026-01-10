@@ -42,6 +42,10 @@ neuron MultiHeadSelfAttention(dim, num_heads)
 ## Implementation
 
 ```
+"from core import attention/MultiHeadSelfAttention"
+```
+
+```
 Source { source: "core", path: "attention/MultiHeadSelfAttention" }
 ```
 

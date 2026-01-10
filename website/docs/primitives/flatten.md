@@ -39,6 +39,10 @@ neuron Flatten(start_dim=Int(1), end_dim=BinOp { op: Sub, left: Int(0), right: I
 ## Implementation
 
 ```
+"from core import structural/Flatten"
+```
+
+```
 Source { source: "core", path: "structural/Flatten" }
 ```
 

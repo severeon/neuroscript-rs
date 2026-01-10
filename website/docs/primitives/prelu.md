@@ -42,6 +42,10 @@ neuron PReLU(num_parameters=Int(1), init=Float(0.25))
 ## Implementation
 
 ```
+"from core import activations/PReLU"
+```
+
+```
 Source { source: "core", path: "activations/PReLU" }
 ```
 

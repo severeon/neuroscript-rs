@@ -39,6 +39,10 @@ neuron Bias(dim)
 ## Implementation
 
 ```
+"from core import operations/Bias"
+```
+
+```
 Source { source: "core", path: "operations/Bias" }
 ```
 

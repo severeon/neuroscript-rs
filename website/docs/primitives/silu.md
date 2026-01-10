@@ -38,6 +38,10 @@ neuron SiLU()
 ## Implementation
 
 ```
+"from core import activations/SiLU"
+```
+
+```
 Source { source: "core", path: "activations/SiLU" }
 ```
 

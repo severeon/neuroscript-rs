@@ -39,6 +39,10 @@ neuron Multiply()
 ## Implementation
 
 ```
+"from core import structural/Multiply"
+```
+
+```
 Source { source: "core", path: "structural/Multiply" }
 ```
 

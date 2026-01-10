@@ -295,9 +295,9 @@ binding_annotation = {
 // Graph Connections
 // ============================================================================
 
-// graph: always indented
+// graph: may be indented
 graph_section = {
-    keyword_graph ~ colon ~ NEWLINE ~ (NEWLINE* ~ connection)+
+    keyword_graph ~ colon ~ (NEWLINE* ~ connection)+
 }
 
 // Connection: source -> dest or pipeline
@@ -310,7 +310,7 @@ connection = {
 
 connection_tail = {
     // Inline: endpoints separated by arrows, all on one line
-    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE)
+    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
     // Indented: newline, then one of:
   | (NEWLINE ~ indented_pipeline)
 }
@@ -323,9 +323,9 @@ indented_pipeline = {
 
 indented_pipeline_item = {
     // Item with trailing arrow means continue to next line
-    (!(ref_endpoint ~ arrow ~ NEWLINE) ~ endpoint ~ arrow ~ NEWLINE)
+    (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ arrow ~ NEWLINE*)
     // Item without trailing arrow (may be followed by next connection or end)
-  | (!(ref_endpoint ~ arrow ~ NEWLINE) ~ endpoint ~ NEWLINE)
+  | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ NEWLINE*)
 }
 
 // Endpoint: in, out, foo, Foo(args), (a, b), match: ..., if ...
@@ -344,7 +344,8 @@ ref_endpoint = {
 
 // Call endpoint: Linear(512, 256)
 call_endpoint = {
-    neuron_expr
+    (keyword_freeze ~ lparen ~ neuron_expr ~ rparen)
+  | call_expr
 }
 
 // Tuple endpoint: (a, b, c)
