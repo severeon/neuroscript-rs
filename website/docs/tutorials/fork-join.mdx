@@ -1,0 +1,127 @@
+---
+sidebar_position: 2
+title: Fork and Join
+description: Split and merge data flows with tuples
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Fork and Join Patterns
+
+NeuroScript supports splitting data into multiple branches and merging them back together. This enables powerful patterns like residual connections, multi-path processing, and parallel computations.
+
+## The Fork Neuron
+
+`Fork()` duplicates its input into multiple identical copies. Combined with **tuple unpacking**, you can name each branch:
+
+```neuroscript
+in -> Fork() -> (branch_a, branch_b)
+```
+
+This creates two references (`branch_a` and `branch_b`) that both point to the same data. You can then process each branch independently.
+
+## Basic Fork Example
+
+<InteractiveExample
+  title="Simple Fork"
+  description="Fork creates two identical copies that can be processed separately"
+  initialCode={`neuron SimpleFork(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork() -> (left, right)
+    left -> Linear(dim, dim) -> processed
+    (processed, right) -> Add() -> out`}
+/>
+
+In this example:
+1. `Fork()` duplicates the input
+2. `left` goes through a Linear layer
+3. `right` is unchanged (identity path)
+4. `Add()` combines them element-wise
+
+## Residual Connection Pattern
+
+The most common fork/join pattern is the **residual connection** (skip connection):
+
+<InteractiveExample
+  title="Residual Block"
+  description="The classic ResNet pattern: process main path, add skip connection"
+  initialCode={`neuron ResidualBlock(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork() -> (main, skip)
+    main ->
+      LayerNorm(dim)
+      Linear(dim, dim * 4)
+      GELU()
+      Linear(dim * 4, dim)
+      processed
+    (processed, skip) -> Add() -> out`}
+/>
+
+Key points:
+- `main` path transforms the data
+- `skip` path preserves the original input
+- `Add()` merges them, enabling gradient flow
+- Both paths must have **matching shapes** at the merge point
+
+## Three-Way Fork
+
+Use `Fork3()` to create three branches:
+
+<InteractiveExample
+  title="Three-Way Processing"
+  description="Fork3 creates three branches for parallel processing"
+  initialCode={`neuron ThreeWayBlock(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork3() -> (a, b, c)
+    a -> Linear(dim, dim) -> pa
+    b -> Linear(dim, dim) -> pb
+    c -> Identity() -> pc
+    (pa, pb) -> Add() -> ab
+    (ab, pc) -> Add() -> out`}
+/>
+
+## Shape Constraints at Merge Points
+
+When merging branches with `Add()`, `Multiply()`, or similar operations, all inputs must have the **same shape**:
+
+```neuroscript
+# This works - both branches have shape [*, dim]
+(processed, skip) -> Add() -> out
+
+# This would fail - shape mismatch
+main -> Linear(dim, dim * 2) -> processed  # [*, dim * 2]
+(processed, skip) -> Add() -> out           # skip is [*, dim] - mismatch!
+```
+
+The compiler validates shape compatibility at merge points during validation.
+
+## Concat Instead of Add
+
+If you want to combine branches with different dimensions, use `Concat()`:
+
+<InteractiveExample
+  title="Concatenation"
+  description="Concat joins tensors along the last dimension"
+  initialCode={`neuron ConcatBranches(dim):
+  in: [*, dim]
+  out: [*, dim * 2]
+  graph:
+    in -> Fork() -> (a, b)
+    a -> Linear(dim, dim) -> pa
+    b -> Linear(dim, dim) -> pb
+    (pa, pb) -> Concat() -> out`}
+/>
+
+## Try It Yourself
+
+Experiment with these patterns:
+- Add more processing to the main branch
+- Try different merge operations (`Add`, `Multiply`, `Concat`)
+- Create deeper residual chains
+- Click "Show Analysis" to trace how shapes flow through branches
