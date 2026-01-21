@@ -38,6 +38,8 @@ from neuroscript_runtime.primitives import (
     Concat,
     # Attention
     ScaledDotProductAttention,
+    # Debug/Logging
+    Log,
 )
 
 
@@ -676,6 +678,92 @@ class TestAttention:
         # So output magnitude should be bounded by value magnitudes
         assert output.shape == (16, 10, 64)
         assert torch.isfinite(output).all()
+
+
+class TestLogging:
+    """Test debug/logging primitives."""
+
+    def test_log_basic(self):
+        """Test basic Log operation (pass-through)."""
+        log = Log("test_layer")
+        x = torch.randn(32, 512)
+        out = log(x)
+
+        assert out.shape == (32, 512)
+        assert torch.equal(out, x)  # Should be pass-through
+
+    def test_log_multi_dim(self):
+        """Test Log with multi-dimensional input."""
+        log = Log("attention")
+        x = torch.randn(8, 16, 10, 64)
+        out = log(x)
+
+        assert out.shape == (8, 16, 10, 64)
+        assert torch.equal(out, x)
+
+    def test_log_levels(self):
+        """Test different log levels."""
+        for level in ["debug", "info", "warn", "error"]:
+            log = Log(f"test_{level}", level=level)
+            x = torch.randn(16, 256)
+            out = log(x)
+            assert torch.equal(out, x)
+
+    def test_log_invalid_level(self):
+        """Test error on invalid log level."""
+        with pytest.raises(ValueError, match="Invalid log level"):
+            Log("test", level="invalid")
+
+    def test_log_disabled(self):
+        """Test global disable."""
+        original = Log.enabled
+        try:
+            Log.enabled = False
+            log = Log("disabled_test")
+            x = torch.randn(32, 512)
+            out = log(x)
+            assert torch.equal(out, x)
+        finally:
+            Log.enabled = original
+
+    def test_log_min_level(self):
+        """Test minimum log level filtering."""
+        original = Log.min_level
+        try:
+            Log.min_level = "warn"
+            # Debug level should be filtered (below warn)
+            log_debug = Log("debug_test", level="debug")
+            # Warn level should pass through and log
+            log_warn = Log("warn_test", level="warn")
+
+            x = torch.randn(32, 512)
+            out_debug = log_debug(x)
+            out_warn = log_warn(x)
+
+            assert torch.equal(out_debug, x)
+            assert torch.equal(out_warn, x)
+        finally:
+            Log.min_level = original
+
+    def test_log_extra_repr(self):
+        """Test module string representation."""
+        log = Log("my_layer", level="debug")
+        repr_str = log.extra_repr()
+        assert "my_layer" in repr_str
+        assert "debug" in repr_str
+
+    def test_log_in_pipeline(self):
+        """Test Log in a typical pipeline with other primitives."""
+        linear = Linear(512, 256)
+        log1 = Log("input")
+        log2 = Log("after_linear", level="debug")
+
+        x = torch.randn(32, 512)
+        x = log1(x)
+        x = linear(x)
+        x = log2(x)
+
+        assert x.shape == (32, 256)
 
 
 if __name__ == "__main__":

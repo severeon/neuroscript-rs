@@ -79,6 +79,8 @@ from neuroscript_runtime.primitives.pooling import (
     GlobalAvgPool,
     GlobalMaxPool,
 )
+# Debug/Logging
+from neuroscript_runtime.primitives.logging import Log
 
 __all__ = [
     "Linear",
@@ -131,4 +133,6 @@ __all__ = [
     "AdaptiveMaxPool",
     "GlobalAvgPool",
     "GlobalMaxPool",
+    # Debug/Logging
+    "Log",
 ]

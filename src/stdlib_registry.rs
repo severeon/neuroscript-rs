@@ -547,6 +547,16 @@ impl StdlibRegistry {
                 "Multi-head self-attention (complete attention mechanism)",
             ),
         );
+
+        // Level 0: Debug/Logging
+        self.register(
+            "Log",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.logging",
+                "Log",
+                "Debug logging with colored output and tensor info (pass-through)",
+            ),
+        );
     }
 
     /// Register a primitive neuron implementation.

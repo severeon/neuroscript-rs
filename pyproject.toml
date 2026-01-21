@@ -30,6 +30,9 @@ dev = [
     "black>=22.0.0",
     "mypy>=1.0.0",
 ]
+logging = [
+    "rich>=13.0.0",
+]
 
 [tool.black]
 line-length = 100

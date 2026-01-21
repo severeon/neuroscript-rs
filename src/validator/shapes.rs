@@ -271,7 +271,6 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
             // Variadic should have been handled above
             (Dim::Variadic(_), _) => continue,
             // Global (conservative check)
-            // Global (conservative check)
             (Dim::Global(g), Dim::Global(s)) => {
                 if g != s {
                     return false;
