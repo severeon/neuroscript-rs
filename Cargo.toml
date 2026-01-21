@@ -21,6 +21,8 @@ num-traits = "0.2"     # Numeric traits (Zero, One)
 clap = { version = "4", features = ["derive"] }  # CLI argument parsing
 pest = "2.7"           # PEG parser generator
 pest_derive = "2.7"    # Derive macro for pest
+serde = { version = "1.0", features = ["derive"] }  # Serialization
+serde_json = "1.0"     # JSON serialization for WASM API
 
 [dev-dependencies]
 pretty_assertions = "1.4"

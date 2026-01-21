@@ -37,3 +37,72 @@ code[class*="language-neuroscript"] {
 [data-theme='dark'] code[class*="language-neuroscript"] {
   color: #e1e4e8;
 }
+
+/* Interactive Example Component Styles */
+.interactive-example {
+  border-radius: 8px;
+}
+
+.interactive-example textarea {
+  transition: border-color 0.2s ease;
+}
+
+.interactive-example textarea:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary) !important;
+}
+
+/* Dark mode adjustments for interactive examples */
+[data-theme='dark'] .interactive-example textarea {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-color: #444;
+}
+
+[data-theme='dark'] .interactive-example button {
+  background-color: #2d2d2d;
+  border-color: #444;
+  color: #e1e4e8;
+}
+
+[data-theme='dark'] .interactive-example button:hover {
+  background-color: #3d3d3d;
+}
+
+/* Analysis panel in dark mode */
+[data-theme='dark'] .interactive-example > div:last-child {
+  background-color: #2d2d2d !important;
+  border-color: #444 !important;
+}
+
+[data-theme='dark'] .interactive-example code {
+  background-color: #3d3d3d !important;
+}
+
+/* Shape highlighting */
+.shape-input {
+  background-color: #e8f5e9 !important;
+}
+
+.shape-output {
+  background-color: #e3f2fd !important;
+}
+
+.shape-match {
+  background-color: #fff3e0 !important;
+}
+
+[data-theme='dark'] .shape-input {
+  background-color: #1b5e20 !important;
+  color: #a5d6a7 !important;
+}
+
+[data-theme='dark'] .shape-output {
+  background-color: #0d47a1 !important;
+  color: #90caf9 !important;
+}
+
+[data-theme='dark'] .shape-match {
+  background-color: #e65100 !important;
+  color: #ffcc80 !important;
+}

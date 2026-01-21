@@ -1,0 +1,156 @@
+---
+sidebar_position: 3
+title: Match and Guards
+description: Route tensors based on their shape at runtime
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Match Expressions and Guards
+
+NeuroScript's `match` expressions let you route tensors to different processing pipelines based on their shape. Combined with **guards** (where clauses), you can create adaptive networks that handle varying input sizes optimally.
+
+## Basic Match Syntax
+
+```neuroscript
+in -> match:
+  [pattern]: pipeline -> out
+  [pattern]: different_pipeline -> out
+```
+
+Each arm has:
+- A **pattern** that matches tensor shapes
+- An optional **guard** (`where` clause) with a condition
+- A **pipeline** to execute if the pattern matches
+
+## Dimension Binding
+
+Patterns can capture dimensions into variables:
+
+```neuroscript
+[*, d]           # Captures last dimension as 'd'
+[*, seq, dim]    # Captures last two dimensions
+[*batch, d]      # Captures batch dimensions as variadic
+```
+
+Captured dimensions can be used in:
+- Guard conditions (`where d > 512`)
+- Neuron arguments (`Linear(d, 256)`)
+
+## Adaptive Projection Example
+
+<InteractiveExample
+  title="Adaptive Projection"
+  description="Different processing paths based on input dimension size"
+  initialCode={`neuron AdaptiveProjection():
+  in: [*, d]
+  out: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where d > 512: Linear(d, 512) -> out
+      [*, d] where d <= 512: Linear(d, 256) -> Linear(256, 512) -> out`}
+/>
+
+This neuron:
+- For large inputs (`d > 512`): Single projection to 512
+- For small inputs (`d <= 512`): Two-stage expansion through 256
+
+Click "Show Analysis" to see the match arms and their patterns.
+
+## Multi-Tier Compression
+
+<InteractiveExample
+  title="Multi-Tier Compression"
+  description="Four different compression strategies based on input size"
+  initialCode={`neuron AdaptiveCompressor():
+  in: [*, d]
+  out: [*, 128]
+  graph:
+    in -> match:
+      [*, d] where d > 1024: Linear(d, 512) -> GELU() -> Linear(512, 128) -> out
+      [*, d] where d > 512: Linear(d, 256) -> GELU() -> Linear(256, 128) -> out
+      [*, d] where d > 128: Linear(d, 128) -> out
+      [*, d]: Identity() -> out`}
+/>
+
+This creates four tiers:
+1. Very large inputs (d &gt; 1024): Two-stage aggressive compression
+2. Large inputs (d &gt; 512): Two-stage moderate compression
+3. Medium inputs (d &gt; 128): Single-stage compression
+4. Small inputs (d &lt;= 128): Pass through unchanged
+
+## Pattern Ordering
+
+Match arms are checked **in order**. More specific patterns should come before general ones:
+
+```neuroscript
+# Correct ordering: specific to general
+[*, 512]: Identity() -> out           # Exact match first
+[*, d] where d > 512: compress(d)     # Guarded pattern
+[*, d]: expand(d)                     # Catch-all last
+
+# Wrong ordering: catch-all shadows others
+[*, d]: expand(d)                     # This catches everything!
+[*, 512]: Identity() -> out           # Never reached
+```
+
+The compiler will warn you about **unreachable arms**.
+
+## Sequence-Aware Processing
+
+Match on multiple dimensions for sequence models:
+
+<InteractiveExample
+  title="Sequence-Aware Encoder"
+  description="Different processing based on sequence length and dimension"
+  initialCode={`neuron FlexibleEncoder():
+  in: [*, seq, d]
+  out: [*, seq, 512]
+  graph:
+    in -> match:
+      [*, seq, d] where d == 512: Identity() -> out
+      [*, seq, d] where d < 512: Linear(d, 512) -> out
+      [*, seq, d] where d > 512: Linear(d, 512) -> out`}
+/>
+
+## Using Captured Dimensions in Pipelines
+
+Captured dimensions can be used as arguments to neurons in the pipeline:
+
+<InteractiveExample
+  title="Dynamic Layer Sizing"
+  description="Captured dimension 'd' is used in Linear layer arguments"
+  initialCode={`neuron DynamicProjection():
+  in: [*, d]
+  out: [*, 512]
+  graph:
+    in -> match:
+      [*, d] where d > 512:
+        Linear(d, 512)
+        out
+      [*, d]:
+        Linear(d, d * 2)
+        GELU()
+        Linear(d * 2, 512)
+        out`}
+/>
+
+Notice how `d` appears in `Linear(d, 512)` and `Linear(d, d * 2)`. The actual values are determined at runtime based on the input shape.
+
+## Guards with Multiple Conditions
+
+Guards can use `and`/`or` for complex conditions:
+
+```neuroscript
+[*, d] where d > 256 and d < 1024: medium_path()
+[*, seq, d] where seq > 100 or d > 512: large_path()
+```
+
+## Try It Yourself
+
+Experiment with match expressions:
+- Add new pattern arms with different thresholds
+- Try capturing multiple dimensions
+- Use captured dimensions in different ways
+- Watch for "unreachable arm" warnings when ordering is wrong
+- Click "Show Analysis" to see which patterns are reachable
