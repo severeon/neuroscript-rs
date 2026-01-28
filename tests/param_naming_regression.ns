@@ -1,0 +1,54 @@
+# Regression test for parameter naming bug (resolved Jan 6, 2026)
+# Tests that parameter names with keyword prefixes/substrings work correctly
+# See: notes/parser-param-naming-bug.md
+
+# Standard ML naming conventions with "in"/"out" prefixes
+neuron Linear(in_features, out_features):
+  in: [*, in_features]
+  out: [*, out_features]
+  impl: core,nn/Linear
+
+neuron Conv2d(in_channels, out_channels, kernel_size):
+  in: [*, in_channels, h, w]
+  out: [*, out_channels, h_out, w_out]
+  impl: core,nn/Conv2d
+
+# Dimension suffix pattern
+neuron MLP(in_dim, hidden_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  graph:
+    in -> Linear(in_dim, hidden_dim) -> Linear(hidden_dim, out_dim) -> out
+
+# Dimension prefix pattern
+neuron Projection(dim_in, dim_out):
+  in: [batch, seq, dim_in]
+  out: [batch, seq, dim_out]
+  impl: core,nn/Linear
+
+# Various "in" and "out" combinations
+neuron TestVariations(indim, outdim, input_size, output_size):
+  in: [*, indim]
+  out: [*, outdim]
+  impl: core,nn/Linear
+
+# Test that match-bound dimensions don't pollute parameter namespace
+neuron Processor:
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> match:
+      [*, d] where d > 512: Linear(d, 512) -> out
+      [*, d]: Linear(d, d) -> out
+
+# This should work - 'in_dim' param is separate from 'd' match var
+neuron AfterMatch(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+# Test keyword-like prefixes (from, to, etc.)
+neuron Transform(from_size, to_size):
+  in: [*, from_size]
+  out: [*, to_size]
+  impl: core,nn/Linear
