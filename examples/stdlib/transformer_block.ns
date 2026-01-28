@@ -1,0 +1,66 @@
+# Category: Standard Library - Transformer Blocks
+# Purpose: Usage examples for complete transformer blocks
+# Doc reference: website/docs/stdlib/
+
+# Example: Complete transformer block (attention + FFN)
+neuron TransformerBlock(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Attention sublayer
+        in -> Fork() -> (attn_main, attn_skip)
+        attn_main ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            attn_out
+        (attn_out, attn_skip) -> Add() -> attn_residual
+
+        # FFN sublayer
+        attn_residual -> Fork() -> (ffn_main, ffn_skip)
+        ffn_main ->
+            LayerNorm(dim)
+            FFN(dim)
+            ffn_out
+        (ffn_out, ffn_skip) -> Add() -> out
+
+neuron FFN(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/MultiHeadSelfAttention
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

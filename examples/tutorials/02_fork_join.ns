@@ -1,0 +1,134 @@
+# Category: Tutorials
+# Purpose: Demonstrate Fork primitive, tuple unpacking, and residual patterns
+# Doc reference: website/docs/tutorials/fork-join.mdx
+
+# Example 1: Basic Fork usage
+neuron SimpleFork:
+    in: [*, dim]
+    out a: [*, dim]
+    out b: [*, dim]
+    impl: core,builtin/Fork
+
+# Example 2: Tuple unpacking with Fork
+neuron UnpackExample(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        # Fork creates two outputs, tuple unpacking names them
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> out
+
+# Example 3: Classic residual connection (fork + add pattern)
+neuron ResidualBlock(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        # Fork the input
+        in -> Fork() -> (main, skip)
+
+        # Process main path
+        main ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            processed
+
+        # Add skip connection back
+        (processed, skip) -> Add() -> out
+
+# Example 4: Multiple parallel paths
+neuron ThreeWayFork:
+    in: [*, dim]
+    out a: [*, dim]
+    out b: [*, dim]
+    out c: [*, dim]
+    impl: core,builtin/Fork3
+
+neuron ParallelProcessing(dim):
+    in: [*, dim]
+    out: [*, dim * 3]
+    graph:
+        # Split into three paths
+        in -> Fork3() -> (path1, path2, path3)
+
+        # Process each independently
+        path1 -> Linear(dim, dim) -> p1
+        path2 -> Linear(dim, dim) -> p2
+        path3 -> Linear(dim, dim) -> p3
+
+        # Combine results
+        (p1, p2, p3) -> Concat() -> out
+
+# Example 5: Nested fork pattern
+neuron NestedResidual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        # Outer residual
+        in -> Fork() -> (outer_main, outer_skip)
+
+        # Inner residual on main path
+        outer_main -> Fork() -> (inner_main, inner_skip)
+        inner_main -> Linear(dim, dim) -> inner_processed
+        (inner_processed, inner_skip) -> Add() -> inner_sum
+
+        # Outer add
+        (inner_sum, outer_skip) -> Add() -> out
+
+# Example 6: Pre-activation residual (fork before normalization)
+neuron PreActivationResidual(dim):
+    in: [batch, dim]
+    out: [batch, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+
+        main ->
+            LayerNorm(dim)
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            processed
+
+        (processed, skip) -> Add() -> out
+
+# Primitives used in this tutorial
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Fork3:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    out c: [*shape]
+    impl: core,builtin/Fork3
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+neuron Concat:
+    in a: [*, dim_a]
+    in b: [*, dim_b]
+    in c: [*, dim_c]
+    out: [*, dim_a + dim_b + dim_c]
+    impl: core,builtin/Concat
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm

@@ -1,0 +1,104 @@
+# Category: Primitives - Activations
+# Purpose: Demonstrate all activation function primitives
+# Doc reference: website/docs/primitives/Activations/
+
+# Example 1: ReLU - Rectified Linear Unit
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ReLU
+
+# Example 2: GELU - Gaussian Error Linear Unit
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+# Example 3: SiLU - Sigmoid Linear Unit (Swish)
+neuron SiLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/SiLU
+
+# Example 4: Sigmoid
+neuron Sigmoid:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Sigmoid
+
+# Example 5: Tanh - Hyperbolic Tangent
+neuron Tanh:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Tanh
+
+# Example 6: Softmax
+neuron Softmax:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Softmax
+
+# Example 7: ELU - Exponential Linear Unit
+neuron ELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ELU
+
+# Example 8: PReLU - Parametric ReLU
+neuron PReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/PReLU
+
+# Example 9: Mish
+neuron Mish:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/Mish
+
+# Example 10: Comparative usage in MLP
+neuron MLPWithReLU(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Linear(dim, dim * 4) -> ReLU() -> Linear(dim * 4, dim) -> out
+
+neuron MLPWithGELU(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Linear(dim, dim * 4) -> GELU() -> Linear(dim * 4, dim) -> out
+
+neuron MLPWithSiLU(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Linear(dim, dim * 4) -> SiLU() -> Linear(dim * 4, dim) -> out
+
+# Example 11: Gated activation (SiLU for gating)
+neuron GatedFFN(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+        gate_path -> Linear(dim, dim * 4) -> SiLU() -> gate
+        value_path -> Linear(dim, dim * 4) -> value
+        (gate, value) -> Multiply() -> Linear(dim * 4, dim) -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Multiply:
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,builtin/Multiply

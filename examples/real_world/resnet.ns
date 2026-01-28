@@ -1,0 +1,101 @@
+# Category: Real World Architectures
+# Purpose: ResNet architecture with residual blocks
+# Doc reference: Complete CNN architecture example
+
+# ResNet building blocks
+neuron Conv2d(in_channels, out_channels, kernel_size, stride, padding):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h_out, w_out]
+    impl: core,nn/Conv2d
+
+neuron BatchNorm(channels):
+    in: [*, channels, h, w]
+    out: [*, channels, h, w]
+    impl: core,normalization/BatchNorm
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ReLU
+
+neuron MaxPool(kernel_size, stride):
+    in: [*, channels, h, w]
+    out: [*, channels, h_out, w_out]
+    impl: core,pooling/MaxPool
+
+neuron GlobalAvgPool:
+    in: [*, channels, h, w]
+    out: [*, channels]
+    impl: core,pooling/GlobalAvgPool
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+# Basic residual block
+neuron ResidualBlock(channels):
+    in: [*, channels, h, w]
+    out: [*, channels, h, w]
+    graph:
+        in -> Fork() -> (main, skip)
+
+        main ->
+            Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
+            BatchNorm(channels)
+            ReLU()
+            Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
+            BatchNorm(channels)
+            processed
+
+        (processed, skip) -> Add() -> ReLU() -> out
+
+# ResNet stem (initial convolution)
+neuron ResNetStem(in_channels, out_channels):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h_out, w_out]
+    graph:
+        in ->
+            Conv2d(in_channels, out_channels, kernel_size=7, stride=2, padding=3)
+            BatchNorm(out_channels)
+            ReLU()
+            MaxPool(kernel_size=3, stride=2)
+            out
+
+# ResNet-18 (simplified, single layer per stage)
+neuron ResNet18(num_classes):
+    in: [*, 3, 224, 224]
+    out: [*, num_classes]
+    graph:
+        # Stem
+        in -> ResNetStem(3, 64) -> stem_out
+
+        # Stage 1: 64 channels
+        stem_out -> ResidualBlock(64) -> stage1
+
+        # Stage 2: 128 channels (would need downsampling in full version)
+        stage1 -> ResidualBlock(64) -> stage2
+
+        # Stage 3: 256 channels
+        stage2 -> ResidualBlock(64) -> stage3
+
+        # Stage 4: 512 channels
+        stage3 -> ResidualBlock(64) -> stage4
+
+        # Classification head
+        stage4 ->
+            GlobalAvgPool()
+            Linear(64, num_classes)
+            out
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

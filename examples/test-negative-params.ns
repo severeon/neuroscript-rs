@@ -1,5 +1,0 @@
-neuron Concat(axis=-1):
-  in left: [*shape]
-  in right: [*shape]
-  out: [*shape]
-  impl: core,builtin/Concat

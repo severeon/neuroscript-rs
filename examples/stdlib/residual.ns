@@ -1,0 +1,96 @@
+# Category: Standard Library - Residual Connections
+# Purpose: Demonstrate usage of stdlib residual connection patterns
+# Doc reference: website/docs/stdlib/
+
+# Using stdlib residual neurons (when available via imports)
+# For now, showing the pattern that stdlib provides
+
+# Example 1: Basic residual connection pattern
+neuron Residual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim * 4) -> GELU() -> Linear(dim * 4, dim) -> processed
+        (processed, skip) -> Add() -> out
+
+# Example 2: Residual with MLP
+neuron ResidualMLP(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> MLP(dim) -> processed
+        (processed, skip) -> Add() -> out
+
+# Example 3: Pre-norm residual (apply normalization before transformation)
+neuron PreNormResidual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            processed
+        (processed, skip) -> Add() -> out
+
+# Example 4: Post-norm residual (apply normalization after addition)
+neuron PostNormResidual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim * 4) -> GELU() -> Linear(dim * 4, dim) -> processed
+        (processed, skip) -> Add() -> LayerNorm(dim) -> out
+
+# Example 5: Stacked residual blocks
+neuron StackedResiduals(dim, depth):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Residual(dim)
+            Residual(dim)
+            Residual(dim)
+            out
+
+# Supporting neurons
+neuron MLP(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm

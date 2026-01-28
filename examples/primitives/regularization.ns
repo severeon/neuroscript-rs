@@ -1,0 +1,33 @@
+# Category: Primitives - Regularization
+# Purpose: Demonstrate regularization primitives
+# Doc reference: website/docs/primitives/Regularization/
+
+# Dropout, DropConnect, DropPath primitives
+# See documentation for full details
+
+neuron Dropout(rate):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/Dropout
+
+neuron RegularizedBlock(dim, dropout_rate):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Dropout(dropout_rate)
+            Linear(dim * 4, dim)
+            Dropout(dropout_rate)
+            out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU

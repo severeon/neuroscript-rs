@@ -1,0 +1,118 @@
+# Category: Primitives - Structural
+# Purpose: Demonstrate structural/routing primitives
+# Doc reference: website/docs/primitives/Structural/
+
+# Example 1: Fork - Split tensor into two identical copies
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+# Example 2: Fork3 - Split into three copies
+neuron Fork3:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    out c: [*shape]
+    impl: core,builtin/Fork3
+
+# Example 3: Split - Split along dimension
+neuron Split(dim, sizes):
+    in: [*shape]
+    out parts: [*shape]
+    impl: core,builtin/Split
+
+# Example 4: Concat - Concatenate tensors
+neuron Concat:
+    in a: [*, dim_a]
+    in b: [*, dim_b]
+    out: [*, dim_a + dim_b]
+    impl: core,builtin/Concat
+
+# Example 5: Reshape - Change tensor shape
+neuron Reshape(target_shape):
+    in: [*shape]
+    out: [target_shape]
+    impl: core,builtin/Reshape
+
+# Example 6: Flatten - Flatten tensor
+neuron Flatten:
+    in: [batch, *dims]
+    out: [batch, flattened]
+    impl: core,builtin/Flatten
+
+# Example 7: Transpose - Transpose dimensions
+neuron Transpose(dim0, dim1):
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Transpose
+
+# Example 8: Slice - Extract slice
+neuron Slice(dim, start, end):
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Slice
+
+# Example 9: Pad - Add padding
+neuron Pad(padding):
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Pad
+
+# Example 10: Identity - Pass through unchanged
+neuron Identity:
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Identity
+
+# Example 11: Residual connection using Fork
+neuron ResidualBlock(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> processed
+        (processed, skip) -> Add() -> out
+
+# Example 12: Multi-path processing with Fork3
+neuron ThreePathProcessor(dim):
+    in: [*, dim]
+    out: [*, dim * 3]
+    graph:
+        in -> Fork3() -> (p1, p2, p3)
+        p1 -> Linear(dim, dim) -> out1
+        p2 -> Linear(dim, dim) -> out2
+        p3 -> Linear(dim, dim) -> out3
+        (out1, out2, out3) -> Concat() -> out
+
+# Example 13: Flatten for classification head
+neuron ClassificationHead(feature_dim, num_classes):
+    in: [batch, h, w, feature_dim]
+    out: [batch, num_classes]
+    graph:
+        in ->
+            Flatten()
+            Linear(h * w * feature_dim, num_classes)
+            out
+
+# Example 14: Identity in conditional routing
+neuron ConditionalProcessor:
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> match:
+            [*, d] where d > 512: Linear(d, 512) -> out
+            [*, d]: Identity() -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

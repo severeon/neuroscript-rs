@@ -1,0 +1,16 @@
+# Category: Primitives - Pooling
+# Purpose: Demonstrate pooling primitives
+# Doc reference: website/docs/primitives/Pooling/
+
+# MaxPool, AvgPool, GlobalMaxPool, GlobalAvgPool, AdaptiveMaxPool, AdaptiveAvgPool
+# See documentation for full details
+
+neuron MaxPool(kernel_size, stride):
+    in: [*, channels, h, w]
+    out: [*, channels, h_out, w_out]
+    impl: core,pooling/MaxPool
+
+neuron GlobalAvgPool:
+    in: [*, channels, h, w]
+    out: [*, channels]
+    impl: core,pooling/GlobalAvgPool

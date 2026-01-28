@@ -1,0 +1,17 @@
+{
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "__pycache__": true,
+    ".agent": true,
+    ".benchmarks": true,
+    ".github": true,
+    ".history": true,
+    ".pytest_cache": true,
+    ".mypy_cache": true,
+    "neuroscript_runtime.egg-info": true,
+  } 
+}

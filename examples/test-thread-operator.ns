@@ -1,9 +1,0 @@
-neuron MLP(dim):
-  in: [*, dim]
-  out: [*, dim]
-  graph:
-    in ->
-      Linear(dim, dim * 4)
-      GELU()
-      Linear(dim * 4, dim)
-      out

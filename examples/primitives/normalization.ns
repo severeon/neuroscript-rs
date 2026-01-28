@@ -1,0 +1,123 @@
+# Category: Primitives - Normalization
+# Purpose: Demonstrate all normalization primitives
+# Doc reference: website/docs/primitives/Normalization/
+
+# Example 1: LayerNorm - Layer Normalization
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+# Example 2: BatchNorm - Batch Normalization
+neuron BatchNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/BatchNorm
+
+# Example 3: GroupNorm - Group Normalization
+neuron GroupNorm(num_groups, dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/GroupNorm
+
+# Example 4: InstanceNorm - Instance Normalization
+neuron InstanceNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/InstanceNorm
+
+# Example 5: RMSNorm - Root Mean Square Normalization
+neuron RMSNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/RMSNorm
+
+# Example 6: Pre-norm transformer pattern (LayerNorm before attention)
+neuron PreNormBlock(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            Linear(dim, dim)
+            processed
+        (processed, skip) -> Add() -> out
+
+# Example 7: Post-norm transformer pattern (LayerNorm after residual)
+neuron PostNormBlock(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> processed
+        (processed, skip) -> Add() -> LayerNorm(dim) -> out
+
+# Example 8: RMSNorm in LLaMA-style block
+neuron LLaMAStyleBlock(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            RMSNorm(dim)
+            Linear(dim, dim * 4)
+            SiLU()
+            Linear(dim * 4, dim)
+            processed
+        (processed, skip) -> Add() -> out
+
+# Example 9: BatchNorm in convolutional network
+neuron ConvBlock(in_channels, out_channels):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h, w]
+    graph:
+        in ->
+            Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+            BatchNorm(out_channels)
+            ReLU()
+            out
+
+# Example 10: GroupNorm (common in vision models)
+neuron GroupNormBlock(channels, num_groups):
+    in: [*, channels, h, w]
+    out: [*, channels, h, w]
+    graph:
+        in ->
+            Conv2d(channels, channels, kernel_size=3, padding=1)
+            GroupNorm(num_groups, channels)
+            ReLU()
+            out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron Conv2d(in_channels, out_channels, kernel_size, padding):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h, w]
+    impl: core,nn/Conv2d
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ReLU
+
+neuron SiLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/SiLU

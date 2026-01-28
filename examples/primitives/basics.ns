@@ -1,0 +1,58 @@
+# Category: Primitives - Basics
+# Purpose: Demonstrate fundamental Linear layer primitive
+# Doc reference: website/docs/primitives/Basics/
+
+# Example 1: Basic Linear layer (primitive)
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+# Example 2: Simple projection layer
+neuron Projection(dim):
+    in: [batch, dim]
+    out: [batch, dim]
+    graph:
+        in -> Linear(dim, dim) -> out
+
+# Example 3: Multi-layer perceptron (MLP)
+neuron MLP(dim_in, dim_hidden, dim_out):
+    in: [*, dim_in]
+    out: [*, dim_out]
+    graph:
+        in ->
+            Linear(dim_in, dim_hidden)
+            GELU()
+            Linear(dim_hidden, dim_out)
+            out
+
+# Example 4: Dimension expansion
+neuron Expander(dim, factor):
+    in: [*, dim]
+    out: [*, dim * factor]
+    graph:
+        in -> Linear(dim, dim * factor) -> out
+
+# Example 5: Dimension reduction
+neuron Reducer(dim_in, dim_out):
+    in: [batch, dim_in]
+    out: [batch, dim_out]
+    graph:
+        in -> Linear(dim_in, dim_out) -> out
+
+# Example 6: Feed-forward network pattern
+neuron FFN(dim):
+    in: [batch, dim]
+    out: [batch, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+# Supporting primitive for examples
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU

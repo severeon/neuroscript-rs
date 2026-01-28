@@ -1,0 +1,75 @@
+# Category: Tutorials
+# Purpose: Demonstrate dimension variables and automatic shape inference
+# Doc reference: website/docs/tutorials/shape-inference.mdx
+
+# Example 1: Basic dimension variable usage
+neuron BasicLinear(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,nn/Linear
+
+# Example 2: Dimension propagation through pipeline
+neuron TwoLayerMLP(in_dim, hidden_dim, out_dim):
+    in: [batch, in_dim]
+    out: [batch, out_dim]
+    graph:
+        in ->
+            Linear(in_dim, hidden_dim)
+            GELU()
+            Linear(hidden_dim, out_dim)
+            out
+
+# Example 3: Automatic batch dimension inference
+neuron BatchAgnostic(dim):
+    # Works with any batch size - shape inference determines compatibility
+    in: [*, dim]
+    out: [*, dim * 2]
+    graph:
+        in -> Linear(dim, dim * 2) -> out
+
+# Example 4: Sequence length preservation
+neuron SequenceProcessor(dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+# Example 5: Multiple dimension variables
+neuron FlexibleProjection(in_dim, out_dim):
+    # Shape inference validates input/output compatibility
+    in: [batch, in_dim]
+    out: [batch, out_dim]
+    graph:
+        in -> Linear(in_dim, out_dim) -> out
+
+# Example 6: Dimension expressions
+neuron Expander(dim):
+    in: [*, dim]
+    out: [*, dim * 4]
+    impl: core,nn/Linear
+
+neuron FFNBlock(dim):
+    # Combines dimension expressions: expand then contract
+    in: [batch, dim]
+    out: [batch, dim]
+    graph:
+        in ->
+            Expander(dim, 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+# Primitives used in this tutorial
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU

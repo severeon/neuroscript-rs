@@ -1,0 +1,39 @@
+# Category: Standard Library - Attention
+# Purpose: Usage examples for stdlib attention components
+# Doc reference: website/docs/stdlib/
+
+# Example patterns for using MultiHeadAttention from stdlib
+# When stdlib is available via imports
+
+neuron AttentionBlock(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            processed
+        (processed, skip) -> Add() -> out
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/MultiHeadSelfAttention
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

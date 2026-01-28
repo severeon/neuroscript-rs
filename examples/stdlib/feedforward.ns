@@ -1,0 +1,126 @@
+# Category: Standard Library - Feed-Forward Networks
+# Purpose: Demonstrate FFN patterns from stdlib
+# Doc reference: website/docs/stdlib/
+
+# Example 1: Basic FFN (expand-activate-contract)
+neuron FFN(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out
+
+# Example 2: FFN with explicit hidden dimension
+neuron FFNWithHidden(in_dim, hidden_dim, out_dim):
+    in: [*, seq, in_dim]
+    out: [*, seq, out_dim]
+    graph:
+        in ->
+            Linear(in_dim, hidden_dim)
+            GELU()
+            Linear(hidden_dim, out_dim)
+            out
+
+# Example 3: FFN with dropout (for training)
+neuron FFNWithDropout(dim, dropout_rate):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Dropout(dropout_rate)
+            Linear(dim * 4, dim)
+            Dropout(dropout_rate)
+            out
+
+# Example 4: Gated FFN (SwiGLU-style)
+neuron GatedFFN(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+
+        gate_path ->
+            Linear(dim, dim * 4)
+            SiLU()
+            gate
+
+        value_path ->
+            Linear(dim, dim * 4)
+            value
+
+        (gate, value) -> Multiply() -> Linear(dim * 4, dim) -> out
+
+# Example 5: FFN in transformer block context
+neuron TransformerFFNBlock(dim):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            FFN(dim)
+            processed
+        (processed, skip) -> Add() -> out
+
+# Example 6: Adaptive FFN (adjust expansion based on dimension)
+neuron AdaptiveFFN:
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in -> match:
+            # Small models: larger expansion
+            [*, *, d] where d < 512:
+                Linear(d, d * 8) -> GELU() -> Linear(d * 8, d) -> out
+
+            # Large models: standard expansion
+            [*, *, d]:
+                Linear(d, d * 4) -> GELU() -> Linear(d * 4, d) -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron SiLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/SiLU
+
+neuron Dropout(rate):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/Dropout
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Multiply:
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,builtin/Multiply
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm

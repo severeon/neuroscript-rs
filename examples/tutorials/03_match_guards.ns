@@ -1,0 +1,125 @@
+# Category: Tutorials
+# Purpose: Demonstrate match expressions with shape patterns and guard conditions
+# Doc reference: website/docs/tutorials/match-guards.mdx
+
+# Example 1: Basic shape pattern matching
+neuron ShapeRouter:
+    in: [*shape]
+    out: [*shape]
+    graph:
+        in -> match:
+            [*, d] where d <= 256: Identity() -> out
+            [*, d] where d > 256: Linear(d, 256) -> out
+
+# Example 2: Dimension binding and usage
+neuron AdaptiveProjection:
+    in: [*, dim]
+    out: [*, 512]
+    graph:
+        in -> match:
+            # Bind dimension variable 'd' from input shape
+            [*, d] where d < 512: Linear(d, 512) -> out
+            [*, d] where d == 512: Identity() -> out
+            [*, d] where d > 512: Linear(d, 512) -> out
+
+# Example 3: Match with dimension in neuron call
+neuron DimensionScaling:
+    in: [*, d]
+    out: [*, d * 4]
+    graph:
+        # Captured dimension 'd' used in Linear call
+        in -> match:
+            [*, d]: Linear(d, d * 4) -> out
+
+# Example 4: Multiple patterns with different processing
+neuron MultiScaleProcessor:
+    in: [batch, seq, dim]
+    out: [batch, seq, 512]
+    graph:
+        in -> match:
+            # Small models: expand significantly
+            [*, *, d] where d < 128:
+                Linear(d, 256) -> GELU() -> Linear(256, 512) -> out
+
+            # Medium models: single projection
+            [*, *, d] where d >= 128 && d < 512:
+                Linear(d, 512) -> out
+
+            # Large models: compress
+            [*, *, d] where d >= 512:
+                Linear(d, 768) -> GELU() -> Linear(768, 512) -> out
+
+# Example 5: Conditional residual connections
+neuron ConditionalResidual(target_dim):
+    in: [*, dim]
+    out: [*, target_dim]
+    graph:
+        in -> match:
+            # Dimension matches: use residual
+            [*, d] where d == target_dim:
+                Fork() -> (main, skip)
+                main -> Linear(d, d * 4) -> GELU() -> Linear(d * 4, d) -> processed
+                (processed, skip) -> Add() -> out
+
+            # Dimension mismatch: project without residual
+            [*, d]:
+                Linear(d, target_dim) -> out
+
+# Example 6: Complex guard with multiple conditions
+neuron FilteredFFN:
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> match:
+            # Only apply FFN if dimensions are in valid range
+            [*, s, d] where s > 1 && d >= 64 && d <= 2048:
+                Linear(d, d * 4)
+                GELU()
+                Linear(d * 4, d)
+                out
+
+            # Otherwise pass through
+            [*, *, d]:
+                Identity() -> out
+
+# Example 7: Match with sequence length binding
+neuron SequenceAwareProcessor:
+    in: [batch, seq, dim]
+    out: [batch, seq, 512]
+    graph:
+        in -> match:
+            # Short sequences: use larger intermediate dimension
+            [*, s, d] where s < 128:
+                Linear(d, d * 8) -> GELU() -> Linear(d * 8, 512) -> out
+
+            # Long sequences: use smaller intermediate for efficiency
+            [*, s, d] where s >= 128:
+                Linear(d, d * 2) -> GELU() -> Linear(d * 2, 512) -> out
+
+# Primitives used in this tutorial
+neuron Linear(n, m):
+  in: [*, n]
+  out: [*, m]
+  impl: core,nn/Linear
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron Identity:
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Identity
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

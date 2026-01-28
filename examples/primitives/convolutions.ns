@@ -1,0 +1,31 @@
+# Category: Primitives - Convolutions
+# Purpose: Demonstrate convolution primitives
+# Doc reference: website/docs/primitives/Convolutions/
+
+# Conv1d, Conv2d, Conv3d, DepthwiseConv, SeparableConv, TransposedConv primitives
+# See documentation for full details
+
+neuron Conv2d(in_channels, out_channels, kernel_size, padding):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h, w]
+    impl: core,nn/Conv2d
+
+neuron ConvBlock(in_channels, out_channels):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h, w]
+    graph:
+        in ->
+            Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+            BatchNorm(out_channels)
+            ReLU()
+            out
+
+neuron BatchNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/BatchNorm
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/ReLU

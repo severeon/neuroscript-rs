@@ -1,0 +1,134 @@
+# Category: Primitives - Embeddings
+# Purpose: Demonstrate embedding primitives
+# Doc reference: website/docs/primitives/Embeddings/
+
+# Example 1: Embedding - Token embeddings
+neuron Embedding(vocab_size, embed_dim):
+    in: [batch, seq]
+    out: [batch, seq, embed_dim]
+    impl: core,nn/Embedding
+
+# Example 2: PositionalEncoding - Sinusoidal positional encoding
+neuron PositionalEncoding(dim, max_len):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,nn/PositionalEncoding
+
+# Example 3: LearnedPositionalEmbedding - Learned position embeddings
+neuron LearnedPositionalEmbedding(max_len, dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,nn/LearnedPositionalEmbedding
+
+# Example 4: RotaryEmbedding - Rotary Position Embedding (RoPE)
+neuron RotaryEmbedding(dim):
+    in: [batch, seq, num_heads, head_dim]
+    out: [batch, seq, num_heads, head_dim]
+    impl: core,nn/RotaryEmbedding
+
+# Example 5: Complete transformer input (tokens + positions)
+neuron TransformerInput(vocab_size, dim, max_len):
+    in: [batch, seq]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            PositionalEncoding(dim, max_len)
+            out
+
+# Example 6: GPT-style embeddings (learned positions)
+neuron GPTEmbeddings(vocab_size, dim, max_len):
+    in: [batch, seq]
+    out: [batch, seq, dim]
+    graph:
+        # Token embeddings
+        in -> Embedding(vocab_size, dim) -> token_embeds
+
+        # Add learned positional embeddings
+        token_embeds ->
+            LearnedPositionalEmbedding(max_len, dim)
+            out
+
+# Example 7: BERT-style embeddings (token + position + segment)
+neuron BERTEmbeddings(vocab_size, dim, max_len):
+    in tokens: [batch, seq]
+    out: [batch, seq, dim]
+    graph:
+        # Token embeddings
+        tokens -> Embedding(vocab_size, dim) -> token_embeds
+
+        # Add positional encoding
+        token_embeds ->
+            LearnedPositionalEmbedding(max_len, dim)
+            LayerNorm(dim)
+            out
+
+# Example 8: RoPE application in attention (LLaMA-style)
+neuron RoPEAttentionInput(dim, num_heads):
+    # Prepare Q/K for attention with RoPE
+    in query: [batch, seq, dim]
+    in key: [batch, seq, dim]
+    out query_rope: [batch, seq, num_heads, head_dim]
+    out key_rope: [batch, seq, num_heads, head_dim]
+    graph:
+        # Reshape Q/K for multi-head
+        query -> Reshape([batch, seq, num_heads, head_dim]) -> q_reshaped
+        key -> Reshape([batch, seq, num_heads, head_dim]) -> k_reshaped
+
+        # Apply RoPE
+        q_reshaped -> RotaryEmbedding(head_dim) -> query_rope
+        k_reshaped -> RotaryEmbedding(head_dim) -> key_rope
+
+# Example 9: Vision embeddings (patch embeddings)
+neuron PatchEmbedding(patch_size, in_channels, embed_dim):
+    # Convert image patches to embeddings
+    in: [batch, in_channels, height, width]
+    out: [batch, num_patches, embed_dim]
+    graph:
+        in ->
+            Conv2d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+            Flatten()
+            out
+
+# Example 10: Complete embedding layer with dropout
+neuron RobustEmbeddings(vocab_size, dim, max_len, dropout_rate):
+    in: [batch, seq]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            PositionalEncoding(dim, max_len)
+            LayerNorm(dim)
+            Dropout(dropout_rate)
+            out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+neuron Reshape(target_shape):
+    in: [*shape]
+    out: [target_shape]
+    impl: core,builtin/Reshape
+
+neuron Flatten:
+    in: [batch, *dims]
+    out: [batch, flattened]
+    impl: core,builtin/Flatten
+
+neuron Conv2d(in_channels, out_channels, kernel_size, stride):
+    in: [*, in_channels, h, w]
+    out: [*, out_channels, h_out, w_out]
+    impl: core,nn/Conv2d
+
+neuron Dropout(rate):
+    in: [*shape]
+    out: [*shape]
+    impl: core,regularization/Dropout

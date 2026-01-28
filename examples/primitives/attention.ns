@@ -1,0 +1,119 @@
+# Category: Primitives - Attention
+# Purpose: Demonstrate attention mechanism primitives
+# Doc reference: website/docs/primitives/Attention/
+
+# Example 1: ScaledDotProductAttention - Core attention mechanism
+neuron ScaledDotProductAttention(dim):
+    in query: [batch, seq, dim]
+    in key: [batch, seq, dim]
+    in value: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/ScaledDotProductAttention
+
+# Example 2: MultiHeadSelfAttention - Multi-head attention
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/MultiHeadSelfAttention
+
+# Example 3: Self-attention in transformer block
+neuron SelfAttentionBlock(d_model, num_heads):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(d_model)
+            MultiHeadSelfAttention(d_model, num_heads)
+            processed
+        (processed, skip) -> Add() -> out
+
+# Example 4: Cross-attention pattern (encoder-decoder)
+neuron CrossAttentionBlock(d_model):
+    # Query from decoder, Key/Value from encoder
+    in query: [batch, tgt_seq, d_model]
+    in memory: [batch, src_seq, d_model]
+    out: [batch, tgt_seq, d_model]
+    graph:
+        # Project query
+        query -> Linear(d_model, d_model) -> q
+
+        # Project key and value from memory
+        memory -> Fork() -> (k_path, v_path)
+        k_path -> Linear(d_model, d_model) -> k
+        v_path -> Linear(d_model, d_model) -> v
+
+        # Apply attention
+        (q, k, v) -> ScaledDotProductAttention(d_model) -> out
+
+# Example 5: Pre-norm attention (GPT-style)
+neuron PreNormAttention(d_model, num_heads):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(d_model)
+            MultiHeadSelfAttention(d_model, num_heads)
+            attn_out
+        (attn_out, skip) -> Add() -> out
+
+# Example 6: Post-norm attention (original Transformer)
+neuron PostNormAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> MultiHeadSelfAttention(dim, num_heads) -> attn_out
+        (attn_out, skip) -> Add() -> LayerNorm(dim) -> out
+
+# Example 7: Complete transformer block with attention + FFN
+neuron TransformerBlock(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Attention sublayer
+        in -> Fork() -> (attn_main, attn_skip)
+        attn_main ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            attn_out
+        (attn_out, attn_skip) -> Add() -> attn_residual
+
+        # FFN sublayer
+        attn_residual -> Fork() -> (ffn_main, ffn_skip)
+        ffn_main ->
+            LayerNorm(dim)
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            ffn_out
+        (ffn_out, ffn_skip) -> Add() -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU

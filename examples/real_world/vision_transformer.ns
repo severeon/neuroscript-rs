@@ -1,0 +1,103 @@
+# Category: Real World Architectures
+# Purpose: Vision Transformer (ViT) architecture
+# Doc reference: Complete vision transformer example
+
+# Patch embedding: convert image to sequence of patches
+neuron PatchEmbedding(patch_size, in_channels, embed_dim):
+    in: [batch, in_channels, height, width]
+    out: [batch, num_patches, embed_dim]
+    impl: core,nn/PatchEmbedding
+
+# Transformer encoder block
+neuron ViTEncoderBlock(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Multi-head self-attention with residual
+        in -> Fork() -> (attn_main, attn_skip)
+        attn_main ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            attn_out
+        (attn_out, attn_skip) -> Add() -> attn_residual
+
+        # Feed-forward with residual
+        attn_residual -> Fork() -> (ffn_main, ffn_skip)
+        ffn_main ->
+            LayerNorm(dim)
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            ffn_out
+        (ffn_out, ffn_skip) -> Add() -> out
+
+# Vision Transformer
+neuron VisionTransformer(img_size, patch_size, num_classes, dim, depth, num_heads):
+    in: [batch, 3, img_size, img_size]
+    out: [batch, num_classes]
+    graph:
+        # Patch embedding
+        in ->
+            PatchEmbedding(patch_size, 3, dim)
+            patches
+
+        # Add positional embeddings
+        patches ->
+            LearnedPositionalEmbedding(max_len=256, dim)
+            positioned
+
+        # Transformer encoder stack (simplified: 2 layers shown)
+        positioned ->
+            ViTEncoderBlock(dim, num_heads)
+            ViTEncoderBlock(dim, num_heads)
+            encoded
+
+        # Classification head: extract [CLS] token (first token) and classify
+        encoded ->
+            LayerNorm(dim)
+            Slice(dim=1, start=0, end=1)
+            Linear(dim, num_classes)
+            out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,attention/MultiHeadSelfAttention
+
+neuron GELU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/GELU
+
+neuron LearnedPositionalEmbedding(max_len, dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: core,nn/LearnedPositionalEmbedding
+
+neuron Slice(dim, start, end):
+    in: [*shape]
+    out: [*shape]
+    impl: core,builtin/Slice
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add

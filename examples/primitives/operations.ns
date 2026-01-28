@@ -1,0 +1,129 @@
+# Category: Primitives - Operations
+# Purpose: Demonstrate tensor operation primitives
+# Doc reference: website/docs/primitives/Operations/
+
+# Example 1: Add - Element-wise addition
+neuron Add:
+    in left: [*shape]
+    in right: [*shape]
+    out: [*shape]
+    impl: core,builtin/Add
+
+# Example 2: Multiply - Element-wise multiplication
+neuron Multiply:
+    in a: [*shape]
+    in b: [*shape]
+    out: [*shape]
+    impl: core,builtin/Multiply
+
+# Example 3: MatMul - Matrix multiplication
+neuron MatMul:
+    in a: [*, m, k]
+    in b: [*, k, n]
+    out: [*, m, n]
+    impl: core,builtin/MatMul
+
+# Example 4: Einsum - Einstein summation
+neuron Einsum(equation):
+    in a: [*shape_a]
+    in b: [*shape_b]
+    out: [*shape_out]
+    impl: core,builtin/Einsum
+
+# Example 5: Bias - Add learned bias
+neuron Bias(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,builtin/Bias
+
+# Example 6: Scale - Multiply by learned scale
+neuron Scale(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,builtin/Scale
+
+# Example 7: Residual addition pattern
+neuron ResidualAdd(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> processed
+        (processed, skip) -> Add() -> out
+
+# Example 8: Gated multiplication (for GLU/SwiGLU)
+neuron GatedUnit(dim, hidden_dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (gate_path, value_path)
+        gate_path -> Linear(dim, hidden_dim) -> SiLU() -> gate
+        value_path -> Linear(dim, hidden_dim) -> value
+        (gate, value) -> Multiply() -> Linear(hidden_dim, dim) -> out
+
+# Example 9: Attention scoring with MatMul
+neuron AttentionScore(dim):
+    # Simplified attention: Q @ K^T
+    in query: [batch, seq, dim]
+    in key: [batch, seq, dim]
+    out: [batch, seq, seq]
+    graph:
+        # In real implementation, would transpose key
+        (query, key) -> MatMul() -> out
+
+# Example 10: Bias after linear projection
+neuron LinearWithBias(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    graph:
+        in ->
+            Linear(in_dim, out_dim)
+            Bias(out_dim)
+            out
+
+# Example 11: Scaled addition (weighted residual)
+neuron WeightedResidual(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main -> Linear(dim, dim) -> processed
+        processed -> Scale(dim) -> scaled
+        (scaled, skip) -> Add() -> out
+
+# Example 12: Multi-step operations composition
+neuron ComplexOperation(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (path1, path2)
+
+        # Path 1: Linear + bias + scale
+        path1 ->
+            Linear(dim, dim)
+            Bias(dim)
+            Scale(dim)
+            p1_out
+
+        # Path 2: Just scale
+        path2 -> Scale(dim) -> p2_out
+
+        # Combine with multiplication then addition
+        (p1_out, p2_out) -> Multiply() -> Add() -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron Fork:
+    in: [*shape]
+    out a: [*shape]
+    out b: [*shape]
+    impl: core,builtin/Fork
+
+neuron SiLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,activations/SiLU
