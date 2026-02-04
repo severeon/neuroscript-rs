@@ -1,25 +1,137 @@
 # NeuroScript
 
-**Neural architecture composition language. Neurons all the way down.**
+**A compositional language for neural architectures. Neurons all the way down.**
 
-NeuroScript is a domain-specific language for defining composable neural network architectures. Everything is a neuron—primitives, layers, attention mechanisms, entire transformers. Neurons compose into neurons through declarative graph specifications with strong shape contracts.
+NeuroScript is a domain-specific language for defining neural network architectures through composition. Everything is a neuron—primitives, layers, attention mechanisms, entire transformers. Neurons compose into neurons with strong shape contracts and zero boilerplate.
 
-## Status
+```neuroscript
+neuron TransformerBlock(d_model, n_heads, d_ff):
+  in: [batch, seq, d_model]
+  out: [batch, seq, d_model]
+  graph:
+    in -> Fork() -> (attn_path, skip1)
+    attn_path ->
+      LayerNorm(d_model)
+      MultiHeadAttention(d_model, n_heads)
+      Add(skip1)
+      Fork() -> (ffn_path, skip2)
+    ffn_path ->
+      LayerNorm(d_model)
+      FFN(d_model, d_ff)
+      Add(skip2)
+      out
+```
 
-**Current:** Parser + IR + Validation + Standard Library + Codegen + Shape Inference
-**Next:** Compile-time Recursion & Advanced Optimizations
-
-## Quick Start
+Compiles to clean PyTorch:
 
 ```bash
-# Build
-cargo build --release
+neuroscript compile transformer.ns > transformer.py
+```
 
-# Parse and validate a file
-./target/release/neuroscript --validate examples/residual.ns
+## Features
+
+- **Compositional by design**: Build transformers from attention heads, attention from projections, projections from Linear
+- **Shape contracts**: Tensor shapes are part of the signature—catch dimension mismatches at compile time
+- **Zero boilerplate**: No classes, no `super().__init__()`, no forward method—just describe the graph
+- **Pattern matching**: Route based on tensor shapes with dimension capture
+- **Multi-backend ready**: Compiles to PyTorch today, ONNX and JAX tomorrow
+- **Standard library**: Batteries-included components from Linear to TransformerStack
+
+## Installation
+
+### Prerequisites
+- Rust toolchain (1.70+)
+- Python 3.8+ with PyTorch
+
+### Build from source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/neuroscript-rs.git
+cd neuroscript-rs
+
+# Build the compiler
+cargo build --release
 
 # Install Python runtime
 pip install -e .
+
+# Verify installation
+./target/release/neuroscript --help
+```
+
+## Quick Start
+
+### 1. Write your first neuron
+
+Create `mlp.ns`:
+
+```neuroscript
+neuron MLP(dim):
+  in: [batch, dim]
+  out: [batch, dim]
+  graph:
+    in ->
+      Linear(dim, dim * 4)
+      GELU()
+      Linear(dim * 4, dim)
+      out
+```
+
+### 2. Compile to PyTorch
+
+```bash
+./target/release/neuroscript compile mlp.ns
+```
+
+Generates a PyTorch module:
+
+```python
+import torch.nn as nn
+from neuroscript_runtime.primitives import Linear, GELU
+
+class MLP(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.linear_1 = Linear(dim, dim * 4)
+        self.gelu_1 = GELU()
+        self.linear_2 = Linear(dim * 4, dim)
+
+    def forward(self, x0):
+        x1 = self.linear_1(x0)
+        x2 = self.gelu_1(x1)
+        x3 = self.linear_2(x2)
+        return x3
+```
+
+### 3. Use in Python
+
+```python
+import torch
+from mlp import MLP
+
+model = MLP(dim=512)
+batch = torch.randn(32, 512)
+output = model(batch)  # [32, 512]
+```
+
+## CLI Usage
+
+```bash
+# Validate a file (parse + type check + shape check)
+neuroscript validate examples/transformer.ns
+
+# Compile to PyTorch
+neuroscript compile examples/transformer.ns
+
+# Compile specific neuron
+neuroscript compile examples/transformer.ns --neuron TransformerBlock
+
+# Write output to file
+neuroscript compile examples/transformer.ns -o transformer.py
+
+# List all neurons in a file
+neuroscript list examples/transformer.ns
 ```
 
 ## Language Overview
@@ -80,29 +192,7 @@ out: [batch, dim * 4]     # expansion
 out: [batch, dim / 2]     # reduction
 ```
 
-**Full tensor shape operations with BigUint arithmetic to avoid overflow:**
-
-```rust
-use neuroscript::shape::*;
-
-// Pattern matching with wildcards
-let pattern = Pattern::from_tokens(vec![
-    PatToken::Any,      // matches any dimension
-    PatToken::Lit(1),   // must be exactly 1
-    PatToken::Any,
-]);
-assert!(pattern.matches(&Shape::new(vec![32, 1, 256])));
-
-// Broadcasting checks
-let a = Shape::new(vec![32, 64, 56, 56]);
-let b = Shape::new(vec![1, 64, 1, 1]);
-assert!(broadcastable(&a, &b));
-
-// Refine/coarsen operations
-let shape = Shape::new(vec![64]);
-let refined = refine_axis(&shape, 0, &[8, 8]).unwrap();
-assert_eq!(refined, Shape::new(vec![8, 8]));
-```
+The shape system uses BigUint arithmetic internally to prevent overflow when computing tensor sizes.
 
 ### Pipeline Syntax
 
@@ -122,7 +212,7 @@ graph:
     Linear(dim * 4, dim)
     out
 
-### State & Scoping
+### State and Scoping
 
 NeuroScript uses a unified `context` block for managing weight sharing and instantiation logic through explicit annotations:
 
@@ -136,10 +226,10 @@ neuron Transformer(d_model):
   context:
     # Instance scope (default): Unique weights per instance
     embedding = Embedding(@global vocab_dim, d_model)
-    
+
     # Static scope: Shared weights across ALL instances of this neuron type
     @static shared_norm = LayerNorm(d_model)
-    
+
     # Lazy scope: Instantiated only when used (useful for conditional branches)
     @lazy extra_proj = Linear(d_model, d_model)
 
@@ -148,11 +238,11 @@ neuron Transformer(d_model):
 ```
 
 | Scope | Annotation | Description |
-| :--- | :--- | :--- |
-| **Global** | `@global` | Module-level constants or neurons shared across everything. |
-| **Static** | `@static` | Shared weights across all instances of a specific neuron type. |
-| **Instance** | (default) | Unique weights per instance (standard behavior). |
-| **Lazy** | `@lazy` | Deferred instantiation (e.g., for conditional match arms). |
+| --- | --- | --- |
+| Global | `@global` | Module-level constants or neurons shared across everything |
+| Static | `@static` | Shared weights across all instances of a specific neuron type |
+| Instance | (default) | Unique weights per instance (standard behavior) |
+| Lazy | `@lazy` | Deferred instantiation (e.g., for conditional match arms) |
 
 ### Tuple Unpacking
 
@@ -189,74 +279,45 @@ neuron AdaptiveProjection:
 
 ## Standard Library
 
-### Level 0: Primitives (Python/PyTorch)
+### Primitives (Python/PyTorch)
 
-**Core:**
+Core building blocks backed by PyTorch implementations:
 
-- `Linear` - Dense/fully-connected layer
-- `Embedding` - Token → vector
-- `PositionalEncoding` - Sinusoidal positions
+**Core**: Linear, Embedding, PositionalEncoding
 
-**Activations:**
+**Activations**: GELU, ReLU, Tanh, Sigmoid, SiLU, Softmax
 
-- `GELU`, `ReLU`, `Tanh`, `Sigmoid`, `SiLU`, `Softmax`
+**Normalization**: LayerNorm, RMSNorm, GroupNorm
 
-**Normalization:**
+**Regularization**: Dropout, DropPath, DropConnect
 
-- `LayerNorm`, `RMSNorm`, `GroupNorm`
+### Composites (NeuroScript)
 
-**Regularization:**
+Pre-built patterns written in NeuroScript:
 
-- `Dropout`, `DropPath`, `DropConnect`
-
-### Level 1+: Composites (NeuroScript)
-
-**Composition Patterns:**
-
-- `FFN` - Feed-forward networks (3 variants)
-- `Residual` - Skip connections (5 variants)
-- `MultiHeadAttention` - Attention mechanisms (5 variants)
-- `TransformerBlock` - Complete transformer layers (5 variants)
-- `TransformerStack` - Stacked transformers (6 variants)
-- `MetaNeurons` - Routing and composition (16 neurons)
+- `FFN`: Feed-forward networks (3 variants)
+- `Residual`: Skip connections (5 variants)
+- `MultiHeadAttention`: Attention mechanisms (5 variants)
+- `TransformerBlock`: Complete transformer layers (5 variants)
+- `TransformerStack`: Stacked transformers (6 variants)
+- `MetaNeurons`: Routing and composition (16 neurons)
 
 See `stdlib/` directory for full definitions.
 
-### Intermediate Representation (IR)
+## Validation
 
-Algebraic types map neural architectures to Rust enums:
+NeuroScript validates your architectures before generating code:
 
-```rust
-pub enum NeuronBody {
-    Primitive(ImplRef),      // Wraps PyTorch/external
-    Graph(Vec<Connection>),  // Composite definition
-}
-
-pub struct Connection {
-    source: Endpoint,
-    destination: Endpoint,
-}
-
-pub enum Endpoint {
-    Ref(PortRef),           // Simple node reference
-    Tuple(Vec<PortRef>),    // Multi-port unpacking
-    Call { ... },           // Neuron instantiation
-    Match(MatchExpr),       // Shape-based routing
-}
-```
-
-### Validation
-
-The validator ensures:
-
-1. **Existence:** All referenced neurons are defined
-2. **Arity:** Tuple unpacking matches port counts
-3. **Shapes:** Connection endpoints are compatible
-4. **Cycles:** No circular dependencies (except self-edges in single connections)
+1. All referenced neurons exist
+2. Tuple unpacking matches port counts
+3. Connection endpoints have compatible shapes
+4. No circular dependencies (except self-edges)
 
 ```bash
-./target/release/neuroscript --validate examples/transformer_from_stdlib.ns
+neuroscript validate examples/transformer_from_stdlib.ns
 ```
+
+Shape errors are caught at compile time with clear diagnostics pointing to the source location.
 
 ## Example: Building GPT-2 Small
 
@@ -299,37 +360,20 @@ See `examples/transformer_from_stdlib.ns` for complete working examples.
 
 ## Testing
 
-### Unit Tests (32 tests)
+Run the test suite:
 
 ```bash
 cargo test                    # All tests
-cargo test lexer              # Lexer tests
-cargo test parser             # Parser tests
-cargo test validator          # Validation tests
-cargo test shape_algebra      # Shape algebra tests
-cargo test stdlib_registry    # Registry tests
+cargo test lexer              # Lexer tests only
+cargo test parser             # Parser tests only
+cargo test validator          # Validation tests only
+./test_examples.sh            # Integration tests (all example files)
 ```
-
-### Integration Tests (26 files)
-
-```bash
-./test_examples.sh            # Parse all examples + stdlib
-```
-
-All 26 files (20 examples + 6 stdlib) parse successfully with zero errors.
-
-## Why Rust?
-
-1. **Algebraic types** - IR maps perfectly to enums/structs
-2. **Great errors** - `miette` provides beautiful diagnostics with source spans
-3. **Fast** - Parses instantly, compiles to native ARM
-4. **PyO3 ready** - Can expose to Python when needed
-5. **Quality** - LLMs write excellent Rust with strong type guidance
 
 ## Syntax Summary
 
 | Construct | Example |
-|-----------|---------|
+| --- | --- |
 | Neuron definition | `neuron Name(p1, p2=default):` |
 | Input port | `in [name]: [shape]` |
 | Output port | `out [name]: [shape]` |
@@ -352,64 +396,44 @@ All 26 files (20 examples + 6 stdlib) parse successfully with zero errors.
 
 ## Roadmap
 
-### Phase 1: Core Language ✅
+### In Progress
 
-- [x] Lexer with indent handling
-- [x] Parser with shape expressions
-- [x] IR with algebraic types
-- [x] Validator (existence, arity, shapes, cycles)
-- [x] Shape algebra with pattern matching
-- [x] Python runtime package
-- [x] Standard library registry
-- [x] Comprehensive test suite
+- Loop constructs for repeated layers (`repeat 12: TransformerBlock(...)`)
+- Higher-order neurons (neurons that take neurons as parameters)
+- Compile-time recursion unrolling
+- Optimization passes (fusion, dead code elimination)
 
-### Phase 2: Codegen & Shape Inference ✅
+### Future
 
-- [x] IR → PyTorch nn.Module
-- [x] Import generation from stdlib_registry
-- [x] Shape inference integration
-- [x] Forward pass generation
-- [x] Parameter initialization
-- [x] Runtime shape assertions
+- ONNX and JAX backends
+- LSP server for editor support
+- PyO3 bindings for tighter Python integration
+- Graph visualization
+- Package manager for sharing neurons
 
-### Phase 3: Advanced Features
+## Design Principles
 
-- [x] Type inference for dimension variables
-- [x] Context blocks and explicit scoping
-- [x] Pattern matching system
-- [ ] Loop constructs for repeated layers
-- [ ] Higher-order neurons (neuron parameters)
-- [ ] Compile-time recursion unrolling
-- [ ] Optimization passes
-- [ ] Multiple backends (ONNX, JAX)
-
-### Phase 4: Tooling
-
-- [ ] LSP server for editor support
-- [ ] PyO3 bindings for Python integration
-- [ ] Visualization of neuron graphs
-- [ ] REPL for interactive development
-- [ ] Package manager for sharing neurons
+1. Composition over configuration: Build complex architectures by composing simple ones
+2. Explicit shape contracts: No silent broadcasting surprises
+3. External primitives: Leverage existing frameworks (PyTorch, JAX)
+4. Declarative graphs: Describe what, not how
+5. Types guide correctness: Catch errors at compile time
 
 ## Contributing
 
-This is a research project exploring compositional approaches to neural architecture design. The core insight: treating neural networks as a compositional algebra where neurons are first-class values enables powerful abstraction without sacrificing clarity.
+NeuroScript explores compositional approaches to neural architecture design. The core insight is treating neural networks as a compositional algebra where neurons are first-class values.
 
-### Key Design Principles
+Contributions welcome. See CLAUDE.md for development guidelines.
 
-1. **Composition over configuration** - Build complex architectures by composing simple ones
-2. **Shape contracts are explicit** - No silent broadcasting surprises
-3. **Primitives are external** - Leverage existing frameworks (PyTorch, JAX)
-4. **Graphs are declarative** - Describe *what*, not *how*
-5. **Types guide correctness** - Catch errors at parse/validate time
+## References
+
+NeuroScript draws inspiration from:
+
+- Tensor type systems and array programming languages (shape algebra)
+- ONNX, TorchScript, and JAX (graph IR)
+- Python (significant whitespace) and Rust (expression syntax)
+- Category theory (compositional approach to systems)
 
 ## License
 
 MIT
-
-## References
-
-- **Shape algebra:** Inspired by tensor type systems and array programming languages
-- **Graph IR:** Influenced by ONNX, TorchScript, and JAX primitives
-- **Syntax:** Python-like with significant whitespace, Rust-like expressions
-- **Composition:** Category theory's compositional approach to systems
