@@ -1,0 +1,15 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Fork3:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+    c: [*shape]
+  impl:
+    Source: core,structural/Fork3

@@ -1,0 +1,21 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GlobalAvgPool:
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels]
+  impl:
+    Source: core,pooling/GlobalAvgPool
+
+neuron MaxPool(kernel_size, stride):
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels, h_out, w_out]
+  impl:
+    Source: core,pooling/MaxPool

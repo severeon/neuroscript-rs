@@ -1,0 +1,18 @@
+# Multi-Layer Perceptron with Dropout
+# Demonstrates using Dropout in a composite neuron
+
+neuron Dropout(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/Dropout
+
+neuron MLPWithDropout(in_dim, hidden_dim, out_dim, dropout_rate):
+    in: [batch, in_dim]
+    out: [batch, out_dim]
+    graph:
+        in ->
+            Linear(in_dim, hidden_dim)
+            ReLU()
+            Dropout(dropout_rate)
+            Linear(hidden_dim, out_dim)
+            out

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm

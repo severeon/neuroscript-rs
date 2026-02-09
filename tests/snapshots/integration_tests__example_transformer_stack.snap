@@ -1,0 +1,89 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention
+
+neuron TransformerBlock(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#3()
+    Fork#3() -> (attn_main, attn_skip)
+    attn_main -> LayerNorm#4(dim)
+    LayerNorm#4(dim) -> MultiHeadSelfAttention#5(dim, num_heads)
+    MultiHeadSelfAttention#5(dim, num_heads) -> attn_out
+    (attn_out, attn_skip) -> Add#6()
+    Add#6() -> attn_residual
+    attn_residual -> Fork#7()
+    Fork#7() -> (ffn_main, ffn_skip)
+    ffn_main -> LayerNorm#8(dim)
+    LayerNorm#8(dim) -> Linear#9(dim, (dim * 4))
+    Linear#9(dim, (dim * 4)) -> GELU#10()
+    GELU#10() -> Linear#11((dim * 4), dim)
+    Linear#11((dim * 4), dim) -> ffn_out
+    (ffn_out, ffn_skip) -> Add#12()
+    Add#12() -> out
+
+neuron TransformerStack(dim, num_heads, num_layers):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> TransformerBlock#0(dim, num_heads)
+    TransformerBlock#0(dim, num_heads) -> TransformerBlock#1(dim, num_heads)
+    TransformerBlock#1(dim, num_heads) -> TransformerBlock#2(dim, num_heads)
+    TransformerBlock#2(dim, num_heads) -> out

@@ -1,5 +1,0 @@
----
-source: tests/integration_tests.rs
-expression: error_text
----
-Parse error: Expected { expected: "EOI, NEWLINE, COMMENT, keyword_neuron, lbracket, endpoint, or neuron_section", found: "unexpected input", span: SourceSpan { offset: SourceOffset(1764), length: 1 } }

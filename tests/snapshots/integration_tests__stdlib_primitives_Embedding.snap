@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Embedding(num_embeddings, embedding_dim):
+  inputs:
+    default: [*, seq_len]
+  outputs:
+    default: [*, seq_len, embedding_dim]
+  impl:
+    Source: core,embeddings/Embedding

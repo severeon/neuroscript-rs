@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Transpose(dims):
+  inputs:
+    default: [*shape_in]
+  outputs:
+    default: [*shape_out]
+  impl:
+    Source: core,structural/Transpose

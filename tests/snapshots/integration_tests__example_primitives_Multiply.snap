@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Multiply:
+  inputs:
+    a: [*shape]
+    b: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,structural/Multiply

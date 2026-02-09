@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Flatten(start_dim = 1, end_dim = (0 - 1)):
+  inputs:
+    default: [*shape_in]
+  outputs:
+    default: [*shape_out]
+  impl:
+    Source: core,structural/Flatten

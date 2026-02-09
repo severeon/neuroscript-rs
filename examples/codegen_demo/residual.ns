@@ -1,0 +1,43 @@
+# Pipeline and multi-port test
+
+use core,nn/*
+
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+neuron GELU:
+  in: [*shape]
+  out: [*shape]
+  impl: core,activations/GELU
+
+neuron Add:
+  in left: [*shape]
+  in right: [*shape]
+  out: [*shape]
+  impl: core,builtin/Add
+
+neuron Fork:
+  in: [*shape]
+  out a: [*shape]
+  out b: [*shape]
+  impl: core,builtin/Fork
+
+neuron MLP(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in ->
+      Linear(dim, dim * 4)
+      GELU()
+      Linear(dim * 4, dim)
+      out
+
+neuron Residual(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Fork() -> (main, skip)
+    main -> MLP(dim) -> processed
+    (processed, skip) -> Add() -> out

@@ -1,0 +1,98 @@
+# Dilated Convolution (Atrous Convolution)
+#
+# A 2D convolution with dilation (atrous convolution) that increases the receptive
+# field without increasing the number of parameters. This is a simple wrapper around
+# Conv2d with the dilation parameter emphasized.
+#
+# Dilated convolutions insert "holes" (zeros) between kernel elements, effectively
+# increasing the kernel size without additional computation. A dilation rate of 1
+# is standard convolution, rate 2 has 1 hole between elements, rate 3 has 2 holes, etc.
+#
+# Parameters:
+# - in_channels: Number of input channels
+# - out_channels: Number of output channels
+# - kernel_size: Size of the convolving kernel
+# - dilation: Spacing between kernel elements (rate of atrous convolution)
+# - stride: Stride of the convolution (default: 1)
+# - padding: Zero-padding added to input (default: 0)
+#
+# Shape Contract:
+# - Input: [batch, in_channels, height, width]
+# - Output: [batch, out_channels, out_height, out_width]
+#
+# Common Use Cases:
+# - Semantic segmentation (DeepLab, PSPNet)
+# - Audio processing with WaveNet
+# - Capturing multi-scale context without downsampling
+#
+# Example Usage:
+# ```
+# # Dilation rate 2 with 3x3 kernel = effective 5x5 receptive field
+# conv = DilatedConv(64, 64, kernel_size=3, dilation=2, padding=2)
+#
+# # Dilation rate 4 with 3x3 kernel = effective 9x9 receptive field
+# conv = DilatedConv(64, 64, kernel_size=3, dilation=4, padding=4)
+# ```
+#
+# Notes:
+# - Common pattern: Use padding = dilation * (kernel_size - 1) / 2 to preserve spatial size
+# - For kernel_size=3: padding=dilation preserves size
+# - Dilation > 1 creates gridding artifacts if not carefully designed
+neuron DilatedConv(in_channels, out_channels, kernel_size, dilation, stride=1, padding=0):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, *, *]
+    impl: core,convolutions/Conv2d
+
+
+# Atrous Spatial Pyramid Pooling (ASPP) Block
+#
+# Multi-scale dilated convolution block that captures context at multiple scales
+# by using parallel dilated convolutions with different dilation rates.
+# Originally introduced in DeepLab v2 for semantic segmentation.
+#
+# This implementation uses 3 parallel branches with dilation rates [6, 12, 18]
+# which are then concatenated. This is a simplified version without the
+# 1x1 conv and global pooling branches.
+#
+# Parameters:
+# - in_channels: Number of input channels
+# - out_channels: Number of output channels per branch
+#
+# Shape Contract:
+# - Input: [batch, in_channels, height, width]
+# - Output: [batch, out_channels * 3, height, width]
+#
+# Architecture:
+# ```
+#        input [batch, C_in, H, W]
+#           |
+#     +-----+-----+
+#     |     |     |
+#   rate6 rate12 rate18
+#     |     |     |
+#     +-----+-----+
+#           |
+#        concat
+#           |
+#    [batch, C_out * 3, H, W]
+# ```
+#
+# Notes:
+# - Each branch uses 3x3 convolution with its respective dilation rate
+# - Padding is set to match dilation to preserve spatial dimensions
+# - Output channels are 3x out_channels (one set per branch)
+# - Typically followed by a 1x1 conv to reduce channels (not included here)
+neuron ASPPBlock(in_channels, out_channels):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels * 3, height, width]
+    graph:
+        in ->
+            Fork3()
+            (branch1, branch2, branch3)
+
+        branch1 -> Conv2d(in_channels, out_channels, 3, padding=6, dilation=6) -> rate6
+        branch2 -> Conv2d(in_channels, out_channels, 3, padding=12, dilation=12) -> rate12
+        branch3 -> Conv2d(in_channels, out_channels, 3, padding=18, dilation=18) -> rate18
+
+        (rate6, rate12) -> Concat(1) -> temp
+        (temp, rate18) -> Concat(1) -> out

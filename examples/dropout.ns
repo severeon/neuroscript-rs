@@ -1,0 +1,7 @@
+# Simple Dropout Neuron
+# Wraps PyTorch's dropout layer for regularization
+
+neuron Dropout(p):
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/Dropout

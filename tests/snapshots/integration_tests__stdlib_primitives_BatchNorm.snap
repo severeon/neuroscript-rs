@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BatchNorm(num_features):
+  inputs:
+    default: [*shape, num_features]
+  outputs:
+    default: [*shape, num_features]
+  impl:
+    Source: core,normalization/BatchNorm

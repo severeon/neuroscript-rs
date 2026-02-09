@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    main: [*shape]
+    skip: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,structural/Add

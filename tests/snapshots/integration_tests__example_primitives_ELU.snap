@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ELU(alpha = 1):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ELU

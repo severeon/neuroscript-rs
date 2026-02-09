@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MatMul:
+  inputs:
+    a: [*, n, m]
+    b: [*, m, p]
+  outputs:
+    default: [*, n, p]
+  impl:
+    Source: core,operations/MatMul

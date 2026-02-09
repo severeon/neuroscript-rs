@@ -1,0 +1,87 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron FFN(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> Linear#8(dim, (dim * 4))
+    Linear#8(dim, (dim * 4)) -> GELU#9()
+    GELU#9() -> Linear#10((dim * 4), dim)
+    Linear#10((dim * 4), dim) -> out
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention
+
+neuron TransformerBlock(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#0()
+    Fork#0() -> (attn_main, attn_skip)
+    attn_main -> LayerNorm#1(dim)
+    LayerNorm#1(dim) -> MultiHeadSelfAttention#2(dim, num_heads)
+    MultiHeadSelfAttention#2(dim, num_heads) -> attn_out
+    (attn_out, attn_skip) -> Add#3()
+    Add#3() -> attn_residual
+    attn_residual -> Fork#4()
+    Fork#4() -> (ffn_main, ffn_skip)
+    ffn_main -> LayerNorm#5(dim)
+    LayerNorm#5(dim) -> FFN#6(dim)
+    FFN#6(dim) -> ffn_out
+    (ffn_out, ffn_skip) -> Add#7()
+    Add#7() -> out

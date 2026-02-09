@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Softmax(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,activations/Softmax

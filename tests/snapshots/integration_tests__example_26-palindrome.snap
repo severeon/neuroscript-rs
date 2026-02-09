@@ -13,15 +13,15 @@ neuron IsPalindromeAttention(vocab_size, max_len):
   outputs:
     default: [batch, 1]
   graph:
-    in -> Embedding#2(vocab_size, 32)
-    Embedding#2(vocab_size, 32) -> embedded
-    embedded -> PositionalEncoding#3(32, max_len=max_len)
-    PositionalEncoding#3(32, max_len=max_len) -> positioned
-    positioned -> MultiHeadSelfAttention#4(32, 4)
-    MultiHeadSelfAttention#4(32, 4) -> attended
-    attended -> Linear#5(32, 1)
-    Linear#5(32, 1) -> Sigmoid#6()
-    Sigmoid#6() -> out
+    in -> Embedding#3(vocab_size, 32)
+    Embedding#3(vocab_size, 32) -> embedded
+    embedded -> PositionalEncoding#4(32, max_len=max_len)
+    PositionalEncoding#4(32, max_len=max_len) -> positioned
+    positioned -> MultiHeadSelfAttention#5(32, 4)
+    MultiHeadSelfAttention#5(32, 4) -> attended
+    attended -> Linear#6(32, 1)
+    Linear#6(32, 1) -> Sigmoid#7()
+    Sigmoid#7() -> out
 
 neuron IsPalindromeNaive(vocab_size):
   inputs:
@@ -30,3 +30,6 @@ neuron IsPalindromeNaive(vocab_size):
     default: [batch, 1]
   graph:
     in -> Embedding#0(vocab_size, 16)
+    Embedding#0(vocab_size, 16) -> Linear#1(16, 1)
+    Linear#1(16, 1) -> Sigmoid#2()
+    Sigmoid#2() -> out

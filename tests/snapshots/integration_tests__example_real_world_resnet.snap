@@ -1,0 +1,121 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron BatchNorm(channels):
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels, h, w]
+  impl:
+    Source: core,normalization/BatchNorm
+
+neuron Conv2d(in_channels, out_channels, kernel_size, stride, padding):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h_out, w_out]
+  impl:
+    Source: core,nn/Conv2d
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GlobalAvgPool:
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels]
+  impl:
+    Source: core,pooling/GlobalAvgPool
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MaxPool(kernel_size, stride):
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels, h_out, w_out]
+  impl:
+    Source: core,pooling/MaxPool
+
+neuron ReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ReLU
+
+neuron ResNet18(num_classes):
+  inputs:
+    default: [*, 3, 224, 224]
+  outputs:
+    default: [*, num_classes]
+  graph:
+    in -> ResNetStem#12(3, 64)
+    ResNetStem#12(3, 64) -> stem_out
+    stem_out -> ResidualBlock#13(64)
+    ResidualBlock#13(64) -> stage1
+    stage1 -> ResidualBlock#14(64)
+    ResidualBlock#14(64) -> stage2
+    stage2 -> ResidualBlock#15(64)
+    ResidualBlock#15(64) -> stage3
+    stage3 -> ResidualBlock#16(64)
+    ResidualBlock#16(64) -> stage4
+    stage4 -> GlobalAvgPool#17()
+    GlobalAvgPool#17() -> Linear#18(64, num_classes)
+    Linear#18(64, num_classes) -> out
+
+neuron ResNetStem(in_channels, out_channels):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h_out, w_out]
+  graph:
+    in -> Conv2d#8(in_channels, out_channels, kernel_size=7, stride=2, padding=3)
+    Conv2d#8(in_channels, out_channels, kernel_size=7, stride=2, padding=3) -> BatchNorm#9(out_channels)
+    BatchNorm#9(out_channels) -> ReLU#10()
+    ReLU#10() -> MaxPool#11(kernel_size=3, stride=2)
+    MaxPool#11(kernel_size=3, stride=2) -> out
+
+neuron ResidualBlock(channels):
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels, h, w]
+  graph:
+    in -> Fork#0()
+    Fork#0() -> (main, skip)
+    main -> Conv2d#1(channels, channels, kernel_size=3, stride=1, padding=1)
+    Conv2d#1(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#2(channels)
+    BatchNorm#2(channels) -> ReLU#3()
+    ReLU#3() -> Conv2d#4(channels, channels, kernel_size=3, stride=1, padding=1)
+    Conv2d#4(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#5(channels)
+    BatchNorm#5(channels) -> processed
+    (processed, skip) -> Add#6()
+    Add#6() -> ReLU#7()
+    ReLU#7() -> out

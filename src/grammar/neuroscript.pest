@@ -367,10 +367,12 @@ match_arm = {
     shape ~ (keyword_where ~ value)? ~ colon ~ match_pipeline
 }
 
-// Pipeline in match arm
+// Pipeline in match arm (supports both inline and indented)
 match_pipeline = {
-    // Inline pipeline
-    (endpoint ~ (arrow ~ endpoint)*)
+    // Inline: endpoints separated by arrows on one line
+    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
+    // Indented: newline, then indented pipeline items
+  | (NEWLINE ~ indented_pipeline)
 }
 
 // ============================================================================

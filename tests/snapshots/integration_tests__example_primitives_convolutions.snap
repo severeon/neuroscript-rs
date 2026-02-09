@@ -1,0 +1,40 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BatchNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,normalization/BatchNorm
+
+neuron Conv2d(in_channels, out_channels, kernel_size, padding):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h, w]
+  impl:
+    Source: core,nn/Conv2d
+
+neuron ConvBlock(in_channels, out_channels):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h, w]
+  graph:
+    in -> Conv2d#0(in_channels, out_channels, kernel_size=3, padding=1)
+    Conv2d#0(in_channels, out_channels, kernel_size=3, padding=1) -> BatchNorm#1(out_channels)
+    BatchNorm#1(out_channels) -> ReLU#2()
+    ReLU#2() -> out
+
+neuron ReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ReLU

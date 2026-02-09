@@ -1,0 +1,32 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ASPPBlock(in_channels, out_channels):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, (out_channels * 3), height, width]
+  graph:
+    in -> Fork3#0()
+    Fork3#0() -> (branch1, branch2, branch3)
+    branch1 -> Conv2d#1(in_channels, out_channels, 3, padding=6, dilation=6)
+    Conv2d#1(in_channels, out_channels, 3, padding=6, dilation=6) -> rate6
+    branch2 -> Conv2d#2(in_channels, out_channels, 3, padding=12, dilation=12)
+    Conv2d#2(in_channels, out_channels, 3, padding=12, dilation=12) -> rate12
+    branch3 -> Conv2d#3(in_channels, out_channels, 3, padding=18, dilation=18)
+    Conv2d#3(in_channels, out_channels, 3, padding=18, dilation=18) -> rate18
+    (rate6, rate12) -> Concat#4(1)
+    Concat#4(1) -> temp
+    (temp, rate18) -> Concat#5(1)
+    Concat#5(1) -> out
+
+neuron DilatedConv(in_channels, out_channels, kernel_size, dilation, stride = 1, padding = 0):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, out_channels, *, *]
+  impl:
+    Source: core,convolutions/Conv2d

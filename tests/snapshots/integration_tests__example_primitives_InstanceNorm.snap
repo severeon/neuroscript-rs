@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron InstanceNorm(num_features, eps = 0.00001, affine = true):
+  inputs:
+    default: [batch, num_features, *spatial]
+  outputs:
+    default: [batch, num_features, *spatial]
+  impl:
+    Source: core,normalization/InstanceNorm

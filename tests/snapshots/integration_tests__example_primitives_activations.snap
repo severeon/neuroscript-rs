@@ -1,0 +1,153 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ELU
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron GatedFFN(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Fork#9()
+    Fork#9() -> (gate_path, value_path)
+    gate_path -> Linear#10(dim, (dim * 4))
+    Linear#10(dim, (dim * 4)) -> SiLU#11()
+    SiLU#11() -> gate
+    value_path -> Linear#12(dim, (dim * 4))
+    Linear#12(dim, (dim * 4)) -> value
+    (gate, value) -> Multiply#13()
+    Multiply#13() -> Linear#14((dim * 4), dim)
+    Linear#14((dim * 4), dim) -> out
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MLPWithGELU(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#3(dim, (dim * 4))
+    Linear#3(dim, (dim * 4)) -> GELU#4()
+    GELU#4() -> Linear#5((dim * 4), dim)
+    Linear#5((dim * 4), dim) -> out
+
+neuron MLPWithReLU(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> ReLU#1()
+    ReLU#1() -> Linear#2((dim * 4), dim)
+    Linear#2((dim * 4), dim) -> out
+
+neuron MLPWithSiLU(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#6(dim, (dim * 4))
+    Linear#6(dim, (dim * 4)) -> SiLU#7()
+    SiLU#7() -> Linear#8((dim * 4), dim)
+    Linear#8((dim * 4), dim) -> out
+
+neuron Mish:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/Mish
+
+neuron Multiply:
+  inputs:
+    a: [*shape]
+    b: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Multiply
+
+neuron PReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/PReLU
+
+neuron ReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ReLU
+
+neuron SiLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/SiLU
+
+neuron Sigmoid:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/Sigmoid
+
+neuron Softmax:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/Softmax
+
+neuron Tanh:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/Tanh

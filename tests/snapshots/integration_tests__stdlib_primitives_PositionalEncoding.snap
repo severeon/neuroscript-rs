@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron PositionalEncoding(dim, max_len):
+  inputs:
+    default: [*, seq_len, dim]
+  outputs:
+    default: [*, seq_len, dim]
+  impl:
+    Source: core,embeddings/PositionalEncoding

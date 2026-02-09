@@ -1,0 +1,114 @@
+use core,convolutions/Conv2d
+use core,convolutions/MaxPool
+use core,pooling/GlobalAvgPool
+use core,normalization/BatchNorm
+use core,activations/ReLU
+use core,nn/Linear
+use core,structural/Flatten
+use core,structural/Identity
+
+neuron ConvBlock(in_channels, out_channels, has_pool=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, height, width]
+
+    context:
+        conv = Conv2d(in_channels, out_channels, 3, padding=1)
+        bn = BatchNorm(out_channels)
+        act = ReLU()
+        @lazy pool = MaxPool(2, stride=2)
+
+    graph:
+        in ->
+            conv
+            bn
+            act
+            
+        act -> match:
+            [*s] where has_pool == true: pool
+            [*s]: Identity()
+        -> out
+
+
+
+
+neuron ConvBlock3(in_channels, out_channels, has_pool=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, height, width]
+
+    context:
+        conv = Conv2d(in_channels, out_channels, 3, padding=1)
+        bn = BatchNorm(out_channels)
+        act = ReLU()
+        @lazy pool = MaxPool(2, stride=2)
+
+    graph:
+        in ->
+            conv
+            bn
+            act 
+        act -> if has_pool: pool -> out else: Identity() -> out
+
+neuron ConvBlock3b(in_channels, out_channels, has_pool=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, height, width]
+
+    context:
+        conv = Conv2d(in_channels, out_channels, 3, padding=1)
+        bn = BatchNorm(out_channels)
+        act = ReLU()
+        @lazy pool = MaxPool(2, stride=2)
+
+    graph:
+        in ->
+            conv
+            bn
+            act
+
+        act -> 
+            if has_pool: pool
+            else: Identity()
+            out
+
+neuron ConvBlock4(in_channels, out_channels, has_pool=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, height, width]
+
+    context:
+        conv = Conv2d(in_channels, out_channels, 3, padding=1)
+        bn = BatchNorm(out_channels)
+        act = ReLU()
+        # output binding removed as conditional bindings are not yet supported
+
+    graph:
+        in ->
+            conv
+            bn
+            act
+            if has_pool: MaxPool(2, stride=2) else: Identity()
+            out
+
+# A simple Convolutional Neural Network for image classification
+neuron CNN(in_channels, num_classes):
+    # Standard image input: [batch, channels, height, width]
+    in: [batch, in_channels, height, width]
+    out: [batch, num_classes]
+
+    context:
+        conv1 = ConvBlock(in_channels=in_channels, out_channels=32)
+        conv2 = ConvBlock(in_channels=32, out_channels=64)
+        conv3 = ConvBlock(in_channels=64, out_channels=128, has_pool=false)
+        
+        # Pooling & Head
+        gap = GlobalAvgPool()
+        flat = Flatten(1) # Flatten channels -> end
+        head = Linear(128, num_classes)
+
+    graph:
+        in ->
+            conv1
+            conv2
+            conv3
+            gap
+            flat
+            head
+            out

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AdaptiveAvgPool(output_size):
+  inputs:
+    default: [batch, channels, *, *]
+  outputs:
+    default: [batch, channels, output_size, output_size]
+  impl:
+    Source: core,pooling/AdaptiveAvgPool

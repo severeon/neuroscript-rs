@@ -23,10 +23,19 @@ pest = "2.7"           # PEG parser generator
 pest_derive = "2.7"    # Derive macro for pest
 serde = { version = "1.0", features = ["derive"] }  # Serialization
 serde_json = "1.0"     # JSON serialization for WASM API
+toml = "0.8"           # TOML parsing for Axon.toml
+semver = "1.0"         # Semantic versioning
+git2 = "0.18"          # Git operations for dependency fetching
+sha2 = "0.10"          # SHA-256 checksums
+dirs = "5.0"           # Cross-platform directory paths
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }  # Ed25519 signing
+rand = "0.8"           # Cryptographic random number generation
+hex = "0.4"            # Hex encoding for keys and signatures
 
 [dev-dependencies]
 pretty_assertions = "1.4"
 insta = { version = "1.34", features = ["yaml"] }  # Snapshot testing
+tempfile = "3.8"       # Temporary directories for testing
 
 [[bin]]
 name = "neuroscript-doc"

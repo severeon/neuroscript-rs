@@ -482,6 +482,9 @@ pub enum ValidationError {
         reason: String,
     },
     Custom(String),
+    UseError {
+        message: String,
+    },
 }
 
 impl std::fmt::Display for ValidationError {
@@ -570,6 +573,9 @@ impl std::fmt::Display for ValidationError {
             }
             ValidationError::Custom(msg) => {
                 write!(f, "{}", msg)
+            }
+            ValidationError::UseError { message } => {
+                write!(f, "Import error: {}", message)
             }
         }
     }

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MaxPool(kernel_size, stride = 1, padding = 0, dilation = 1):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, *, *]
+  impl:
+    Source: core,pooling/MaxPool

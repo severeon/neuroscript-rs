@@ -73,45 +73,45 @@ fn test_build(input: &str, name: &str) {
 }
 
 #[test]
-fn test_build_residual() {
-    let input = include_str!("../../../examples/residual.ns");
-    test_build(input, "residual.ns");
+fn test_build_stdlib_residual() {
+    let input = include_str!("../../../examples/stdlib/residual.ns");
+    test_build(input, "stdlib/residual.ns");
 }
 
 #[test]
-fn test_build_01_comments() {
-    let input = include_str!("../../../examples/01-comments.ns");
-    test_build(input, "01-comments.ns");
+fn test_build_shape_inference() {
+    let input = include_str!("../../../examples/tutorials/01_shape_inference.ns");
+    test_build(input, "tutorials/01_shape_inference.ns");
 }
 
 #[test]
-fn test_build_03_parameters() {
-    let input = include_str!("../../../examples/03-parameters.ns");
-    test_build(input, "03-parameters.ns");
+fn test_build_primitives_basics() {
+    let input = include_str!("../../../examples/primitives/basics.ns");
+    test_build(input, "primitives/basics.ns");
 }
 
 #[test]
-fn test_build_07_pipelines() {
-    let input = include_str!("../../../examples/07-pipelines.ns");
-    test_build(input, "07-pipelines.ns");
+fn test_build_stdlib_feedforward() {
+    let input = include_str!("../../../examples/stdlib/feedforward.ns");
+    test_build(input, "stdlib/feedforward.ns");
 }
 
 #[test]
-fn test_build_10_match() {
-    let input = include_str!("../../../examples/10-match.ns");
-    test_build(input, "10-match.ns");
+fn test_build_tutorials_fork_join() {
+    let input = include_str!("../../../examples/tutorials/02_fork_join.ns");
+    test_build(input, "tutorials/02_fork_join.ns");
 }
 
 #[test]
-fn test_build_22_xor() {
-    let input = include_str!("../../../examples/22-xor.ns");
-    test_build(input, "22-xor.ns");
+fn test_build_match_inline() {
+    let input = include_str!("../../../examples/match_inline_test.ns");
+    test_build(input, "match_inline_test.ns");
 }
 
 #[test]
-fn test_build_28_context() {
-    let input = include_str!("../../../examples/28-context_basic.ns");
-    test_build(input, "28-context_basic.ns");
+fn test_build_match_multiline() {
+    let input = include_str!("../../../examples/match_multiline.ns");
+    test_build(input, "match_multiline.ns");
 }
 
 // Run build check on all numbered example files
@@ -125,14 +125,14 @@ macro_rules! check_example_build {
     };
 }
 
-check_example_build!(build_02_imports, "02-imports.ns");
-check_example_build!(build_04_shapes, "04-shapes.ns");
-check_example_build!(build_05_ports, "05-ports.ns");
-check_example_build!(build_06_impl_refs, "06-impl-refs.ns");
-check_example_build!(build_08_tuples, "08-tuples.ns");
-check_example_build!(build_09_port_access, "09-port-access.ns");
-check_example_build!(build_11_calls, "11-calls.ns");
-check_example_build!(build_12_expressions, "12-expressions.ns");
-check_example_build!(build_13_values, "13-values.ns");
-check_example_build!(build_14_composite, "14-composite.ns");
-check_example_build!(build_15_edge_cases, "15-edge-cases.ns");
+check_example_build!(build_primitives_activations, "primitives/activations.ns");
+check_example_build!(build_primitives_structural, "primitives/structural.ns");
+check_example_build!(build_primitives_operations, "primitives/operations.ns");
+check_example_build!(build_primitives_attention, "primitives/attention.ns");
+check_example_build!(build_stdlib_attention, "stdlib/attention.ns");
+check_example_build!(build_stdlib_transformer_block, "stdlib/transformer_block.ns");
+check_example_build!(build_tutorials_fork_join, "tutorials/02_fork_join.ns");
+check_example_build!(build_real_world_resnet, "real_world/resnet.ns");
+check_example_build!(build_dropout, "dropout.ns");
+check_example_build!(build_mlp_with_dropout, "mlp_with_dropout.ns");
+check_example_build!(build_dilated_conv, "DilatedConv.ns");

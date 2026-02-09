@@ -1087,15 +1087,30 @@ impl AstBuilder {
         })
     }
 
-    /// Build a match pipeline
+    /// Build a match pipeline (supports both inline and indented)
     fn build_match_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::match_pipeline);
 
         let mut endpoints = vec![];
 
         for inner in pair.into_inner() {
-            if inner.as_rule() == Rule::endpoint {
-                endpoints.push(self.build_endpoint(inner)?);
+            match inner.as_rule() {
+                Rule::endpoint => {
+                    endpoints.push(self.build_endpoint(inner)?);
+                }
+                Rule::indented_pipeline => {
+                    // Handle indented multi-line pipelines
+                    for item in inner.into_inner() {
+                        if item.as_rule() == Rule::indented_pipeline_item {
+                            for endpoint_pair in item.into_inner() {
+                                if endpoint_pair.as_rule() == Rule::endpoint {
+                                    endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 

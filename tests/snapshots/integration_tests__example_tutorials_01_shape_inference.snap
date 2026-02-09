@@ -1,0 +1,88 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BasicLinear(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron BatchAgnostic(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 2)]
+  graph:
+    in -> Linear#3(dim, (dim * 2))
+    Linear#3(dim, (dim * 2)) -> out
+
+neuron Expander(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 4)]
+  impl:
+    Source: core,nn/Linear
+
+neuron FFNBlock(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in -> Expander#8(dim, 4)
+    Expander#8(dim, 4) -> GELU#9()
+    GELU#9() -> Linear#10((dim * 4), dim)
+    Linear#10((dim * 4), dim) -> out
+
+neuron FlexibleProjection(in_dim, out_dim):
+  inputs:
+    default: [batch, in_dim]
+  outputs:
+    default: [batch, out_dim]
+  graph:
+    in -> Linear#7(in_dim, out_dim)
+    Linear#7(in_dim, out_dim) -> out
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron SequenceProcessor(dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Linear#4(dim, (dim * 4))
+    Linear#4(dim, (dim * 4)) -> GELU#5()
+    GELU#5() -> Linear#6((dim * 4), dim)
+    Linear#6((dim * 4), dim) -> out
+
+neuron TwoLayerMLP(in_dim, hidden_dim, out_dim):
+  inputs:
+    default: [batch, in_dim]
+  outputs:
+    default: [batch, out_dim]
+  graph:
+    in -> Linear#0(in_dim, hidden_dim)
+    Linear#0(in_dim, hidden_dim) -> GELU#1()
+    GELU#1() -> Linear#2(hidden_dim, out_dim)
+    Linear#2(hidden_dim, out_dim) -> out

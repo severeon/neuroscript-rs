@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Concat(dim):
+  inputs:
+    a: [*shape_a]
+    b: [*shape_b]
+  outputs:
+    default: [*shape_out]
+  impl:
+    Source: core,structural/Concat

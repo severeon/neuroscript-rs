@@ -33,6 +33,15 @@ const config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+  
+  plugins: [
+    [
+      "docusaurus-plugin-generate-llms-txt",
+      {
+        outputFile: "llms.txt", // defaults to llms.txt if not specified
+      },
+    ],
+  ],
 
   presets: [
     [
@@ -117,6 +126,10 @@ const config = {
               {
                 label: 'Standard Library',
                 to: '/docs/stdlib',
+              },
+              {
+                label: 'Packages',
+                to: '/docs/packages',
               },
               {
                 label: 'Playground',

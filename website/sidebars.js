@@ -162,6 +162,21 @@ const sidebars = {
         },
       ],
     },
+    {
+      type: 'category',
+      label: 'Packages',
+      collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'packages/index',
+      },
+      items: [
+        'packages/creating-packages',
+        'packages/dependencies',
+        'packages/publishing',
+        'packages/cli-reference',
+      ],
+    },
   ],
 };
 

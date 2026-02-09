@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Split(num_splits, dim = (0 - 1)):
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape_a]
+    b: [*shape_b]
+  impl:
+    Source: core,structural/Split

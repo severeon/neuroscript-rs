@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    main: [*shape]
+    skip: [*shape]
+  impl:
+    Source: core,structural/Fork

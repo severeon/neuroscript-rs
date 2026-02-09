@@ -34,6 +34,7 @@ neuron FFN(dim, expansion):
 ## Advanced Capabilities
 
 ### Compatibility & Shape Inference
+
 NeuroScript ensures pipeline compatibility through its rigorous shape algebra system. Every connection is validated at compile time:
 
 ```neuroscript
@@ -46,6 +47,7 @@ neuron Incompatible:
 ```
 
 ### Lazy Loading
+
 Use the `@lazy` annotation to define components that are only instantiated when used. This is powerful for conditional architectures or dynamic routing:
 
 ```neuroscript
@@ -61,6 +63,7 @@ neuron DynamicBranch(dim):
 ```
 
 ### Recursion
+
 NeuroScript supports recursive neuron definitions, enabling fractal architectures and repeated structures:
 
 ```neuroscript
@@ -86,6 +89,7 @@ neuron FractalNet(dim, depth):
 
 1. **[Primitives](/docs/primitives)** - Low-level building blocks wrapping PyTorch operations
 2. **[Standard Library](/docs/stdlib)** - High-level composable architectures
+3. **[Packages](/docs/packages)** - Create, share, and consume reusable neuron packages
 
 ## Installation
 

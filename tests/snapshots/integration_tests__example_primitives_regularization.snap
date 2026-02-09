@@ -1,0 +1,42 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Dropout(rate):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,regularization/Dropout
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron RegularizedBlock(dim, dropout_rate):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> GELU#1()
+    GELU#1() -> Dropout#2(dropout_rate)
+    Dropout#2(dropout_rate) -> Linear#3((dim * 4), dim)
+    Linear#3((dim * 4), dim) -> Dropout#4(dropout_rate)
+    Dropout#4(dropout_rate) -> out

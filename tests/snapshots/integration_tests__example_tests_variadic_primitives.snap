@@ -1,0 +1,107 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron Test2D_LayerNorm:
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in -> LayerNorm#1(dim=768)
+    LayerNorm#1(dim=768) -> out
+
+neuron Test2D_Linear:
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, out_dim]
+  graph:
+    in -> Linear#0(dim=768, out_dim=512)
+    Linear#0(dim=768, out_dim=512) -> out
+
+neuron Test3D_LayerNorm:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> LayerNorm#3(dim=768)
+    LayerNorm#3(dim=768) -> out
+
+neuron Test3D_Linear:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, out_dim]
+  graph:
+    in -> Linear#2(dim=768, out_dim=512)
+    Linear#2(dim=768, out_dim=512) -> out
+
+neuron Test3D_Pipeline:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> LayerNorm#4(dim=768)
+    LayerNorm#4(dim=768) -> Linear#5(dim=768, out_dim=50257)
+    Linear#5(dim=768, out_dim=50257) -> out
+
+neuron Test4D_LayerNorm:
+  inputs:
+    default: [batch, heads, seq, dim]
+  outputs:
+    default: [batch, heads, seq, dim]
+  graph:
+    in -> LayerNorm#7(dim=64)
+    LayerNorm#7(dim=64) -> out
+
+neuron Test4D_Linear:
+  inputs:
+    default: [batch, heads, seq, dim]
+  outputs:
+    default: [batch, heads, seq, out_dim]
+  graph:
+    in -> Linear#6(dim=64, out_dim=64)
+    Linear#6(dim=64, out_dim=64) -> out
+
+neuron TestMixedRanks:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, out_dim]
+  graph:
+    in -> LayerNorm#8(dim=768)
+    LayerNorm#8(dim=768) -> Linear#9(dim=768, out_dim=3072)
+    Linear#9(dim=768, out_dim=3072) -> GELU#10()
+    GELU#10() -> Linear#11(dim=3072, out_dim=768)
+    Linear#11(dim=3072, out_dim=768) -> LayerNorm#12(dim=768)
+    LayerNorm#12(dim=768) -> Linear#13(dim=768, out_dim=512)
+    Linear#13(dim=768, out_dim=512) -> out

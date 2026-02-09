@@ -15,7 +15,7 @@ fn test_registry_basics() {
     assert!(!registry.contains("NonExistent"));
 
     // Check we have the expected number of primitives
-    assert_eq!(registry.len(), 52); // 52 primitives registered (added missing ones + RoPE)
+    assert_eq!(registry.len(), 53); // 53 primitives registered (added missing ones + RoPE + DilatedConv)
 
     // Check lookup works
     let linear = registry.lookup("Linear").unwrap();

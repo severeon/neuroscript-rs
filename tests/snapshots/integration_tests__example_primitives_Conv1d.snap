@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Conv1d(in_channels, out_channels, kernel_size, stride = 1, padding = 0, dilation = 1, groups = 1, bias = true):
+  inputs:
+    default: [batch, in_channels, length]
+  outputs:
+    default: [batch, out_channels, *]
+  impl:
+    Source: core,convolutions/Conv1d

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron DepthwiseConv(channels, kernel_size, stride = 1, padding = 0, dilation = 1, bias = true):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, *, *]
+  impl:
+    Source: core,convolutions/DepthwiseConv

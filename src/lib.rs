@@ -22,6 +22,7 @@ pub mod grammar;
 pub mod interfaces;
 pub mod ir;
 pub mod optimizer;
+pub mod package;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;

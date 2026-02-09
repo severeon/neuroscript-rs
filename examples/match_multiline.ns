@@ -1,0 +1,33 @@
+# Test multi-line pipelines in match expressions with indented continuation
+# This verifies that match arms support multi-line arrow syntax
+# Match expressions return values that are then piped to the output
+
+neuron DimensionRouterMultiLine(out_dim):
+  in: [batch, in_dim]
+  out: [batch, out_dim]
+  graph:
+    in -> match:
+      [batch, d] where d > 1024:
+        Linear(d, 512) ->
+        Linear(512, out_dim)
+      [batch, d] where d > 256:
+        Linear(d, out_dim)
+      [batch, d]:
+        Linear(d, out_dim)
+    -> out
+
+# Same router with inline syntax (already supported)
+neuron DimensionRouterInline(out_dim):
+  in: [batch, in_dim]
+  out: [batch, out_dim]
+  graph:
+    in -> match:
+      [batch, d] where d > 1024: Linear(d, 512) -> Linear(512, out_dim)
+      [batch, d] where d > 256: Linear(d, out_dim)
+      [batch, d]: Linear(d, out_dim)
+    -> out
+
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear

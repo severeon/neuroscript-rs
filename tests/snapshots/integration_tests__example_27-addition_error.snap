@@ -1,5 +1,0 @@
----
-source: tests/integration_tests.rs
-expression: error_text
----
-Parse error: Expected { expected: "identifier", found: "Arrow", span: SourceSpan { offset: SourceOffset(600), length: 2 } }

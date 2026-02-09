@@ -1,0 +1,15 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron RotaryEmbedding(dim, max_position_embeddings = 2048, base = 10000):
+  inputs:
+    query: [*batch, seq, num_heads, dim]
+    key: [*batch, seq, num_heads, dim]
+  outputs:
+    q_out: [*batch, seq, num_heads, dim]
+    k_out: [*batch, seq, num_heads, dim]
+  impl:
+    Source: neuroscript,embeddings/RotaryEmbedding

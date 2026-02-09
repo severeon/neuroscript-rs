@@ -1,0 +1,70 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Expander(dim, factor):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * factor)]
+  graph:
+    in -> Linear#4(dim, (dim * factor))
+    Linear#4(dim, (dim * factor)) -> out
+
+neuron FFN(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in -> Linear#6(dim, (dim * 4))
+    Linear#6(dim, (dim * 4)) -> GELU#7()
+    GELU#7() -> Linear#8((dim * 4), dim)
+    Linear#8((dim * 4), dim) -> out
+
+neuron GELU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/GELU
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron MLP(dim_in, dim_hidden, dim_out):
+  inputs:
+    default: [*, dim_in]
+  outputs:
+    default: [*, dim_out]
+  graph:
+    in -> Linear#1(dim_in, dim_hidden)
+    Linear#1(dim_in, dim_hidden) -> GELU#2()
+    GELU#2() -> Linear#3(dim_hidden, dim_out)
+    Linear#3(dim_hidden, dim_out) -> out
+
+neuron Projection(dim):
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> out
+
+neuron Reducer(dim_in, dim_out):
+  inputs:
+    default: [batch, dim_in]
+  outputs:
+    default: [batch, dim_out]
+  graph:
+    in -> Linear#5(dim_in, dim_out)
+    Linear#5(dim_in, dim_out) -> out

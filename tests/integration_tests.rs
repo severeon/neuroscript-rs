@@ -11,7 +11,7 @@
 use neuroscript::interfaces::*;
 use neuroscript::{generate_pytorch, parse, validate};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Format a Program IR for snapshot testing
 ///
@@ -326,31 +326,33 @@ fn format_port_ref(port_ref: &PortRef) -> String {
     }
 }
 
-/// Get all .ns files from examples/ and stdlib/ directories
+/// Get all .ns files from examples/ and stdlib/ directories (recursive)
 fn get_test_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    // Collect examples
-    if let Ok(entries) = fs::read_dir("examples") {
-        for entry in entries.flatten() {
-            if let Some(ext) = entry.path().extension() {
-                if ext == "ns" {
-                    files.push(entry.path());
+    fn collect_ns_files(dir: &Path, files: &mut Vec<PathBuf>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+
+                // Skip __scratch and dot-prefixed directories
+                if path.is_dir() {
+                    if !name_str.starts_with('.') && !name_str.starts_with("__") {
+                        collect_ns_files(&path, files);
+                    }
+                } else if let Some(ext) = path.extension() {
+                    if ext == "ns" {
+                        files.push(path);
+                    }
                 }
             }
         }
     }
 
-    // Collect stdlib
-    if let Ok(entries) = fs::read_dir("stdlib") {
-        for entry in entries.flatten() {
-            if let Some(ext) = entry.path().extension() {
-                if ext == "ns" {
-                    files.push(entry.path());
-                }
-            }
-        }
-    }
+    collect_ns_files(Path::new("examples"), &mut files);
+    collect_ns_files(Path::new("stdlib"), &mut files);
 
     files.sort();
     files
@@ -362,7 +364,7 @@ fn get_test_files() -> Vec<PathBuf> {
 
 #[test]
 fn snapshot_parser_ir_residual() {
-    let source = fs::read_to_string("examples/residual.ns").expect("Failed to read residual.ns");
+    let source = fs::read_to_string("examples/codegen_demo/residual.ns").expect("Failed to read residual.ns");
 
     let program = parse(&source).expect("Parse failed");
     let formatted = format_program_ir(&program);
@@ -384,7 +386,7 @@ fn snapshot_parser_ir_residual() {
 
 #[test]
 fn snapshot_parser_ir_match_basic() {
-    let source = fs::read_to_string("examples/10-match.ns").expect("Failed to read 10-match.ns");
+    let source = fs::read_to_string("examples/match_inline_test.ns").expect("Failed to read match_inline_test.ns");
 
     let program = parse(&source).expect("Parse failed");
     let formatted = format_program_ir(&program);
@@ -394,8 +396,8 @@ fn snapshot_parser_ir_match_basic() {
 
 #[test]
 fn snapshot_parser_ir_match_dimension_binding() {
-    let source = fs::read_to_string("examples/17-match-dimension-binding.ns")
-        .expect("Failed to read 17-match-dimension-binding.ns");
+    let source = fs::read_to_string("examples/codegen_demo/match_dimension_binding.ns")
+        .expect("Failed to read match_dimension_binding.ns");
 
     let program = parse(&source).expect("Parse failed");
     let formatted = format_program_ir(&program);
@@ -540,7 +542,7 @@ neuron Linear(in_dim, out_dim):
 
 #[test]
 fn snapshot_codegen_residual_block() {
-    let source = fs::read_to_string("examples/residual.ns").expect("Failed to read residual.ns");
+    let source = fs::read_to_string("examples/codegen_demo/residual.ns").expect("Failed to read residual.ns");
 
     let mut program = parse(&source).expect("Parse failed");
     validate(&mut program).expect("Validation failed");
@@ -552,7 +554,7 @@ fn snapshot_codegen_residual_block() {
 
 #[test]
 fn snapshot_codegen_cnn_demo() {
-    let source = fs::read_to_string("examples/cnn_demo.ns").expect("Failed to read cnn_demo.ns");
+    let source = fs::read_to_string("examples/real_world/cnn_demo.ns").expect("Failed to read cnn_demo.ns");
 
     let mut program = parse(&source).expect("Parse failed");
     // We need to load stdlib primitives for this to pass validation
@@ -569,7 +571,7 @@ fn snapshot_codegen_cnn_demo() {
 #[test]
 fn snapshot_codegen_cnn_demo_2() {
     let source =
-        fs::read_to_string("examples/cnn_demo_2.ns").expect("Failed to read cnn_demo_2.ns");
+        fs::read_to_string("examples/real_world/cnn_demo_2.ns").expect("Failed to read cnn_demo_2.ns");
 
     let mut program = parse(&source).expect("Parse failed");
     // We need to load stdlib primitives for this to pass validation
@@ -663,33 +665,51 @@ neuron Test
 fn snapshot_all_examples() {
     let files = get_test_files();
 
+    // Paths that already have dedicated snapshot tests
+    let skip_paths: Vec<&str> = vec![
+        "examples/codegen_demo/residual.ns",
+        "examples/codegen_demo/match_dimension_binding.ns",
+        "examples/tutorials/03_match_guards.ns",
+        "examples/real_world/cnn_demo.ns",
+        "examples/real_world/cnn_demo_2.ns",
+    ];
+
     for file_path in files {
-        let file_name = file_path.file_name().unwrap().to_str().unwrap();
+        let path_str = file_path.to_string_lossy();
 
         // Skip if we already have a specific test for this file
-        if file_name == "residual.ns"
-            || file_name == "10-match.ns"
-            || file_name == "17-match-dimension-binding.ns"
-            || file_name == "FFN.ns"
-            || file_name == "cnn_demo.ns"
-            || file_name == "cnn_demo_2.ns"
-        {
+        if skip_paths.iter().any(|s| path_str.ends_with(s)) {
             continue;
         }
+
+        // Also skip stdlib FFN.ns (has dedicated test)
+        if path_str.ends_with("stdlib/FFN.ns") || path_str.ends_with("stdlib\\FFN.ns") {
+            continue;
+        }
+
+        let file_name = file_path.file_name().unwrap().to_str().unwrap();
 
         let source = fs::read_to_string(&file_path)
             .unwrap_or_else(|_| panic!("Failed to read {}", file_name));
 
+        // Create a snapshot name from the relative path
+        let snapshot_name = if path_str.starts_with("stdlib/") {
+            // Keep "stdlib_" prefix for top-level stdlib files
+            path_str.replace("/", "_").replace(".ns", "")
+        } else {
+            let trimmed = path_str.trim_start_matches("examples/");
+            format!("example_{}", trimmed.replace("/", "_").replace(".ns", ""))
+        };
+
         match parse(&source) {
             Ok(program) => {
                 let formatted = format_program_ir(&program);
-                let snapshot_name = format!("example_{}", file_name.replace(".ns", ""));
                 insta::assert_snapshot!(snapshot_name, formatted);
             }
             Err(e) => {
                 // Some examples might be intentionally invalid for error testing
                 let error_text = format!("Parse error: {:?}", e);
-                let snapshot_name = format!("example_{}_error", file_name.replace(".ns", ""));
+                let snapshot_name = format!("{}_error", snapshot_name);
                 insta::assert_snapshot!(snapshot_name, error_text);
             }
         }

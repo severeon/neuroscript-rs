@@ -1,0 +1,161 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron BatchNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/BatchNorm
+
+neuron Conv2d(in_channels, out_channels, kernel_size, padding):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h, w]
+  impl:
+    Source: core,nn/Conv2d
+
+neuron ConvBlock(in_channels, out_channels):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h, w]
+  graph:
+    in -> Conv2d#14(in_channels, out_channels, kernel_size=3, padding=1)
+    Conv2d#14(in_channels, out_channels, kernel_size=3, padding=1) -> BatchNorm#15(out_channels)
+    BatchNorm#15(out_channels) -> ReLU#16()
+    ReLU#16() -> out
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron GroupNorm(num_groups, dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/GroupNorm
+
+neuron GroupNormBlock(channels, num_groups):
+  inputs:
+    default: [*, channels, h, w]
+  outputs:
+    default: [*, channels, h, w]
+  graph:
+    in -> Conv2d#17(channels, channels, kernel_size=3, padding=1)
+    Conv2d#17(channels, channels, kernel_size=3, padding=1) -> GroupNorm#18(num_groups, channels)
+    GroupNorm#18(num_groups, channels) -> ReLU#19()
+    ReLU#19() -> out
+
+neuron InstanceNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/InstanceNorm
+
+neuron LLaMAStyleBlock(dim):
+  inputs:
+    default: [*, seq, dim]
+  outputs:
+    default: [*, seq, dim]
+  graph:
+    in -> Fork#8()
+    Fork#8() -> (main, skip)
+    main -> RMSNorm#9(dim)
+    RMSNorm#9(dim) -> Linear#10(dim, (dim * 4))
+    Linear#10(dim, (dim * 4)) -> SiLU#11()
+    SiLU#11() -> Linear#12((dim * 4), dim)
+    Linear#12((dim * 4), dim) -> processed
+    (processed, skip) -> Add#13()
+    Add#13() -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron PostNormBlock(dim):
+  inputs:
+    default: [*, seq, dim]
+  outputs:
+    default: [*, seq, dim]
+  graph:
+    in -> Fork#4()
+    Fork#4() -> (main, skip)
+    main -> Linear#5(dim, dim)
+    Linear#5(dim, dim) -> processed
+    (processed, skip) -> Add#6()
+    Add#6() -> LayerNorm#7(dim)
+    LayerNorm#7(dim) -> out
+
+neuron PreNormBlock(dim):
+  inputs:
+    default: [*, seq, dim]
+  outputs:
+    default: [*, seq, dim]
+  graph:
+    in -> Fork#0()
+    Fork#0() -> (main, skip)
+    main -> LayerNorm#1(dim)
+    LayerNorm#1(dim) -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> processed
+    (processed, skip) -> Add#3()
+    Add#3() -> out
+
+neuron RMSNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/RMSNorm
+
+neuron ReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/ReLU
+
+neuron SiLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,activations/SiLU

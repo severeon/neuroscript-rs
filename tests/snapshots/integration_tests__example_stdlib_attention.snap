@@ -1,0 +1,53 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Add:
+  inputs:
+    left: [*shape]
+    right: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,builtin/Add
+
+neuron AttentionBlock(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Fork#0()
+    Fork#0() -> (main, skip)
+    main -> LayerNorm#1(dim)
+    LayerNorm#1(dim) -> MultiHeadSelfAttention#2(dim, num_heads)
+    MultiHeadSelfAttention#2(dim, num_heads) -> processed
+    (processed, skip) -> Add#3()
+    Add#3() -> out
+
+neuron Fork:
+  inputs:
+    default: [*shape]
+  outputs:
+    a: [*shape]
+    b: [*shape]
+  impl:
+    Source: core,builtin/Fork
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention

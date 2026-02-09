@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GlobalAvgPool:
+  inputs:
+    default: [batch, channels, *, *]
+  outputs:
+    default: [batch, channels, 1, 1]
+  impl:
+    Source: core,pooling/GlobalAvgPool

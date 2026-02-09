@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Pad(padding, value = 0, mode = constant):
+  inputs:
+    default: [*shape_in]
+  outputs:
+    default: [*shape_out]
+  impl:
+    Source: core,structural/Pad

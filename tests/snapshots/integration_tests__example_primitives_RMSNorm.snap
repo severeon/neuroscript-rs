@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron RMSNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,normalization/RMSNorm

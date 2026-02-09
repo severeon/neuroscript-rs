@@ -54,7 +54,7 @@ pub struct MatchArmInfo {
 }
 
 #[wasm_bindgen]
-pub fn compile(source: &str) -> Result<String, String> {
+pub fn compile(source: &str, neuron_name: Option<String>) -> Result<String, String> {
     let mut program = parse(source).map_err(|e| format!("{}", e))?;
 
     validate(&mut program).map_err(|errors| {
@@ -65,7 +65,16 @@ pub fn compile(source: &str) -> Result<String, String> {
             .join("\n")
     })?;
 
-    let entry_point = find_entry_point(&program).ok_or("No suitable entry point neuron found")?;
+    // Use provided name or fall back to heuristic
+    let entry_point = if let Some(name) = neuron_name {
+        if program.neurons.contains_key(&name) {
+            name
+        } else {
+            return Err(format!("Neuron '{}' not found in program", name));
+        }
+    } else {
+        find_entry_point(&program).ok_or("No suitable entry point neuron found")?
+    };
 
     let py_code = generate_pytorch(&program, &entry_point).map_err(|e| format!("{}", e))?;
 
@@ -82,6 +91,19 @@ pub fn validate_source(source: &str) -> Result<(), String> {
             .collect::<Vec<_>>()
             .join("\n")
     })
+}
+
+/// List all non-primitive neurons in a program
+#[wasm_bindgen]
+pub fn list_neurons(source: &str) -> Result<String, String> {
+    let program = parse(source).map_err(|e| format!("{}", e))?;
+    let neurons: Vec<String> = program
+        .neurons
+        .iter()
+        .filter(|(_, neuron)| !neuron.is_primitive())
+        .map(|(name, _)| name.clone())
+        .collect();
+    serde_json::to_string(&neurons).map_err(|e| format!("JSON serialization error: {}", e))
 }
 
 fn find_entry_point(program: &Program) -> Option<String> {

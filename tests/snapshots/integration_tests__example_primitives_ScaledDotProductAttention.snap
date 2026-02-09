@@ -1,0 +1,15 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ScaledDotProductAttention(d_k):
+  inputs:
+    query: [*, seq_q, d_k]
+    key: [*, seq_k, d_k]
+    value: [*, seq_v, d_v]
+  outputs:
+    default: [*, seq_q, d_v]
+  impl:
+    Source: core,attention/ScaledDotProductAttention

@@ -101,12 +101,12 @@ core,nn/Linear
 
 #[test]
 fn test_parse_residual_example() {
-    let input = include_str!("../../examples/residual.ns");
+    let input = include_str!("../../examples/stdlib/residual.ns");
     let result = NeuroScriptParser::parse(Rule::program, input);
     if let Err(e) = &result {
         eprintln!("Parse error: {}", e);
     }
-    assert!(result.is_ok(), "Failed to parse residual.ns example");
+    assert!(result.is_ok(), "Failed to parse stdlib/residual.ns example");
 }
 
 // Test suite for example files
@@ -124,18 +124,18 @@ macro_rules! test_example_file {
     };
 }
 
-test_example_file!(test_01_comments, "01-comments.ns");
-test_example_file!(test_02_imports, "02-imports.ns");
-test_example_file!(test_03_parameters, "03-parameters.ns");
-test_example_file!(test_04_shapes, "04-shapes.ns");
-test_example_file!(test_05_ports, "05-ports.ns");
-test_example_file!(test_06_impl_refs, "06-impl-refs.ns");
-test_example_file!(test_07_pipelines, "07-pipelines.ns");
-test_example_file!(test_08_tuples, "08-tuples.ns");
-test_example_file!(test_09_port_access, "09-port-access.ns");
-test_example_file!(test_10_match, "10-match.ns");
-test_example_file!(test_xor, "22-xor.ns");
-test_example_file!(test_addition, "27-addition.ns");
+test_example_file!(test_primitives_basics, "primitives/basics.ns");
+test_example_file!(test_primitives_activations, "primitives/activations.ns");
+test_example_file!(test_primitives_structural, "primitives/structural.ns");
+test_example_file!(test_primitives_operations, "primitives/operations.ns");
+test_example_file!(test_primitives_attention, "primitives/attention.ns");
+test_example_file!(test_stdlib_feedforward, "stdlib/feedforward.ns");
+test_example_file!(test_stdlib_attention, "stdlib/attention.ns");
+test_example_file!(test_stdlib_transformer_block, "stdlib/transformer_block.ns");
+test_example_file!(test_tutorials_fork_join, "tutorials/02_fork_join.ns");
+test_example_file!(test_match_multiline, "match_multiline.ns");
+test_example_file!(test_real_world_resnet, "real_world/resnet.ns");
+test_example_file!(test_dropout, "dropout.ns");
 
 #[test]
 fn test_multiple_connections_in_graph() {

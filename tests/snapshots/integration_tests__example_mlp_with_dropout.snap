@@ -1,0 +1,25 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Dropout(p):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Dropout
+
+neuron MLPWithDropout(in_dim, hidden_dim, out_dim, dropout_rate):
+  inputs:
+    default: [batch, in_dim]
+  outputs:
+    default: [batch, out_dim]
+  graph:
+    in -> Linear#0(in_dim, hidden_dim)
+    Linear#0(in_dim, hidden_dim) -> ReLU#1()
+    ReLU#1() -> Dropout#2(dropout_rate)
+    Dropout#2(dropout_rate) -> Linear#3(hidden_dim, out_dim)
+    Linear#3(hidden_dim, out_dim) -> out

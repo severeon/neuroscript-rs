@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MultiHeadSelfAttention(dim, num_heads):
+  inputs:
+    default: [*, seq_len, dim]
+  outputs:
+    default: [*, seq_len, dim]
+  impl:
+    Source: core,attention/MultiHeadSelfAttention

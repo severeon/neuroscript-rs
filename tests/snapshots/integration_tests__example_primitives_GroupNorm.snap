@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GroupNorm(num_groups, num_channels):
+  inputs:
+    default: [*, num_channels, *, *]
+  outputs:
+    default: [*, num_channels, *, *]
+  impl:
+    Source: core,normalization/GroupNorm

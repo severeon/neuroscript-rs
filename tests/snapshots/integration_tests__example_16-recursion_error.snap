@@ -1,5 +1,0 @@
----
-source: tests/integration_tests.rs
-expression: error_text
----
-Parse error: Unexpected { found: "Ident(\"let\")", span: SourceSpan { offset: SourceOffset(191), length: 3 } }

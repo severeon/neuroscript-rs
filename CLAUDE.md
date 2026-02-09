@@ -8,6 +8,29 @@ NeuroScript is a neural architecture composition language implemented in Rust. I
 
 **Core philosophy**: Neurons all the way down - everything is a neuron, and neurons compose into neurons.
 
+## NeuroScript Language Constraints
+
+When writing or generating NeuroScript (.ns) files:
+
+- Binding blocks use `context:` keyword (not `let:`), with optional annotations: `@lazy`, `@static`, `@global`
+- Recursive bindings require `@lazy` annotation with arguments that change (e.g., `depth - 1`)
+- Only one variadic dimension per shape (e.g., `[*shape, dim]` works, `[*a, *b]` does not)
+- Fork (2-way) and Fork3 (3-way) are the available split primitives — no Fork4+
+- Shape dimension expressions support +, -, *, / but solver handles only simple single-unknown equations
+- Always validate generated .ns files with the CLI before considering work complete
+
+## Compilation & Validation
+
+- Always run compilation/validation after any code changes to .ns files, Rust files, or playground code
+- Do not consider a task complete until the build passes and tests run clean
+- If a fix introduces new errors, fix those before reporting success
+
+## Task Approach
+
+- For implementation tasks, start coding promptly after brief exploration
+- When using swarm/sub-agents for batch creation, target 1-2 items per agent to ensure quality
+- When the user specifies a skill or tool to use, use it immediately without substituting your own approach
+
 ## Build and Test Commands
 
 ```bash
@@ -15,7 +38,7 @@ NeuroScript is a neural architecture composition language implemented in Rust. I
 cargo build --release
 
 # ============================================================================
-# CLI: Parse, Validate, Compile, List
+# CLI: Parse, Validate, Compile, List, Package Management
 # ============================================================================
 
 # Parse a file and show structure (quiet mode by default)
@@ -55,6 +78,11 @@ cargo build --release
 # List with connection details
 ./target/release/neuroscript list --verbose examples/residual.ns
 
+# Package management
+./target/release/neuroscript init          # Initialize a new package (Axon.toml)
+./target/release/neuroscript add <dep>     # Add a dependency
+./target/release/neuroscript fetch         # Fetch all dependencies
+
 # Get help for any command
 ./target/release/neuroscript --help
 ./target/release/neuroscript parse --help
@@ -71,13 +99,13 @@ cargo test
 cargo test -- --nocapture
 
 # Run specific test module
-cargo test lexer              # Lexer tests only
-cargo test parser             # Parser tests only
+cargo test grammar            # Grammar/parser tests only
 cargo test validator          # Validation tests only
 cargo test shape_algebra      # Shape algebra tests only
 cargo test shape_inference    # Shape inference tests only
 cargo test stdlib_registry    # Registry tests only
 cargo test codegen            # Codegen tests only
+cargo test optimizer          # Optimizer tests only
 
 # Run a single test by name
 cargo test test_name
@@ -97,19 +125,22 @@ cargo check
 
 ### CLI Subcommands
 
-The CLI uses clap with four main subcommands:
+The CLI uses clap with seven subcommands:
 
 **`parse <FILE>`**
+
 - Parse NeuroScript file and display IR structure
 - Quiet by default, use `-v/--verbose` to show detailed output
 - Useful for understanding the program structure
 
 **`validate <FILE>`**
+
 - Parse and validate program
 - Checks: neuron existence, connection arity, cycles, shape compatibility
 - Use `-v/--verbose` to see all details
 
 **`compile <FILE>`**
+
 - Full compilation pipeline: parse → validate → optimize → codegen
 - Auto-detects neuron name from filename (e.g., `residual.ns` → `Residual`)
 - Requires explicit `--neuron` if filename-based detection fails
@@ -124,18 +155,23 @@ The CLI uses clap with four main subcommands:
   - `-v, --verbose`: Show optimization stats and detailed output
 
 **`list <FILE>`**
+
 - List all neurons in a file with signatures
 - Shows: name, kind (primitive/composite), inputs, outputs
 - Use `-v/--verbose` to see connection details
 
-## Architecture: Five-Phase Compiler
+**`init`** / **`add <DEP>`** / **`fetch`**
+
+- Package management commands for Axon.toml-based dependency management
+
+## Architecture
 
 ```
-Source (.ns) → Lexer → Tokens → Parser → IR → Validator → Codegen → PyTorch
-                                              ↓
-                                        Shape Inference
-                                        Shape Algebra
-                                        Stdlib Registry
+Source (.ns) → Pest Grammar → AST Builder → IR → Validator → Optimizer → Codegen → PyTorch
+                                                     ↓
+                                               Shape Inference
+                                               Shape Algebra
+                                               Stdlib Registry
 ```
 
 ### Module Organization
@@ -147,43 +183,63 @@ src/
 ├── lib.rs              # Public API (parse, validate, generate_pytorch)
 ├── main.rs             # CLI entry point
 ├── interfaces.rs       # Central type definitions (IR, errors, traits)
-├── ir.rs               # (deprecated - types moved to interfaces.rs)
-├── lexer/
-│   ├── mod.rs         # Re-exports
-│   ├── core.rs        # Lexer implementation
-│   └── token.rs       # Token types
-├── parser/
-│   ├── mod.rs         # Re-exports
-│   └── core.rs        # Parser implementation
+├── ir.rs               # Legacy IR types (mostly moved to interfaces.rs)
+├── grammar/
+│   ├── mod.rs         # Pest parser entry point (NeuroScriptParser)
+│   ├── neuroscript.pest # PEG grammar definition
+│   ├── ast.rs         # AST builder (pest pairs → IR types)
+│   ├── ast/           # AST helper modules (tests)
+│   ├── error.rs       # Parse error conversion to miette diagnostics
+│   └── tests.rs       # Grammar tests
 ├── validator/
 │   ├── mod.rs         # Re-exports
-│   └── core.rs        # Validation logic
+│   ├── core.rs        # Core validation logic
+│   ├── bindings.rs    # Context binding validation (recursion, annotations)
+│   ├── cycles.rs      # Cycle detection in dependency graph
+│   ├── shapes.rs      # Shape compatibility validation
+│   ├── symbol_table.rs # Symbol resolution
+│   └── tests/         # Validator test suite (7 modules)
 ├── shape/
 │   ├── mod.rs         # Re-exports
 │   ├── algebra.rs     # Shape pattern matching and operations
-│   └── inference.rs   # Shape inference engine
+│   ├── inference.rs   # Shape inference engine (variadic support)
+│   └── tests.rs       # Shape system tests
 ├── codegen/
 │   ├── mod.rs         # Re-exports
 │   ├── generator.rs   # Main CodeGenerator struct
 │   ├── instantiation.rs # Module instantiation (__init__)
 │   ├── forward.rs     # Forward pass generation
-│   └── utils.rs       # Helper functions
-└── stdlib_registry.rs  # Primitive implementation registry
+│   ├── utils.rs       # Helper functions
+│   └── tests.rs       # Codegen tests
+├── optimizer/
+│   ├── mod.rs         # Re-exports
+│   └── core.rs        # Match arm optimization (reordering, dead branch elim)
+├── package/           # Package management (Axon.toml, registry, resolver)
+│   ├── mod.rs
+│   ├── init.rs        # Package initialization
+│   ├── manifest.rs    # Axon.toml parsing
+│   ├── lockfile.rs    # Axon.lock generation
+│   ├── registry.rs    # Package registry
+│   └── resolver.rs    # Dependency resolution
+├── stdlib_registry.rs # Primitive implementation registry
+├── stdlib.rs          # Standard library loading
+├── doc_parser.rs      # Documentation extraction from .ns files
+├── bin/
+│   └── neuroscript-doc.rs # Documentation CLI tool
+└── wasm.rs            # WebAssembly target support (conditional)
 ```
 
-### 1. Lexer (`src/lexer/`)
-- **Indentation-aware tokenization**: Tracks indent/dedent for Python-style blocks
-- Produces tokens with span information for error reporting
-- Handles keywords, operators, literals, and structural tokens (Indent/Dedent/Newline)
-- **Key detail**: Indentation is significant - pipelines can be single-line (`a -> b -> c`) or multi-line with indentation
+### 1. Grammar & Parser (`src/grammar/`)
 
-### 2. Parser (`src/parser/`)
-- **Recursive descent** parser that converts tokens to IR
-- Uses `miette` for diagnostic-quality error messages with source spans
-- Returns `Result<Program, ParseError>` with structured error types
-- **Important**: Parser tracks position in token stream; uses `peek()`, `at()`, `expect()` pattern
+- **PEG grammar** using the `pest` crate (`neuroscript.pest`)
+- Grammar handles tokenization and parsing in one pass (no separate lexer)
+- `AstBuilder` in `ast.rs` converts pest parse pairs into IR types
+- Indentation handling done in AST builder, not grammar
+- Error conversion via `error.rs` produces miette-compatible diagnostics
+- Entry point: `NeuroScriptParser::parse_program(source) -> Result<Program, ParseError>`
 
-### 3. IR (`src/interfaces.rs`)
+### 2. IR (`src/interfaces.rs`)
+
 - **Algebraic data types** defining the full AST
 - Key types:
   - `Program`: Top-level container with `uses` and `neurons` HashMap
@@ -195,17 +251,21 @@ src/
   - `PortRef`: References to ports (e.g., `in`, `out`, `fork.left`)
   - `InferenceContext`: Tracks resolved dimensions and node outputs during shape inference
 
-### 4. Validator (`src/validator/`)
+### 3. Validator (`src/validator/`)
+
 - **Post-parse validation** of the IR graph
+- Modular design: `core.rs`, `bindings.rs`, `cycles.rs`, `shapes.rs`, `symbol_table.rs`
 - Checks:
-  1. All referenced neurons exist
+  1. All referenced neurons exist (symbol resolution)
   2. Connection endpoints match (tuple arity, port names)
   3. No cycles in dependency graph
   4. Shape compatibility via shape inference engine
+  5. Context binding validity (annotation correctness, recursion safety)
 - Returns `Result<(), Vec<ValidationError>>` - collects ALL errors rather than failing fast
-- **New**: Integrates shape inference for dimension variable resolution
+- Integrates shape inference for dimension variable resolution
 
-### 5. Shape System (`src/shape/`)
+### 4. Shape System (`src/shape/`)
+
 - **Tensor shape operations** using BigUint arithmetic to avoid overflow
 - **`algebra.rs`**: Pattern matching with wildcards and literals
   - `Pattern::matches()`: Match shapes like `[*, 1, *]` against concrete shapes
@@ -216,8 +276,16 @@ src/
   - Resolves dimension variables (e.g., `dim`, `batch`) across connections
   - Tracks equivalences and constraints
   - Validates shape compatibility throughout the graph
+  - Supports variadic shape patterns
+
+### 5. Optimizer (`src/optimizer/`)
+
+- Match arm optimization passes
+- Pattern reordering for efficiency
+- Dead branch elimination for unreachable match arms
 
 ### 6. Stdlib Registry (`src/stdlib_registry.rs`)
+
 - **Maps neuron names to implementation references**
 - Tracks primitive neurons and their Python/PyTorch implementations
 - `ImplRef` enum with two variants:
@@ -226,7 +294,8 @@ src/
 - Used by codegen to generate correct imports
 
 ### 7. Codegen (`src/codegen/`)
-- **Phase 0 implementation**: Direct lowering from IR to PyTorch
+
+- Direct lowering from IR to PyTorch `nn.Module`
 - **`generator.rs`**: Main CodeGenerator with state tracking
 - **`instantiation.rs`**: Generates `__init__` with module instantiation
 - **`forward.rs`**: Generates `forward()` with connection graph execution
@@ -235,27 +304,38 @@ src/
   - Import generation from stdlib_registry
   - Match expression codegen with dimension binding
   - Parameter passing and shape comments
-- **Future**: Optimizations and multiple backends
+
+### 8. Package Management (`src/package/`)
+
+- Cargo-inspired package management with `Axon.toml` manifests
+- Supports git, path, and registry dependencies
+- Lockfile generation (`Axon.lock`) for reproducible builds
+- CLI commands: `init`, `add`, `fetch`
 
 ## Key Language Concepts
 
 ### Neurons
+
 Two types:
+
 - **Primitive**: Has `impl:` reference to external code (e.g., `impl: core,nn/Linear`)
 - **Composite**: Has `graph:` section with internal connections
 
 ### Ports
+
 - Default port: `in` and `out` (named "default" internally)
 - Named ports: `in left: [*shape]`, `out a: [*shape]`
 - Port references: `in`, `out`, `fork.left`, `fork.a`
 
 ### Connections and Pipelines
+
 - Simple: `in -> Linear(512, 256) -> out`
 - Multi-line: Indentation creates pipeline continuation
 - Tuple unpacking: `in -> Fork() -> (main, skip)` creates two named references
 - Port access: `main -> MLP(dim) -> processed`
 
 ### Shapes
+
 - Literal dimensions: `[512, 256]`
 - Named dimensions: `[batch, seq, dim]`
 - Wildcards: `[*, dim]` (single dimension), `[*shape]` (variadic)
@@ -263,13 +343,15 @@ Two types:
 
 ## Critical Implementation Details
 
-### Parser State Management
-- Parser maintains `pos` index into token vector
-- **Never advance past EOF**: `peek()` returns last token (EOF) when at end
-- Use `at(&TokenKind)` for lookahead, not `peek().kind ==` (discriminant comparison)
-- `expect()` consumes and validates, `eat()` optionally consumes
+### PEG Grammar Notes
+
+- The grammar is defined in `src/grammar/neuroscript.pest` using pest syntax
+- `AstBuilder` in `src/grammar/ast.rs` walks pest `Pairs` to construct IR types
+- Keywords are defined as pest rules with `!ident_cont` negative lookahead to prevent partial matches
+- Indentation significance is handled during AST building, not in the grammar itself
 
 ### Tuple Unpacking Grammar
+
 ```rust
 // WRONG: Tuple unpacking only works for port references in connections
 in -> Fork() -> (a, b, c)  // Creates references a, b, c
@@ -279,6 +361,7 @@ Linear(dim, dim * 4)  // Call with args, not tuple
 ```
 
 ### Match Expressions
+
 - Pattern match on tensor shapes with dimension capture
 - **Basic syntax**: `match: [pattern]: pipeline`
 - **With guards**: `match: [*, d] where d > 512: Linear(d, 512) -> out`
@@ -288,22 +371,27 @@ Linear(dim, dim * 4)  // Call with args, not tuple
   - Referenced in pipeline expressions
 - Compiler generates lazy instantiation for modules with captured dimensions
 
-### Let Bindings
+### Context Bindings
+
 - Define reusable neuron instantiations within a neuron definition
-- Syntax: `let: name = NeuronCall(args)`
-- Enables recursion by binding to self with modified parameters
+- Syntax: `context:` block with optional annotations (`@lazy`, `@static`, `@global`)
+- Enables recursion via `@lazy` binding to self with modified parameters
 - Example:
+
   ```neuroscript
-  neuron MyNeuron(depth):
-    let:
-      recurse = MyNeuron(depth - 1)
+  neuron MyNeuron(d_model, num_heads, d_ff, depth):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+      @lazy recurse = MyNeuron(d_model, num_heads, d_ff, depth - 1)
     graph:
       in -> match:
-        [*] where depth > 0: recurse -> out
-        [*]: Identity() -> out
+        [*, seq, d_model] where depth > 0: recurse
+        [*, seq, d_model]: Identity() -> out
   ```
 
 ### Error Handling Philosophy
+
 - Use `miette::Diagnostic` for structured errors with source spans
 - Prefer `thiserror::Error` for error types
 - Always include context: what failed, where (span), and why
@@ -312,14 +400,18 @@ Linear(dim, dim * 4)  // Call with args, not tuple
 ## Testing Strategy
 
 ### Example Files (`examples/`)
+
 Comprehensive test suite with 126+ `.ns` files covering language features:
+
 - `01-comments.ns` through `17-match-dimension-binding.ns`: Core language features
 - Many additional test cases for edge cases, patterns, and advanced features
 - Real-world examples: `residual.ns`, `transformer_from_stdlib.ns`, etc.
 - Codegen test cases: `codegen_demo.ns`
 
 ### Standard Library (`stdlib/`)
+
 6 library files with composable neurons:
+
 - `FFN.ns`: Feed-forward networks (3 variants)
 - `Residual.ns`: Skip connections (5 variants)
 - `MultiHeadAttention.ns`: Attention mechanisms (5 variants)
@@ -328,7 +420,9 @@ Comprehensive test suite with 126+ `.ns` files covering language features:
 - `MetaNeurons.ns`: Routing and composition (16 neurons)
 
 ### Unit Tests
+
 Located inline in source files (Rust convention):
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -339,39 +433,45 @@ mod tests {
 ```
 
 Organized by module:
-- `src/lexer/`: Tokenization, indentation handling
-- `src/parser/`: Grammar rules, error cases
-- `src/validator/`: Existence, arity, cycles
-- `src/shape/algebra.rs`: Pattern matching, broadcasting, operations
-- `src/shape/inference.rs`: Shape inference and dimension resolution
+
+- `src/grammar/`: Grammar parsing, AST building
+- `src/validator/tests/`: Existence, arity, cycles, shapes, bindings, match expressions
+- `src/shape/`: Pattern matching, broadcasting, inference
 - `src/stdlib_registry.rs`: Primitive registry lookups
 - `src/codegen/`: Code generation tests
+- `src/optimizer/`: Optimization pass tests
 
 ### Integration Test Script
+
 `./test_examples.sh` parses all `.ns` files in `examples/` and `stdlib/` directories
 
 ### Snapshot Testing (`tests/integration_tests.rs`)
+
 Comprehensive snapshot testing using the `insta` crate for regression detection:
 
 **What we snapshot:**
+
 - **Parser IR**: Complete AST structures for all example files (46+ snapshots)
 - **Codegen output**: Generated PyTorch code for representative neurons
 - **Error messages**: Formatted diagnostics for validation and parse errors
 
 **Key features:**
+
 - Custom IR formatting for readable snapshots (omits spans, focuses on semantics)
 - All snapshots stored in `tests/snapshots/` directory
 - Automatic detection of unintended changes during refactoring
 - Interactive review workflow with `cargo insta review`
 
 **Workflow:**
+
 1. Run tests: `cargo test --test integration_tests`
 2. Review changes: `cargo insta review` (interactive UI with diffs)
 3. Accept valid changes, reject unexpected ones
 4. Commit snapshots with code changes
 
 **When to use:**
-- After changing parser, validator, or codegen logic
+
+- After changing grammar, validator, or codegen logic
 - Before committing refactoring changes
 - When adding new language features
 - For comprehensive regression testing
@@ -380,30 +480,36 @@ Comprehensive snapshot testing using the `insta` crate for regression detection:
 
 ## Common Patterns
 
-### Adding New Token Types
-1. Add variant to `TokenKind` in `src/interfaces.rs`
-2. Add keyword mapping in lexer's keyword table in `src/lexer/core.rs`
-3. Update parser to handle new token in relevant `parse_*` methods in `src/parser/core.rs`
+### Adding New Grammar Rules
+
+1. Add rule to `src/grammar/neuroscript.pest`
+2. Handle the new pest pair in `src/grammar/ast.rs` (AstBuilder)
+3. Add corresponding IR type in `src/interfaces.rs` if needed
+4. Add tests in `src/grammar/tests.rs`
 
 ### Adding New IR Nodes
+
 1. Add enum variant to appropriate IR type in `src/interfaces.rs`
-2. Add parser logic in `src/parser/core.rs`
+2. Add AST builder logic in `src/grammar/ast.rs`
 3. Add validation logic in `src/validator/core.rs` if needed
 4. Add `Display` implementation for debugging in `src/interfaces.rs`
 
 ### Extending Validation
+
 1. Add new `ValidationError` variant in `src/interfaces.rs`
 2. Implement check in `Validator::validate()` or helper methods in `src/validator/core.rs`
 3. Collect errors in `errors` vector (don't fail fast)
 4. Update shape inference in `src/shape/inference.rs` if relevant
 
 ### Adding Primitives
+
 1. Register in `StdlibRegistry::new()` with `ImplRef` in `src/stdlib_registry.rs`
 2. Implement Python class in `neuroscript_runtime/primitives/`
 3. Add test case in appropriate example file
 4. Verify codegen generates correct import
 
 ### Implementing Codegen Features
+
 1. Extend `CodeGenerator` in `src/codegen/generator.rs`
 2. Handle new IR patterns in:
    - `src/codegen/forward.rs` for forward pass generation
@@ -415,12 +521,14 @@ Comprehensive snapshot testing using the `insta` crate for regression detection:
 ## Python Runtime Integration
 
 NeuroScript compiles to PyTorch, requiring a Python runtime:
+
 ```bash
 # Install the Python runtime package (in project root)
 pip install -e .
 ```
 
 The runtime provides:
+
 - Primitive neuron implementations (`neuroscript_runtime.primitives.*`)
 - Core utilities for shape handling
 - Generated code imports from this package
@@ -430,8 +538,8 @@ Generated PyTorch modules are standalone after runtime is installed.
 ## Roadmap
 
 ### Phase 1: Core Language ✅ Complete
-- ✅ Lexer with indent handling
-- ✅ Parser with shape expressions
+
+- ✅ PEG grammar with pest (replaced hand-written lexer/parser)
 - ✅ IR with algebraic types (modularized to `interfaces.rs`)
 - ✅ Validator (existence, arity, cycles)
 - ✅ Shape algebra with pattern matching
@@ -440,32 +548,39 @@ Generated PyTorch modules are standalone after runtime is installed.
 - ✅ Comprehensive test suite (126+ examples, 6 stdlib files)
 
 ### Phase 2: Codegen ✅ Complete
+
 - ✅ IR → PyTorch `nn.Module` generation
 - ✅ Import generation from stdlib_registry
 - ✅ Forward pass generation (connection graph traversal)
 - ✅ Parameter initialization (`__init__`)
 - ✅ Match expression codegen with dimension binding
-- ✅ Let bindings for recursion
+- ✅ Context bindings for recursion
 - ✅ Shape inference integration in validation
+- ✅ Optimizer passes (pattern reordering, dead branch elimination)
+- ✅ Package management (Axon.toml, dependency resolution)
 
 ### Phase 3: Advanced Features (In Progress)
+
 - ⏳ Full dimension variable type inference across programs
 - ⏳ Loop constructs for repeated layers
 - ⏳ Higher-order neurons (neuron parameters)
-- ⏳ Optimization passes (graph simplification, fusion)
+- ⏳ Graph simplification and fusion optimizations
 - ⏳ Multiple backends (ONNX, JAX, TorchScript)
 
 ### Phase 4: Tooling (Future)
+
 - LSP server for editor support
 - PyO3 bindings for Python integration
 - Visualization of neuron graphs (GraphViz, D3.js)
 - REPL for interactive development
-- Package manager for sharing neurons
 - Documentation generator from neuron definitions
 
 ## Key Dependencies
 
 ### Rust Crates (from Cargo.toml)
+
+- `pest` (2.7): PEG parser generator
+- `pest_derive` (2.7): Derive macro for pest grammar compilation
 - `thiserror` (1.0): Clean error type definitions with derive macros
 - `miette` (7.x): Beautiful diagnostic error reporting with source spans and fancy formatting
 - `num-bigint` (0.4): Arbitrary precision integers for shape algebra (prevents overflow)
@@ -475,6 +590,7 @@ Generated PyTorch modules are standalone after runtime is installed.
 - `insta` (1.34): Snapshot testing for comprehensive regression detection (dev-only, with yaml feature)
 
 ### Python Runtime (separate package)
+
 - Located in project root with `setup.py` / `pyproject.toml`
 - Install with `pip install -e .`
 - Provides `neuroscript_runtime.primitives.*` modules for generated code

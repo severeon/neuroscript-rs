@@ -1,5 +1,0 @@
----
-source: tests/integration_tests.rs
-expression: error_text
----
-Parse error: Expected { expected: "COMMENT or arrow", found: "unexpected input", span: SourceSpan { offset: SourceOffset(11794), length: 1 } }

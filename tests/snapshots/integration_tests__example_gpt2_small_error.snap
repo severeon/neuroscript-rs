@@ -1,5 +1,0 @@
----
-source: tests/integration_tests.rs
-expression: error_text
----
-Parse error: Expected { expected: "NEWLINE, COMMENT, arrow, colon, dot, lparen, or ident", found: "unexpected input", span: SourceSpan { offset: SourceOffset(7375), length: 1 } }
