@@ -407,8 +407,9 @@ neuron_section = {
 
 // Neuron definition: neuron Foo(params): ...
 // Optionally preceded by documentation comments
+// Blank lines between doc_block and keyword_neuron are allowed
 neuron_def = {
-    doc_block? ~ keyword_neuron ~ ident ~ params? ~ colon ~ NEWLINE ~
+    doc_block? ~ NEWLINE* ~ keyword_neuron ~ ident ~ params? ~ colon ~ NEWLINE ~
     (NEWLINE* ~ neuron_section)+
 }
 
