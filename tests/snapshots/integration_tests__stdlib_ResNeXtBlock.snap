@@ -1,0 +1,26 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ResNeXtBlock(channels, bottleneck, groups):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  graph:
+    in -> (main, skip)
+    main -> Conv2d#0(channels, bottleneck, 1, 1, 0)
+    Conv2d#0(channels, bottleneck, 1, 1, 0) -> BatchNorm#1(bottleneck)
+    BatchNorm#1(bottleneck) -> ReLU#2()
+    ReLU#2() -> Conv2d#3(bottleneck, bottleneck, 3, 1, 1)
+    Conv2d#3(bottleneck, bottleneck, 3, 1, 1) -> BatchNorm#4(bottleneck)
+    BatchNorm#4(bottleneck) -> ReLU#5()
+    ReLU#5() -> Conv2d#6(bottleneck, channels, 1, 1, 0)
+    Conv2d#6(bottleneck, channels, 1, 1, 0) -> BatchNorm#7(channels)
+    BatchNorm#7(channels) -> conv_out
+    (conv_out, skip) -> Add#8()
+    Add#8() -> added
+    added -> ReLU#9()
+    ReLU#9() -> out

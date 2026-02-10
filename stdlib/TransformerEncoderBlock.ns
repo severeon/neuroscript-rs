@@ -1,0 +1,24 @@
+/// Transformer Encoder Block
+/// Pre-norm self-attention + FFN with residual connections.
+/// Reference: Vaswani et al. (2017), with pre-norm from Xiong et al. (2020)
+neuron TransformerEncoderBlock(dim, num_heads, d_ff, dropout_rate):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> (attn_path, skip1)
+        attn_path ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            Dropout(dropout_rate)
+            attn_out
+        (attn_out, skip1) -> Add() -> attn_residual
+        attn_residual -> (ffn_path, skip2)
+        ffn_path ->
+            LayerNorm(dim)
+            Linear(dim, d_ff)
+            GELU()
+            Dropout(dropout_rate)
+            Linear(d_ff, dim)
+            Dropout(dropout_rate)
+            ffn_out
+        (ffn_out, skip2) -> Add() -> out

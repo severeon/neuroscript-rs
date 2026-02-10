@@ -1,0 +1,20 @@
+/// ResNeXt Block
+/// Bottleneck with grouped convolutions for multi-branch aggregation.
+/// Reference: Xie et al. (2017), "Aggregated Residual Transformations"
+neuron ResNeXtBlock(channels, bottleneck, groups):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv2d(channels, bottleneck, 1, 1, 0)
+            BatchNorm(bottleneck)
+            ReLU()
+            Conv2d(bottleneck, bottleneck, 3, 1, 1)
+            BatchNorm(bottleneck)
+            ReLU()
+            Conv2d(bottleneck, channels, 1, 1, 0)
+            BatchNorm(channels)
+            conv_out
+        (conv_out, skip) -> Add() -> added
+        added -> ReLU() -> out

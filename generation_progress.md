@@ -21,12 +21,12 @@
 | BottleneckBlock | 2 | completed | 1 | |
 | ConvNeXtBlock | 2 | completed | 1 | |
 | ViTBlock | 2 | completed | 1 | |
-| MBConvBlock | 2 | pending | 0 | |
+| MBConvBlock | 2 | completed | 1 | |
 | PatchEmbedding | 2 | completed | 1 | |
-| TransformerEncoderBlock | 2 | pending | 0 | |
-| TransformerDecoderBlock | 2 | pending | 0 | |
-| ResNeXtBlock | 2 | pending | 0 | |
-| DenseBlock | 2 | pending | 0 | |
+| TransformerEncoderBlock | 2 | completed | 1 | |
+| TransformerDecoderBlock | 2 | completed | 1 | |
+| ResNeXtBlock | 2 | completed | 1 | |
+| DenseBlock | 2 | completed | 1 | |
 | InceptionBlock | 2 | pending | 0 | |
 | FusedMBConv | 2 | pending | 0 | |
 | PatchMerging | 2 | pending | 0 | |

@@ -1,0 +1,45 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron TransformerDecoderBlock(dim, num_heads, d_ff, dropout_rate):
+  inputs:
+    query: [batch, seq, dim]
+    memory: [batch, seq_kv, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    query -> (self_attn_path, skip1)
+    self_attn_path -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
+    MultiHeadSelfAttention#1(dim, num_heads) -> Dropout#2(dropout_rate)
+    Dropout#2(dropout_rate) -> self_attn_out
+    (self_attn_out, skip1) -> Add#3()
+    Add#3() -> self_attn_residual
+    self_attn_residual -> (cross_q_path, skip2)
+    cross_q_path -> LayerNorm#4(dim)
+    LayerNorm#4(dim) -> Linear#5(dim, dim)
+    Linear#5(dim, dim) -> q
+    memory -> (k_path, v_path)
+    k_path -> Linear#6(dim, dim)
+    Linear#6(dim, dim) -> k
+    v_path -> Linear#7(dim, dim)
+    Linear#7(dim, dim) -> v
+    (q, k, v) -> ScaledDotProductAttention#8(dim, num_heads)
+    ScaledDotProductAttention#8(dim, num_heads) -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> Dropout#10(dropout_rate)
+    Dropout#10(dropout_rate) -> cross_attn_out
+    (cross_attn_out, skip2) -> Add#11()
+    Add#11() -> cross_attn_residual
+    cross_attn_residual -> (ffn_path, skip3)
+    ffn_path -> LayerNorm#12(dim)
+    LayerNorm#12(dim) -> Linear#13(dim, d_ff)
+    Linear#13(dim, d_ff) -> GELU#14()
+    GELU#14() -> Dropout#15(dropout_rate)
+    Dropout#15(dropout_rate) -> Linear#16(d_ff, dim)
+    Linear#16(d_ff, dim) -> Dropout#17(dropout_rate)
+    Dropout#17(dropout_rate) -> ffn_out
+    (ffn_out, skip3) -> Add#18()
+    Add#18() -> out

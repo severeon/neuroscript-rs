@@ -1,0 +1,54 @@
+/// Transformer Decoder Block
+///
+/// Complete decoder block with pre-norm residual connections.
+/// Three sub-layers:
+///   1. Masked self-attention on decoder input
+///   2. Cross-attention (decoder queries, encoder keys/values)
+///   3. Feed-forward network (FFN)
+///
+/// Parameters:
+/// - dim: Model dimension
+/// - num_heads: Number of attention heads
+/// - d_ff: FFN hidden dimension
+/// - dropout_rate: Dropout probability
+///
+/// Shape Contract:
+/// - Input query: [batch, seq, dim] decoder sequence
+/// - Input memory: [batch, seq_kv, dim] encoder output
+/// - Output: [batch, seq, dim] decoded representation
+///
+/// Reference: Vaswani et al. (2017) "Attention Is All You Need"
+neuron TransformerDecoderBlock(dim, num_heads, d_ff, dropout_rate):
+    in query: [batch, seq, dim]
+    in memory: [batch, seq_kv, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Sub-layer 1: Masked self-attention with pre-norm residual
+        query -> (self_attn_path, skip1)
+        self_attn_path ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            Dropout(dropout_rate)
+            self_attn_out
+        (self_attn_out, skip1) -> Add() -> self_attn_residual
+
+        # Sub-layer 2: Cross-attention with pre-norm residual
+        self_attn_residual -> (cross_q_path, skip2)
+        cross_q_path -> LayerNorm(dim) -> Linear(dim, dim) -> q
+        memory -> (k_path, v_path)
+        k_path -> Linear(dim, dim) -> k
+        v_path -> Linear(dim, dim) -> v
+        (q, k, v) -> ScaledDotProductAttention(dim, num_heads) -> Linear(dim, dim) -> Dropout(dropout_rate) -> cross_attn_out
+        (cross_attn_out, skip2) -> Add() -> cross_attn_residual
+
+        # Sub-layer 3: FFN with pre-norm residual
+        cross_attn_residual -> (ffn_path, skip3)
+        ffn_path ->
+            LayerNorm(dim)
+            Linear(dim, d_ff)
+            GELU()
+            Dropout(dropout_rate)
+            Linear(d_ff, dim)
+            Dropout(dropout_rate)
+            ffn_out
+        (ffn_out, skip3) -> Add() -> out

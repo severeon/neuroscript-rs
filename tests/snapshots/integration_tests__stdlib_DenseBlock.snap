@@ -1,0 +1,21 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron DenseBlock(channels, growth_rate):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  graph:
+    in -> (main, skip)
+    main -> BatchNorm#0(channels)
+    BatchNorm#0(channels) -> ReLU#1()
+    ReLU#1() -> Conv2d#2(channels, growth_rate, 3, 1, 1)
+    Conv2d#2(channels, growth_rate, 3, 1, 1) -> features
+    (features, skip) -> Concat#3(1)
+    Concat#3(1) -> concatenated
+    concatenated -> Conv2d#4((channels + growth_rate), channels, 1, 1, 0)
+    Conv2d#4((channels + growth_rate), channels, 1, 1, 0) -> out
