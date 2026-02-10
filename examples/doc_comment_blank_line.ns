@@ -1,0 +1,27 @@
+use core,nn/*
+
+/// A simple neuron with a blank line before the keyword
+///
+/// This tests that blank lines between doc comments and neuron are allowed
+
+neuron DocBlankLine(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Linear(dim, dim) -> out
+
+/// Another neuron with multiple blank lines
+
+
+neuron DocMultipleBlankLines(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Linear(dim, dim) -> out
+
+/// A neuron with no blank line (should still work)
+neuron DocNoBlankLine(dim):
+  in: [*, dim]
+  out: [*, dim]
+  graph:
+    in -> Linear(dim, dim) -> out

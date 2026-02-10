@@ -211,3 +211,35 @@ fn test_parse_simple_neuron_with_if() {
     }
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_doc_comment_blank_line_before_neuron() {
+    // Single blank line between doc comment and neuron keyword
+    let input = r#"/// A documented neuron
+
+neuron Test:
+  in: [*, dim]
+  out: [*, dim]
+  impl: core,nn/Linear
+"#;
+    let result = NeuroScriptParser::parse(Rule::neuron_def, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse neuron_def with single blank line after doc comment");
+
+    // Multiple blank lines between doc comment and neuron keyword
+    let input_multi = r#"/// A documented neuron
+
+
+neuron Test:
+  in: [*, dim]
+  out: [*, dim]
+  impl: core,nn/Linear
+"#;
+    let result_multi = NeuroScriptParser::parse(Rule::neuron_def, input_multi);
+    if let Err(e) = &result_multi {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result_multi.is_ok(), "Failed to parse neuron_def with multiple blank lines after doc comment");
+}

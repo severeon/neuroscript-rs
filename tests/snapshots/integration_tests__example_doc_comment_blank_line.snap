@@ -1,0 +1,35 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Uses ===
+use nn::* (source: core)
+
+=== Neurons ===
+
+neuron DocBlankLine(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> out
+
+neuron DocMultipleBlankLines(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> out
+
+neuron DocNoBlankLine(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> out

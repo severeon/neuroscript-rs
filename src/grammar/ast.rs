@@ -161,7 +161,16 @@ impl AstBuilder {
         if let Some(ref p) = next {
             if p.as_rule() == Rule::doc_block {
                 doc = Some(self.build_doc_block(p.clone())?);
-                next = inner.next(); // Move to keyword_neuron
+                next = inner.next();
+            }
+        }
+
+        // Skip any blank lines (NEWLINEs) between doc_block and keyword_neuron
+        while let Some(ref p) = next {
+            if p.as_rule() == Rule::NEWLINE {
+                next = inner.next();
+            } else {
+                break;
             }
         }
 
