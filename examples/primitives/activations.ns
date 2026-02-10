@@ -80,7 +80,7 @@ neuron GatedFFN(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (gate_path, value_path)
+        in -> (gate_path, value_path)
         gate_path -> Linear(dim, dim * 4) -> SiLU() -> gate
         value_path -> Linear(dim, dim * 4) -> value
         (gate, value) -> Multiply() -> Linear(dim * 4, dim) -> out

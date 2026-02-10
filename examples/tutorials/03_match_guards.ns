@@ -57,7 +57,7 @@ neuron ConditionalResidual(target_dim):
         in -> match:
             # Dimension matches: use residual
             [*, d] where d == target_dim:
-                Fork() -> (main, skip)
+                (main, skip)
                 main -> Linear(d, d * 4) -> GELU() -> Linear(d * 4, d) -> processed
                 (processed, skip) -> Add() -> out
 

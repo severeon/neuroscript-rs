@@ -35,10 +35,10 @@ neuron ConvBlock(in_channels, out_channels):
   outputs:
     default: [*, out_channels, h, w]
   graph:
-    in -> Conv2d#14(in_channels, out_channels, kernel_size=3, padding=1)
-    Conv2d#14(in_channels, out_channels, kernel_size=3, padding=1) -> BatchNorm#15(out_channels)
-    BatchNorm#15(out_channels) -> ReLU#16()
-    ReLU#16() -> out
+    in -> Conv2d#11(in_channels, out_channels, kernel_size=3, padding=1)
+    Conv2d#11(in_channels, out_channels, kernel_size=3, padding=1) -> BatchNorm#12(out_channels)
+    BatchNorm#12(out_channels) -> ReLU#13()
+    ReLU#13() -> out
 
 neuron Fork:
   inputs:
@@ -63,10 +63,10 @@ neuron GroupNormBlock(channels, num_groups):
   outputs:
     default: [*, channels, h, w]
   graph:
-    in -> Conv2d#17(channels, channels, kernel_size=3, padding=1)
-    Conv2d#17(channels, channels, kernel_size=3, padding=1) -> GroupNorm#18(num_groups, channels)
-    GroupNorm#18(num_groups, channels) -> ReLU#19()
-    ReLU#19() -> out
+    in -> Conv2d#14(channels, channels, kernel_size=3, padding=1)
+    Conv2d#14(channels, channels, kernel_size=3, padding=1) -> GroupNorm#15(num_groups, channels)
+    GroupNorm#15(num_groups, channels) -> ReLU#16()
+    ReLU#16() -> out
 
 neuron InstanceNorm(dim):
   inputs:
@@ -82,15 +82,14 @@ neuron LLaMAStyleBlock(dim):
   outputs:
     default: [*, seq, dim]
   graph:
-    in -> Fork#8()
-    Fork#8() -> (main, skip)
-    main -> RMSNorm#9(dim)
-    RMSNorm#9(dim) -> Linear#10(dim, (dim * 4))
-    Linear#10(dim, (dim * 4)) -> SiLU#11()
-    SiLU#11() -> Linear#12((dim * 4), dim)
-    Linear#12((dim * 4), dim) -> processed
-    (processed, skip) -> Add#13()
-    Add#13() -> out
+    in -> (main, skip)
+    main -> RMSNorm#6(dim)
+    RMSNorm#6(dim) -> Linear#7(dim, (dim * 4))
+    Linear#7(dim, (dim * 4)) -> SiLU#8()
+    SiLU#8() -> Linear#9((dim * 4), dim)
+    Linear#9((dim * 4), dim) -> processed
+    (processed, skip) -> Add#10()
+    Add#10() -> out
 
 neuron LayerNorm(dim):
   inputs:
@@ -114,13 +113,12 @@ neuron PostNormBlock(dim):
   outputs:
     default: [*, seq, dim]
   graph:
-    in -> Fork#4()
-    Fork#4() -> (main, skip)
-    main -> Linear#5(dim, dim)
-    Linear#5(dim, dim) -> processed
-    (processed, skip) -> Add#6()
-    Add#6() -> LayerNorm#7(dim)
-    LayerNorm#7(dim) -> out
+    in -> (main, skip)
+    main -> Linear#3(dim, dim)
+    Linear#3(dim, dim) -> processed
+    (processed, skip) -> Add#4()
+    Add#4() -> LayerNorm#5(dim)
+    LayerNorm#5(dim) -> out
 
 neuron PreNormBlock(dim):
   inputs:
@@ -128,13 +126,12 @@ neuron PreNormBlock(dim):
   outputs:
     default: [*, seq, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> LayerNorm#1(dim)
-    LayerNorm#1(dim) -> Linear#2(dim, dim)
-    Linear#2(dim, dim) -> processed
-    (processed, skip) -> Add#3()
-    Add#3() -> out
+    in -> (main, skip)
+    main -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> processed
+    (processed, skip) -> Add#2()
+    Add#2() -> out
 
 neuron RMSNorm(dim):
   inputs:

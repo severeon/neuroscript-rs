@@ -71,7 +71,7 @@ neuron ResidualBlock(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> Linear(dim, dim) -> processed
         (processed, skip) -> Add() -> out
 
@@ -80,7 +80,7 @@ neuron ThreePathProcessor(dim):
     in: [*, dim]
     out: [*, dim * 3]
     graph:
-        in -> Fork3() -> (p1, p2, p3)
+        in -> (p1, p2, p3)
         p1 -> Linear(dim, dim) -> out1
         p2 -> Linear(dim, dim) -> out2
         p3 -> Linear(dim, dim) -> out3

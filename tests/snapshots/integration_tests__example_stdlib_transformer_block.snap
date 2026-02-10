@@ -19,10 +19,10 @@ neuron FFN(dim):
   outputs:
     default: [*shape, dim]
   graph:
-    in -> Linear#8(dim, (dim * 4))
-    Linear#8(dim, (dim * 4)) -> GELU#9()
-    GELU#9() -> Linear#10((dim * 4), dim)
-    Linear#10((dim * 4), dim) -> out
+    in -> Linear#6(dim, (dim * 4))
+    Linear#6(dim, (dim * 4)) -> GELU#7()
+    GELU#7() -> Linear#8((dim * 4), dim)
+    Linear#8((dim * 4), dim) -> out
 
 neuron Fork:
   inputs:
@@ -71,17 +71,15 @@ neuron TransformerBlock(dim, num_heads):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (attn_main, attn_skip)
-    attn_main -> LayerNorm#1(dim)
-    LayerNorm#1(dim) -> MultiHeadSelfAttention#2(dim, num_heads)
-    MultiHeadSelfAttention#2(dim, num_heads) -> attn_out
-    (attn_out, attn_skip) -> Add#3()
-    Add#3() -> attn_residual
-    attn_residual -> Fork#4()
-    Fork#4() -> (ffn_main, ffn_skip)
-    ffn_main -> LayerNorm#5(dim)
-    LayerNorm#5(dim) -> FFN#6(dim)
-    FFN#6(dim) -> ffn_out
-    (ffn_out, ffn_skip) -> Add#7()
-    Add#7() -> out
+    in -> (attn_main, attn_skip)
+    attn_main -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
+    MultiHeadSelfAttention#1(dim, num_heads) -> attn_out
+    (attn_out, attn_skip) -> Add#2()
+    Add#2() -> attn_residual
+    attn_residual -> (ffn_main, ffn_skip)
+    ffn_main -> LayerNorm#3(dim)
+    LayerNorm#3(dim) -> FFN#4(dim)
+    FFN#4(dim) -> ffn_out
+    (ffn_out, ffn_skip) -> Add#5()
+    Add#5() -> out

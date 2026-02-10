@@ -72,16 +72,14 @@ neuron NestedResidual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#12()
-    Fork#12() -> (outer_main, outer_skip)
-    outer_main -> Fork#13()
-    Fork#13() -> (inner_main, inner_skip)
-    inner_main -> Linear#14(dim, dim)
-    Linear#14(dim, dim) -> inner_processed
-    (inner_processed, inner_skip) -> Add#15()
-    Add#15() -> inner_sum
-    (inner_sum, outer_skip) -> Add#16()
-    Add#16() -> out
+    in -> (outer_main, outer_skip)
+    outer_main -> (inner_main, inner_skip)
+    inner_main -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> inner_processed
+    (inner_processed, inner_skip) -> Add#10()
+    Add#10() -> inner_sum
+    (inner_sum, outer_skip) -> Add#11()
+    Add#11() -> out
 
 neuron ParallelProcessing(dim):
   inputs:
@@ -89,16 +87,15 @@ neuron ParallelProcessing(dim):
   outputs:
     default: [*, (dim * 3)]
   graph:
-    in -> Fork3#7()
-    Fork3#7() -> (path1, path2, path3)
-    path1 -> Linear#8(dim, dim)
-    Linear#8(dim, dim) -> p1
-    path2 -> Linear#9(dim, dim)
-    Linear#9(dim, dim) -> p2
-    path3 -> Linear#10(dim, dim)
-    Linear#10(dim, dim) -> p3
-    (p1, p2, p3) -> Concat#11()
-    Concat#11() -> out
+    in -> (path1, path2, path3)
+    path1 -> Linear#5(dim, dim)
+    Linear#5(dim, dim) -> p1
+    path2 -> Linear#6(dim, dim)
+    Linear#6(dim, dim) -> p2
+    path3 -> Linear#7(dim, dim)
+    Linear#7(dim, dim) -> p3
+    (p1, p2, p3) -> Concat#8()
+    Concat#8() -> out
 
 neuron PreActivationResidual(dim):
   inputs:
@@ -106,15 +103,14 @@ neuron PreActivationResidual(dim):
   outputs:
     default: [batch, dim]
   graph:
-    in -> Fork#17()
-    Fork#17() -> (main, skip)
-    main -> LayerNorm#18(dim)
-    LayerNorm#18(dim) -> Linear#19(dim, (dim * 4))
-    Linear#19(dim, (dim * 4)) -> GELU#20()
-    GELU#20() -> Linear#21((dim * 4), dim)
-    Linear#21((dim * 4), dim) -> processed
-    (processed, skip) -> Add#22()
-    Add#22() -> out
+    in -> (main, skip)
+    main -> LayerNorm#12(dim)
+    LayerNorm#12(dim) -> Linear#13(dim, (dim * 4))
+    Linear#13(dim, (dim * 4)) -> GELU#14()
+    GELU#14() -> Linear#15((dim * 4), dim)
+    Linear#15((dim * 4), dim) -> processed
+    (processed, skip) -> Add#16()
+    Add#16() -> out
 
 neuron ResidualBlock(dim):
   inputs:
@@ -122,14 +118,13 @@ neuron ResidualBlock(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#2()
-    Fork#2() -> (main, skip)
-    main -> Linear#3(dim, (dim * 4))
-    Linear#3(dim, (dim * 4)) -> GELU#4()
-    GELU#4() -> Linear#5((dim * 4), dim)
-    Linear#5((dim * 4), dim) -> processed
-    (processed, skip) -> Add#6()
-    Add#6() -> out
+    in -> (main, skip)
+    main -> Linear#1(dim, (dim * 4))
+    Linear#1(dim, (dim * 4)) -> GELU#2()
+    GELU#2() -> Linear#3((dim * 4), dim)
+    Linear#3((dim * 4), dim) -> processed
+    (processed, skip) -> Add#4()
+    Add#4() -> out
 
 neuron SimpleFork:
   inputs:
@@ -156,7 +151,6 @@ neuron UnpackExample(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> Linear#1(dim, dim)
-    Linear#1(dim, dim) -> out
+    in -> (main, skip)
+    main -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> out

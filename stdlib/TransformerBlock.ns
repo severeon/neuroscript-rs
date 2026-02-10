@@ -26,7 +26,7 @@ neuron TransformerBlock(dim, num_heads, d_ff):
     out: [batch, seq, dim]
     graph:
         # First residual-attention with pre-norm
-        in -> Fork() -> (skip1, attn_path)
+        in -> (skip1, attn_path)
 
         attn_path ->
             LayerNorm(dim)
@@ -38,7 +38,7 @@ neuron TransformerBlock(dim, num_heads, d_ff):
         (skip1, attn_out) -> Add() -> attn_residual
 
         # Second residual-forward with pre-norm
-        attn_residual -> Fork() -> (skip2, ffn_path)
+        attn_residual -> (skip2, ffn_path)
 
         ffn_path ->
             LayerNorm(dim)

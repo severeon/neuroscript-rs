@@ -19,13 +19,12 @@ neuron AttentionBlock(dim, num_heads):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> LayerNorm#1(dim)
-    LayerNorm#1(dim) -> MultiHeadSelfAttention#2(dim, num_heads)
-    MultiHeadSelfAttention#2(dim, num_heads) -> processed
-    (processed, skip) -> Add#3()
-    Add#3() -> out
+    in -> (main, skip)
+    main -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
+    MultiHeadSelfAttention#1(dim, num_heads) -> processed
+    (processed, skip) -> Add#2()
+    Add#2() -> out
 
 neuron Fork:
   inputs:

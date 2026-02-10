@@ -38,6 +38,6 @@ neuron Residual(dim):
   in: [*, dim]
   out: [*, dim]
   graph:
-    in -> Fork() -> (main, skip)
+    in -> (main, skip)
     main -> MLP(dim) -> processed
     (processed, skip) -> Add() -> out

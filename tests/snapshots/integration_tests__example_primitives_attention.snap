@@ -20,16 +20,15 @@ neuron CrossAttentionBlock(d_model):
   outputs:
     default: [batch, tgt_seq, d_model]
   graph:
-    query -> Linear#4(d_model, d_model)
-    Linear#4(d_model, d_model) -> q
-    memory -> Fork#5()
-    Fork#5() -> (k_path, v_path)
-    k_path -> Linear#6(d_model, d_model)
-    Linear#6(d_model, d_model) -> k
-    v_path -> Linear#7(d_model, d_model)
-    Linear#7(d_model, d_model) -> v
-    (q, k, v) -> ScaledDotProductAttention#8(d_model)
-    ScaledDotProductAttention#8(d_model) -> out
+    query -> Linear#3(d_model, d_model)
+    Linear#3(d_model, d_model) -> q
+    memory -> (k_path, v_path)
+    k_path -> Linear#4(d_model, d_model)
+    Linear#4(d_model, d_model) -> k
+    v_path -> Linear#5(d_model, d_model)
+    Linear#5(d_model, d_model) -> v
+    (q, k, v) -> ScaledDotProductAttention#6(d_model)
+    ScaledDotProductAttention#6(d_model) -> out
 
 neuron Fork:
   inputs:
@@ -78,13 +77,12 @@ neuron PostNormAttention(dim, num_heads):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#13()
-    Fork#13() -> (main, skip)
-    main -> MultiHeadSelfAttention#14(dim, num_heads)
-    MultiHeadSelfAttention#14(dim, num_heads) -> attn_out
-    (attn_out, skip) -> Add#15()
-    Add#15() -> LayerNorm#16(dim)
-    LayerNorm#16(dim) -> out
+    in -> (main, skip)
+    main -> MultiHeadSelfAttention#10(dim, num_heads)
+    MultiHeadSelfAttention#10(dim, num_heads) -> attn_out
+    (attn_out, skip) -> Add#11()
+    Add#11() -> LayerNorm#12(dim)
+    LayerNorm#12(dim) -> out
 
 neuron PreNormAttention(d_model, num_heads):
   inputs:
@@ -92,13 +90,12 @@ neuron PreNormAttention(d_model, num_heads):
   outputs:
     default: [batch, seq, d_model]
   graph:
-    in -> Fork#9()
-    Fork#9() -> (main, skip)
-    main -> LayerNorm#10(d_model)
-    LayerNorm#10(d_model) -> MultiHeadSelfAttention#11(d_model, num_heads)
-    MultiHeadSelfAttention#11(d_model, num_heads) -> attn_out
-    (attn_out, skip) -> Add#12()
-    Add#12() -> out
+    in -> (main, skip)
+    main -> LayerNorm#7(d_model)
+    LayerNorm#7(d_model) -> MultiHeadSelfAttention#8(d_model, num_heads)
+    MultiHeadSelfAttention#8(d_model, num_heads) -> attn_out
+    (attn_out, skip) -> Add#9()
+    Add#9() -> out
 
 neuron ScaledDotProductAttention(dim):
   inputs:
@@ -116,13 +113,12 @@ neuron SelfAttentionBlock(d_model, num_heads):
   outputs:
     default: [batch, seq, d_model]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> LayerNorm#1(d_model)
-    LayerNorm#1(d_model) -> MultiHeadSelfAttention#2(d_model, num_heads)
-    MultiHeadSelfAttention#2(d_model, num_heads) -> processed
-    (processed, skip) -> Add#3()
-    Add#3() -> out
+    in -> (main, skip)
+    main -> LayerNorm#0(d_model)
+    LayerNorm#0(d_model) -> MultiHeadSelfAttention#1(d_model, num_heads)
+    MultiHeadSelfAttention#1(d_model, num_heads) -> processed
+    (processed, skip) -> Add#2()
+    Add#2() -> out
 
 neuron TransformerBlock(dim, num_heads):
   inputs:
@@ -130,19 +126,17 @@ neuron TransformerBlock(dim, num_heads):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#17()
-    Fork#17() -> (attn_main, attn_skip)
-    attn_main -> LayerNorm#18(dim)
-    LayerNorm#18(dim) -> MultiHeadSelfAttention#19(dim, num_heads)
-    MultiHeadSelfAttention#19(dim, num_heads) -> attn_out
-    (attn_out, attn_skip) -> Add#20()
-    Add#20() -> attn_residual
-    attn_residual -> Fork#21()
-    Fork#21() -> (ffn_main, ffn_skip)
-    ffn_main -> LayerNorm#22(dim)
-    LayerNorm#22(dim) -> Linear#23(dim, (dim * 4))
-    Linear#23(dim, (dim * 4)) -> GELU#24()
-    GELU#24() -> Linear#25((dim * 4), dim)
-    Linear#25((dim * 4), dim) -> ffn_out
-    (ffn_out, ffn_skip) -> Add#26()
-    Add#26() -> out
+    in -> (attn_main, attn_skip)
+    attn_main -> LayerNorm#13(dim)
+    LayerNorm#13(dim) -> MultiHeadSelfAttention#14(dim, num_heads)
+    MultiHeadSelfAttention#14(dim, num_heads) -> attn_out
+    (attn_out, attn_skip) -> Add#15()
+    Add#15() -> attn_residual
+    attn_residual -> (ffn_main, ffn_skip)
+    ffn_main -> LayerNorm#16(dim)
+    LayerNorm#16(dim) -> Linear#17(dim, (dim * 4))
+    Linear#17(dim, (dim * 4)) -> GELU#18()
+    GELU#18() -> Linear#19((dim * 4), dim)
+    Linear#19((dim * 4), dim) -> ffn_out
+    (ffn_out, ffn_skip) -> Add#20()
+    Add#20() -> out

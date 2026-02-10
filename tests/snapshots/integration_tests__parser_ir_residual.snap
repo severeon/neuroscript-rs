@@ -58,9 +58,8 @@ neuron Residual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#3()
-    Fork#3() -> (main, skip)
-    main -> MLP#4(dim)
-    MLP#4(dim) -> processed
-    (processed, skip) -> Add#5()
-    Add#5() -> out
+    in -> (main, skip)
+    main -> MLP#3(dim)
+    MLP#3(dim) -> processed
+    (processed, skip) -> Add#4()
+    Add#4() -> out

@@ -1,30 +1,34 @@
 # Category: Tutorials
-# Purpose: Demonstrate Fork primitive, tuple unpacking, and residual patterns
+# Purpose: Demonstrate implicit fork (tuple unpacking) and residual patterns
 # Doc reference: website/docs/tutorials/fork-join.mdx
+#
+# In NeuroScript v0.3.0+, forking is implicit: flowing a single output
+# into a tuple automatically duplicates the tensor. No explicit Fork()
+# or Fork3() call is needed.
 
-# Example 1: Basic Fork usage
+# Example 1: Basic Fork primitive (still available as a primitive)
 neuron SimpleFork:
     in: [*, dim]
     out a: [*, dim]
     out b: [*, dim]
     impl: core,builtin/Fork
 
-# Example 2: Tuple unpacking with Fork
+# Example 2: Implicit fork with tuple unpacking
 neuron UnpackExample(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        # Fork creates two outputs, tuple unpacking names them
-        in -> Fork() -> (main, skip)
+        # Implicit fork: flowing into a tuple duplicates the tensor (v0.3.0+)
+        in -> (main, skip)
         main -> Linear(dim, dim) -> out
 
-# Example 3: Classic residual connection (fork + add pattern)
+# Example 3: Classic residual connection (implicit fork + add pattern)
 neuron ResidualBlock(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        # Fork the input
-        in -> Fork() -> (main, skip)
+        # Implicit fork: the input is duplicated into main and skip
+        in -> (main, skip)
 
         # Process main path
         main ->
@@ -48,8 +52,8 @@ neuron ParallelProcessing(dim):
     in: [*, dim]
     out: [*, dim * 3]
     graph:
-        # Split into three paths
-        in -> Fork3() -> (path1, path2, path3)
+        # Implicit 3-way fork: flowing into a 3-tuple duplicates the tensor (v0.3.0+)
+        in -> (path1, path2, path3)
 
         # Process each independently
         path1 -> Linear(dim, dim) -> p1
@@ -59,28 +63,28 @@ neuron ParallelProcessing(dim):
         # Combine results
         (p1, p2, p3) -> Concat() -> out
 
-# Example 5: Nested fork pattern
+# Example 5: Nested implicit fork pattern
 neuron NestedResidual(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        # Outer residual
-        in -> Fork() -> (outer_main, outer_skip)
+        # Outer residual (implicit fork)
+        in -> (outer_main, outer_skip)
 
-        # Inner residual on main path
-        outer_main -> Fork() -> (inner_main, inner_skip)
+        # Inner residual on main path (implicit fork)
+        outer_main -> (inner_main, inner_skip)
         inner_main -> Linear(dim, dim) -> inner_processed
         (inner_processed, inner_skip) -> Add() -> inner_sum
 
         # Outer add
         (inner_sum, outer_skip) -> Add() -> out
 
-# Example 6: Pre-activation residual (fork before normalization)
+# Example 6: Pre-activation residual (implicit fork before normalization)
 neuron PreActivationResidual(dim):
     in: [batch, dim]
     out: [batch, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
 
         main ->
             LayerNorm(dim)

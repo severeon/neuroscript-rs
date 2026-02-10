@@ -9,7 +9,7 @@ neuron AttentionBlock(dim, num_heads):
     in: [batch, seq, dim]
     out: [batch, seq, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main ->
             LayerNorm(dim)
             MultiHeadSelfAttention(dim, num_heads)

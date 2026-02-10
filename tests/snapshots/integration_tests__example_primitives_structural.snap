@@ -19,9 +19,9 @@ neuron ClassificationHead(feature_dim, num_classes):
   outputs:
     default: [batch, num_classes]
   graph:
-    in -> Flatten#8()
-    Flatten#8() -> Linear#9(((h * w) * feature_dim), num_classes)
-    Linear#9(((h * w) * feature_dim), num_classes) -> out
+    in -> Flatten#6()
+    Flatten#6() -> Linear#7(((h * w) * feature_dim), num_classes)
+    Linear#7(((h * w) * feature_dim), num_classes) -> out
 
 neuron Concat:
   inputs:
@@ -39,8 +39,8 @@ neuron ConditionalProcessor:
     default: [*, dim]
   graph:
     in -> match:
-      [*, d] where (d > 512): Linear#10(d, 512) -> out
-      [*, d]: Identity#11() -> out
+      [*, d] where (d > 512): Linear#8(d, 512) -> out
+      [*, d]: Identity#9() -> out
 
 neuron Flatten:
   inputs:
@@ -107,12 +107,11 @@ neuron ResidualBlock(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> Linear#1(dim, dim)
-    Linear#1(dim, dim) -> processed
-    (processed, skip) -> Add#2()
-    Add#2() -> out
+    in -> (main, skip)
+    main -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> processed
+    (processed, skip) -> Add#1()
+    Add#1() -> out
 
 neuron Slice(dim, start, end):
   inputs:
@@ -136,16 +135,15 @@ neuron ThreePathProcessor(dim):
   outputs:
     default: [*, (dim * 3)]
   graph:
-    in -> Fork3#3()
-    Fork3#3() -> (p1, p2, p3)
-    p1 -> Linear#4(dim, dim)
-    Linear#4(dim, dim) -> out1
-    p2 -> Linear#5(dim, dim)
-    Linear#5(dim, dim) -> out2
-    p3 -> Linear#6(dim, dim)
-    Linear#6(dim, dim) -> out3
-    (out1, out2, out3) -> Concat#7()
-    Concat#7() -> out
+    in -> (p1, p2, p3)
+    p1 -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> out1
+    p2 -> Linear#3(dim, dim)
+    Linear#3(dim, dim) -> out2
+    p3 -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> out3
+    (out1, out2, out3) -> Concat#5()
+    Concat#5() -> out
 
 neuron Transpose(dim0, dim1):
   inputs:

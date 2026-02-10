@@ -42,7 +42,7 @@ neuron GatedFFN(dim):
     in: [*shape, dim]
     out: [*shape, dim]
     graph:
-        in -> Fork() -> (gate_path, value_path)
+        in -> (gate_path, value_path)
 
         gate_path ->
             Linear(dim, dim * 4)
@@ -60,7 +60,7 @@ neuron TransformerFFNBlock(dim):
     in: [*shape, dim]
     out: [*shape, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main ->
             LayerNorm(dim)
             FFN(dim)

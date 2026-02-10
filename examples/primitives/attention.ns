@@ -21,7 +21,7 @@ neuron SelfAttentionBlock(d_model, num_heads):
     in: [batch, seq, d_model]
     out: [batch, seq, d_model]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main ->
             LayerNorm(d_model)
             MultiHeadSelfAttention(d_model, num_heads)
@@ -39,7 +39,7 @@ neuron CrossAttentionBlock(d_model):
         query -> Linear(d_model, d_model) -> q
 
         # Project key and value from memory
-        memory -> Fork() -> (k_path, v_path)
+        memory -> (k_path, v_path)
         k_path -> Linear(d_model, d_model) -> k
         v_path -> Linear(d_model, d_model) -> v
 
@@ -51,7 +51,7 @@ neuron PreNormAttention(d_model, num_heads):
     in: [batch, seq, d_model]
     out: [batch, seq, d_model]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main ->
             LayerNorm(d_model)
             MultiHeadSelfAttention(d_model, num_heads)
@@ -63,7 +63,7 @@ neuron PostNormAttention(dim, num_heads):
     in: [batch, seq, dim]
     out: [batch, seq, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> MultiHeadSelfAttention(dim, num_heads) -> attn_out
         (attn_out, skip) -> Add() -> LayerNorm(dim) -> out
 
@@ -73,7 +73,7 @@ neuron TransformerBlock(dim, num_heads):
     out: [batch, seq, dim]
     graph:
         # Attention sublayer
-        in -> Fork() -> (attn_main, attn_skip)
+        in -> (attn_main, attn_skip)
         attn_main ->
             LayerNorm(dim)
             MultiHeadSelfAttention(dim, num_heads)
@@ -81,7 +81,7 @@ neuron TransformerBlock(dim, num_heads):
         (attn_out, attn_skip) -> Add() -> attn_residual
 
         # FFN sublayer
-        attn_residual -> Fork() -> (ffn_main, ffn_skip)
+        attn_residual -> (ffn_main, ffn_skip)
         ffn_main ->
             LayerNorm(dim)
             Linear(dim, dim * 4)

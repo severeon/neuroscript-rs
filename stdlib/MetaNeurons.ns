@@ -3,8 +3,8 @@
 # These neurons orchestrate other neurons, providing structural
 # composition patterns for common neural network structures.
 #
-# NOTE: Simplified version - advanced features like Fork() with
-# tuple unpacking require implementation of primitive port signatures.
+# NOTE: Simplified version - advanced features like implicit fork
+# require implementation of primitive port signatures.
 # See primitives.ns for Identity() and other routing operations.
 
 /// Parallel FFN branches

@@ -47,7 +47,7 @@ neuron ResidualAdd(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> Linear(dim, dim) -> processed
         (processed, skip) -> Add() -> out
 
@@ -56,7 +56,7 @@ neuron GatedUnit(dim, hidden_dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (gate_path, value_path)
+        in -> (gate_path, value_path)
         gate_path -> Linear(dim, hidden_dim) -> SiLU() -> gate
         value_path -> Linear(dim, hidden_dim) -> value
         (gate, value) -> Multiply() -> Linear(hidden_dim, dim) -> out
@@ -86,7 +86,7 @@ neuron WeightedResidual(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> Linear(dim, dim) -> processed
         processed -> Scale(dim) -> scaled
         (scaled, skip) -> Add() -> out
@@ -96,7 +96,7 @@ neuron ComplexOperation(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (path1, path2)
+        in -> (path1, path2)
 
         # Path 1: Linear + bias + scale
         path1 ->

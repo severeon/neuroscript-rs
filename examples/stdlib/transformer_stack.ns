@@ -18,14 +18,14 @@ neuron TransformerBlock(dim, num_heads):
     in: [batch, seq, dim]
     out: [batch, seq, dim]
     graph:
-        in -> Fork() -> (attn_main, attn_skip)
+        in -> (attn_main, attn_skip)
         attn_main ->
             LayerNorm(dim)
             MultiHeadSelfAttention(dim, num_heads)
             attn_out
         (attn_out, attn_skip) -> Add() -> attn_residual
 
-        attn_residual -> Fork() -> (ffn_main, ffn_skip)
+        attn_residual -> (ffn_main, ffn_skip)
         ffn_main ->
             LayerNorm(dim)
             Linear(dim, dim * 4)

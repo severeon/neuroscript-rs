@@ -52,10 +52,10 @@ neuron MLP(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Linear#23(dim, (dim * 4))
-    Linear#23(dim, (dim * 4)) -> GELU#24()
-    GELU#24() -> Linear#25((dim * 4), dim)
-    Linear#25((dim * 4), dim) -> out
+    in -> Linear#19(dim, (dim * 4))
+    Linear#19(dim, (dim * 4)) -> GELU#20()
+    GELU#20() -> Linear#21((dim * 4), dim)
+    Linear#21((dim * 4), dim) -> out
 
 neuron PostNormResidual(dim):
   inputs:
@@ -63,15 +63,14 @@ neuron PostNormResidual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#14()
-    Fork#14() -> (main, skip)
-    main -> Linear#15(dim, (dim * 4))
-    Linear#15(dim, (dim * 4)) -> GELU#16()
-    GELU#16() -> Linear#17((dim * 4), dim)
-    Linear#17((dim * 4), dim) -> processed
-    (processed, skip) -> Add#18()
-    Add#18() -> LayerNorm#19(dim)
-    LayerNorm#19(dim) -> out
+    in -> (main, skip)
+    main -> Linear#11(dim, (dim * 4))
+    Linear#11(dim, (dim * 4)) -> GELU#12()
+    GELU#12() -> Linear#13((dim * 4), dim)
+    Linear#13((dim * 4), dim) -> processed
+    (processed, skip) -> Add#14()
+    Add#14() -> LayerNorm#15(dim)
+    LayerNorm#15(dim) -> out
 
 neuron PreNormResidual(dim):
   inputs:
@@ -79,15 +78,14 @@ neuron PreNormResidual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#8()
-    Fork#8() -> (main, skip)
-    main -> LayerNorm#9(dim)
-    LayerNorm#9(dim) -> Linear#10(dim, (dim * 4))
-    Linear#10(dim, (dim * 4)) -> GELU#11()
-    GELU#11() -> Linear#12((dim * 4), dim)
-    Linear#12((dim * 4), dim) -> processed
-    (processed, skip) -> Add#13()
-    Add#13() -> out
+    in -> (main, skip)
+    main -> LayerNorm#6(dim)
+    LayerNorm#6(dim) -> Linear#7(dim, (dim * 4))
+    Linear#7(dim, (dim * 4)) -> GELU#8()
+    GELU#8() -> Linear#9((dim * 4), dim)
+    Linear#9((dim * 4), dim) -> processed
+    (processed, skip) -> Add#10()
+    Add#10() -> out
 
 neuron Residual(dim):
   inputs:
@@ -95,14 +93,13 @@ neuron Residual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> Linear#1(dim, (dim * 4))
-    Linear#1(dim, (dim * 4)) -> GELU#2()
-    GELU#2() -> Linear#3((dim * 4), dim)
-    Linear#3((dim * 4), dim) -> processed
-    (processed, skip) -> Add#4()
-    Add#4() -> out
+    in -> (main, skip)
+    main -> Linear#0(dim, (dim * 4))
+    Linear#0(dim, (dim * 4)) -> GELU#1()
+    GELU#1() -> Linear#2((dim * 4), dim)
+    Linear#2((dim * 4), dim) -> processed
+    (processed, skip) -> Add#3()
+    Add#3() -> out
 
 neuron ResidualMLP(dim):
   inputs:
@@ -110,12 +107,11 @@ neuron ResidualMLP(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#5()
-    Fork#5() -> (main, skip)
-    main -> MLP#6(dim)
-    MLP#6(dim) -> processed
-    (processed, skip) -> Add#7()
-    Add#7() -> out
+    in -> (main, skip)
+    main -> MLP#4(dim)
+    MLP#4(dim) -> processed
+    (processed, skip) -> Add#5()
+    Add#5() -> out
 
 neuron StackedResiduals(dim, depth):
   inputs:
@@ -123,7 +119,7 @@ neuron StackedResiduals(dim, depth):
   outputs:
     default: [*, dim]
   graph:
-    in -> Residual#20(dim)
-    Residual#20(dim) -> Residual#21(dim)
-    Residual#21(dim) -> Residual#22(dim)
-    Residual#22(dim) -> out
+    in -> Residual#16(dim)
+    Residual#16(dim) -> Residual#17(dim)
+    Residual#17(dim) -> Residual#18(dim)
+    Residual#18(dim) -> out

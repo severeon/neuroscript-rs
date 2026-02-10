@@ -15,7 +15,7 @@ When writing or generating NeuroScript (.ns) files:
 - Binding blocks use `context:` keyword (not `let:`), with optional annotations: `@lazy`, `@static`, `@global`
 - Recursive bindings require `@lazy` annotation with arguments that change (e.g., `depth - 1`)
 - Only one variadic dimension per shape (e.g., `[*shape, dim]` works, `[*a, *b]` does not)
-- Fork (2-way) and Fork3 (3-way) are the available split primitives — no Fork4+
+- Implicit fork is preferred for splitting: `in -> (a, b, c)` — any single output → N-way tuple. Explicit Fork/Fork3 only for named port access
 - Shape dimension expressions support +, -, *, / but solver handles only simple single-unknown equations
 - Always validate generated .ns files with the CLI before considering work complete
 
@@ -331,7 +331,8 @@ Two types:
 
 - Simple: `in -> Linear(512, 256) -> out`
 - Multi-line: Indentation creates pipeline continuation
-- Tuple unpacking: `in -> Fork() -> (main, skip)` creates two named references
+- Implicit fork (preferred): `in -> (main, skip)` — single output auto-replicates to N tuple bindings
+- Explicit Fork (for named ports only): `in -> Fork() -> f` then `f.left`, `f.right`
 - Port access: `main -> MLP(dim) -> processed`
 
 ### Shapes
@@ -350,13 +351,19 @@ Two types:
 - Keywords are defined as pest rules with `!ident_cont` negative lookahead to prevent partial matches
 - Indentation significance is handled during AST building, not in the grammar itself
 
-### Tuple Unpacking Grammar
+### Tuple Unpacking & Implicit Fork
 
 ```rust
-// WRONG: Tuple unpacking only works for port references in connections
-in -> Fork() -> (a, b, c)  // Creates references a, b, c
+// Implicit fork (v0.3.0+) — preferred for splitting tensors
+in -> (a, b, c)        // Single output auto-replicates to all bindings
+in -> (main, skip)     // Any number of outputs supported
 
-// RIGHT: Not for inline calls
+// Explicit Fork — only when you need named port access
+in -> Fork() -> f
+f.left -> ...
+f.right -> ...
+
+// NOT for inline calls
 Linear(dim, dim * 4)  // Call with args, not tuple
 ```
 

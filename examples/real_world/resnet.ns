@@ -38,7 +38,7 @@ neuron ResidualBlock(channels):
     in: [*, channels, h, w]
     out: [*, channels, h, w]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
 
         main ->
             Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)

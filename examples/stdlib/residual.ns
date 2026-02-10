@@ -10,7 +10,7 @@ neuron Residual(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> Linear(dim, dim * 4) -> GELU() -> Linear(dim * 4, dim) -> processed
         (processed, skip) -> Add() -> out
 
@@ -19,7 +19,7 @@ neuron ResidualMLP(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> MLP(dim) -> processed
         (processed, skip) -> Add() -> out
 
@@ -28,7 +28,7 @@ neuron PreNormResidual(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main ->
             LayerNorm(dim)
             Linear(dim, dim * 4)
@@ -42,7 +42,7 @@ neuron PostNormResidual(dim):
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> Fork() -> (main, skip)
+        in -> (main, skip)
         main -> Linear(dim, dim * 4) -> GELU() -> Linear(dim * 4, dim) -> processed
         (processed, skip) -> Add() -> LayerNorm(dim) -> out
 

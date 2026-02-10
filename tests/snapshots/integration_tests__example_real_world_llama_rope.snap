@@ -10,20 +10,18 @@ neuron LlamaBlock(dim, num_heads, intermediate_size):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#10()
-    Fork#10() -> (skip1, norm1)
-    norm1 -> RMSNorm#11(dim)
-    RMSNorm#11(dim) -> LlamaRotaryAttention#12(dim, num_heads)
-    LlamaRotaryAttention#12(dim, num_heads) -> attn_out
-    (skip1, attn_out) -> Add#13()
-    Add#13() -> residual1
-    residual1 -> Fork#14()
-    Fork#14() -> (skip2, norm2)
-    norm2 -> RMSNorm#15(dim)
-    RMSNorm#15(dim) -> SwiGLU#16(dim, intermediate_size)
-    SwiGLU#16(dim, intermediate_size) -> ffn_out
-    (skip2, ffn_out) -> Add#17()
-    Add#17() -> out
+    in -> (skip1, norm1)
+    norm1 -> RMSNorm#9(dim)
+    RMSNorm#9(dim) -> LlamaRotaryAttention#10(dim, num_heads)
+    LlamaRotaryAttention#10(dim, num_heads) -> attn_out
+    (skip1, attn_out) -> Add#11()
+    Add#11() -> residual1
+    residual1 -> (skip2, norm2)
+    norm2 -> RMSNorm#12(dim)
+    RMSNorm#12(dim) -> SwiGLU#13(dim, intermediate_size)
+    SwiGLU#13(dim, intermediate_size) -> ffn_out
+    (skip2, ffn_out) -> Add#14()
+    Add#14() -> out
 
 neuron LlamaRotaryAttention(dim, num_heads):
   inputs:
@@ -47,11 +45,11 @@ neuron MiniLlama(vocab_size, dim, num_heads, layers):
   outputs:
     default: [batch, seq, vocab_size]
   graph:
-    in -> Embedding#18(vocab_size, dim)
-    Embedding#18(vocab_size, dim) -> LlamaBlock#19(dim, num_heads, (dim * 4))
-    LlamaBlock#19(dim, num_heads, (dim * 4)) -> RMSNorm#20(dim)
-    RMSNorm#20(dim) -> Linear#21(dim, vocab_size)
-    Linear#21(dim, vocab_size) -> out
+    in -> Embedding#15(vocab_size, dim)
+    Embedding#15(vocab_size, dim) -> LlamaBlock#16(dim, num_heads, (dim * 4))
+    LlamaBlock#16(dim, num_heads, (dim * 4)) -> RMSNorm#17(dim)
+    RMSNorm#17(dim) -> Linear#18(dim, vocab_size)
+    Linear#18(dim, vocab_size) -> out
 
 neuron SwiGLU(dim, hidden_dim):
   inputs:
@@ -59,14 +57,13 @@ neuron SwiGLU(dim, hidden_dim):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#4()
-    Fork#4() -> (gate_path, val_path)
-    gate_path -> Linear#5(dim, hidden_dim)
-    Linear#5(dim, hidden_dim) -> SiLU#6()
-    SiLU#6() -> gate
-    val_path -> Linear#7(dim, hidden_dim)
-    Linear#7(dim, hidden_dim) -> val
-    (gate, val) -> Multiply#8()
-    Multiply#8() -> hidden
-    hidden -> Linear#9(hidden_dim, dim)
-    Linear#9(hidden_dim, dim) -> out
+    in -> (gate_path, val_path)
+    gate_path -> Linear#4(dim, hidden_dim)
+    Linear#4(dim, hidden_dim) -> SiLU#5()
+    SiLU#5() -> gate
+    val_path -> Linear#6(dim, hidden_dim)
+    Linear#6(dim, hidden_dim) -> val
+    (gate, val) -> Multiply#7()
+    Multiply#7() -> hidden
+    hidden -> Linear#8(hidden_dim, dim)
+    Linear#8(hidden_dim, dim) -> out

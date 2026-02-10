@@ -76,19 +76,19 @@ neuron ResNet18(num_classes):
   outputs:
     default: [*, num_classes]
   graph:
-    in -> ResNetStem#12(3, 64)
-    ResNetStem#12(3, 64) -> stem_out
-    stem_out -> ResidualBlock#13(64)
-    ResidualBlock#13(64) -> stage1
-    stage1 -> ResidualBlock#14(64)
-    ResidualBlock#14(64) -> stage2
-    stage2 -> ResidualBlock#15(64)
-    ResidualBlock#15(64) -> stage3
-    stage3 -> ResidualBlock#16(64)
-    ResidualBlock#16(64) -> stage4
-    stage4 -> GlobalAvgPool#17()
-    GlobalAvgPool#17() -> Linear#18(64, num_classes)
-    Linear#18(64, num_classes) -> out
+    in -> ResNetStem#11(3, 64)
+    ResNetStem#11(3, 64) -> stem_out
+    stem_out -> ResidualBlock#12(64)
+    ResidualBlock#12(64) -> stage1
+    stage1 -> ResidualBlock#13(64)
+    ResidualBlock#13(64) -> stage2
+    stage2 -> ResidualBlock#14(64)
+    ResidualBlock#14(64) -> stage3
+    stage3 -> ResidualBlock#15(64)
+    ResidualBlock#15(64) -> stage4
+    stage4 -> GlobalAvgPool#16()
+    GlobalAvgPool#16() -> Linear#17(64, num_classes)
+    Linear#17(64, num_classes) -> out
 
 neuron ResNetStem(in_channels, out_channels):
   inputs:
@@ -96,11 +96,11 @@ neuron ResNetStem(in_channels, out_channels):
   outputs:
     default: [*, out_channels, h_out, w_out]
   graph:
-    in -> Conv2d#8(in_channels, out_channels, kernel_size=7, stride=2, padding=3)
-    Conv2d#8(in_channels, out_channels, kernel_size=7, stride=2, padding=3) -> BatchNorm#9(out_channels)
-    BatchNorm#9(out_channels) -> ReLU#10()
-    ReLU#10() -> MaxPool#11(kernel_size=3, stride=2)
-    MaxPool#11(kernel_size=3, stride=2) -> out
+    in -> Conv2d#7(in_channels, out_channels, kernel_size=7, stride=2, padding=3)
+    Conv2d#7(in_channels, out_channels, kernel_size=7, stride=2, padding=3) -> BatchNorm#8(out_channels)
+    BatchNorm#8(out_channels) -> ReLU#9()
+    ReLU#9() -> MaxPool#10(kernel_size=3, stride=2)
+    MaxPool#10(kernel_size=3, stride=2) -> out
 
 neuron ResidualBlock(channels):
   inputs:
@@ -108,14 +108,13 @@ neuron ResidualBlock(channels):
   outputs:
     default: [*, channels, h, w]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> Conv2d#1(channels, channels, kernel_size=3, stride=1, padding=1)
-    Conv2d#1(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#2(channels)
-    BatchNorm#2(channels) -> ReLU#3()
-    ReLU#3() -> Conv2d#4(channels, channels, kernel_size=3, stride=1, padding=1)
-    Conv2d#4(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#5(channels)
-    BatchNorm#5(channels) -> processed
-    (processed, skip) -> Add#6()
-    Add#6() -> ReLU#7()
-    ReLU#7() -> out
+    in -> (main, skip)
+    main -> Conv2d#0(channels, channels, kernel_size=3, stride=1, padding=1)
+    Conv2d#0(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#1(channels)
+    BatchNorm#1(channels) -> ReLU#2()
+    ReLU#2() -> Conv2d#3(channels, channels, kernel_size=3, stride=1, padding=1)
+    Conv2d#3(channels, channels, kernel_size=3, stride=1, padding=1) -> BatchNorm#4(channels)
+    BatchNorm#4(channels) -> processed
+    (processed, skip) -> Add#5()
+    Add#5() -> ReLU#6()
+    ReLU#6() -> out

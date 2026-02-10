@@ -11,8 +11,8 @@ neuron AdaptiveFFN:
     default: [*shape, dim]
   graph:
     in -> match:
-      [*, *, d] where (d < 512): Linear#21(d, (d * 8)) -> GELU#22() -> Linear#23((d * 8), d) -> out
-      [*, *, d]: Linear#24(d, (d * 4)) -> GELU#25() -> Linear#26((d * 4), d) -> out
+      [*, *, d] where (d < 512): Linear#19(d, (d * 8)) -> GELU#20() -> Linear#21((d * 8), d) -> out
+      [*, *, d]: Linear#22(d, (d * 4)) -> GELU#23() -> Linear#24((d * 4), d) -> out
 
 neuron Add:
   inputs:
@@ -89,16 +89,15 @@ neuron GatedFFN(dim):
   outputs:
     default: [*shape, dim]
   graph:
-    in -> Fork#11()
-    Fork#11() -> (gate_path, value_path)
-    gate_path -> Linear#12(dim, (dim * 4))
-    Linear#12(dim, (dim * 4)) -> SiLU#13()
-    SiLU#13() -> gate
-    value_path -> Linear#14(dim, (dim * 4))
-    Linear#14(dim, (dim * 4)) -> value
-    (gate, value) -> Multiply#15()
-    Multiply#15() -> Linear#16((dim * 4), dim)
-    Linear#16((dim * 4), dim) -> out
+    in -> (gate_path, value_path)
+    gate_path -> Linear#11(dim, (dim * 4))
+    Linear#11(dim, (dim * 4)) -> SiLU#12()
+    SiLU#12() -> gate
+    value_path -> Linear#13(dim, (dim * 4))
+    Linear#13(dim, (dim * 4)) -> value
+    (gate, value) -> Multiply#14()
+    Multiply#14() -> Linear#15((dim * 4), dim)
+    Linear#15((dim * 4), dim) -> out
 
 neuron LayerNorm(dim):
   inputs:
@@ -139,10 +138,9 @@ neuron TransformerFFNBlock(dim):
   outputs:
     default: [*shape, dim]
   graph:
-    in -> Fork#17()
-    Fork#17() -> (main, skip)
-    main -> LayerNorm#18(dim)
-    LayerNorm#18(dim) -> FFN#19(dim)
-    FFN#19(dim) -> processed
-    (processed, skip) -> Add#20()
-    Add#20() -> out
+    in -> (main, skip)
+    main -> LayerNorm#16(dim)
+    LayerNorm#16(dim) -> FFN#17(dim)
+    FFN#17(dim) -> processed
+    (processed, skip) -> Add#18()
+    Add#18() -> out

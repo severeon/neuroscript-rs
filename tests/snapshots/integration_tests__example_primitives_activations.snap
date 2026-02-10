@@ -35,16 +35,15 @@ neuron GatedFFN(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#9()
-    Fork#9() -> (gate_path, value_path)
-    gate_path -> Linear#10(dim, (dim * 4))
-    Linear#10(dim, (dim * 4)) -> SiLU#11()
-    SiLU#11() -> gate
-    value_path -> Linear#12(dim, (dim * 4))
-    Linear#12(dim, (dim * 4)) -> value
-    (gate, value) -> Multiply#13()
-    Multiply#13() -> Linear#14((dim * 4), dim)
-    Linear#14((dim * 4), dim) -> out
+    in -> (gate_path, value_path)
+    gate_path -> Linear#9(dim, (dim * 4))
+    Linear#9(dim, (dim * 4)) -> SiLU#10()
+    SiLU#10() -> gate
+    value_path -> Linear#11(dim, (dim * 4))
+    Linear#11(dim, (dim * 4)) -> value
+    (gate, value) -> Multiply#12()
+    Multiply#12() -> Linear#13((dim * 4), dim)
+    Linear#13((dim * 4), dim) -> out
 
 neuron Linear(in_dim, out_dim):
   inputs:

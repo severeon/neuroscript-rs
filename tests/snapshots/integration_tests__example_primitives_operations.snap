@@ -20,8 +20,8 @@ neuron AttentionScore(dim):
   outputs:
     default: [batch, seq, seq]
   graph:
-    (query, key) -> MatMul#9()
-    MatMul#9() -> out
+    (query, key) -> MatMul#7()
+    MatMul#7() -> out
 
 neuron Bias(dim):
   inputs:
@@ -37,17 +37,16 @@ neuron ComplexOperation(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#16()
-    Fork#16() -> (path1, path2)
-    path1 -> Linear#17(dim, dim)
-    Linear#17(dim, dim) -> Bias#18(dim)
-    Bias#18(dim) -> Scale#19(dim)
-    Scale#19(dim) -> p1_out
-    path2 -> Scale#20(dim)
-    Scale#20(dim) -> p2_out
-    (p1_out, p2_out) -> Multiply#21()
-    Multiply#21() -> Add#22()
-    Add#22() -> out
+    in -> (path1, path2)
+    path1 -> Linear#13(dim, dim)
+    Linear#13(dim, dim) -> Bias#14(dim)
+    Bias#14(dim) -> Scale#15(dim)
+    Scale#15(dim) -> p1_out
+    path2 -> Scale#16(dim)
+    Scale#16(dim) -> p2_out
+    (p1_out, p2_out) -> Multiply#17()
+    Multiply#17() -> Add#18()
+    Add#18() -> out
 
 neuron Einsum(equation):
   inputs:
@@ -73,16 +72,15 @@ neuron GatedUnit(dim, hidden_dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#3()
-    Fork#3() -> (gate_path, value_path)
-    gate_path -> Linear#4(dim, hidden_dim)
-    Linear#4(dim, hidden_dim) -> SiLU#5()
-    SiLU#5() -> gate
-    value_path -> Linear#6(dim, hidden_dim)
-    Linear#6(dim, hidden_dim) -> value
-    (gate, value) -> Multiply#7()
-    Multiply#7() -> Linear#8(hidden_dim, dim)
-    Linear#8(hidden_dim, dim) -> out
+    in -> (gate_path, value_path)
+    gate_path -> Linear#2(dim, hidden_dim)
+    Linear#2(dim, hidden_dim) -> SiLU#3()
+    SiLU#3() -> gate
+    value_path -> Linear#4(dim, hidden_dim)
+    Linear#4(dim, hidden_dim) -> value
+    (gate, value) -> Multiply#5()
+    Multiply#5() -> Linear#6(hidden_dim, dim)
+    Linear#6(hidden_dim, dim) -> out
 
 neuron Linear(in_dim, out_dim):
   inputs:
@@ -98,9 +96,9 @@ neuron LinearWithBias(in_dim, out_dim):
   outputs:
     default: [*, out_dim]
   graph:
-    in -> Linear#10(in_dim, out_dim)
-    Linear#10(in_dim, out_dim) -> Bias#11(out_dim)
-    Bias#11(out_dim) -> out
+    in -> Linear#8(in_dim, out_dim)
+    Linear#8(in_dim, out_dim) -> Bias#9(out_dim)
+    Bias#9(out_dim) -> out
 
 neuron MatMul:
   inputs:
@@ -126,12 +124,11 @@ neuron ResidualAdd(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#0()
-    Fork#0() -> (main, skip)
-    main -> Linear#1(dim, dim)
-    Linear#1(dim, dim) -> processed
-    (processed, skip) -> Add#2()
-    Add#2() -> out
+    in -> (main, skip)
+    main -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> processed
+    (processed, skip) -> Add#1()
+    Add#1() -> out
 
 neuron Scale(dim):
   inputs:
@@ -155,11 +152,10 @@ neuron WeightedResidual(dim):
   outputs:
     default: [*, dim]
   graph:
-    in -> Fork#12()
-    Fork#12() -> (main, skip)
-    main -> Linear#13(dim, dim)
-    Linear#13(dim, dim) -> processed
-    processed -> Scale#14(dim)
-    Scale#14(dim) -> scaled
-    (scaled, skip) -> Add#15()
-    Add#15() -> out
+    in -> (main, skip)
+    main -> Linear#10(dim, dim)
+    Linear#10(dim, dim) -> processed
+    processed -> Scale#11(dim)
+    Scale#11(dim) -> scaled
+    (scaled, skip) -> Add#12()
+    Add#12() -> out

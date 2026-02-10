@@ -21,19 +21,17 @@ neuron TransformerBlock(dim, num_heads, d_ff):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> Fork#3()
-    Fork#3() -> (skip1, attn_path)
-    attn_path -> LayerNorm#4(dim)
-    LayerNorm#4(dim) -> MultiHeadSelfAttention#5(dim, num_heads)
-    MultiHeadSelfAttention#5(dim, num_heads) -> Dropout#6(0.1)
-    Dropout#6(0.1) -> attn_out
-    (skip1, attn_out) -> Add#7()
-    Add#7() -> attn_residual
-    attn_residual -> Fork#8()
-    Fork#8() -> (skip2, ffn_path)
-    ffn_path -> LayerNorm#9(dim)
-    LayerNorm#9(dim) -> FFN#10(dim, d_ff)
-    FFN#10(dim, d_ff) -> Dropout#11(0.1)
-    Dropout#11(0.1) -> ffn_out
-    (skip2, ffn_out) -> Add#12()
-    Add#12() -> out
+    in -> (skip1, attn_path)
+    attn_path -> LayerNorm#3(dim)
+    LayerNorm#3(dim) -> MultiHeadSelfAttention#4(dim, num_heads)
+    MultiHeadSelfAttention#4(dim, num_heads) -> Dropout#5(0.1)
+    Dropout#5(0.1) -> attn_out
+    (skip1, attn_out) -> Add#6()
+    Add#6() -> attn_residual
+    attn_residual -> (skip2, ffn_path)
+    ffn_path -> LayerNorm#7(dim)
+    LayerNorm#7(dim) -> FFN#8(dim, d_ff)
+    FFN#8(dim, d_ff) -> Dropout#9(0.1)
+    Dropout#9(0.1) -> ffn_out
+    (skip2, ffn_out) -> Add#10()
+    Add#10() -> out

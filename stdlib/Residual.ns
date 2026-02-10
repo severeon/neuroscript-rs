@@ -6,7 +6,7 @@
 # This is the fundamental building block of ResNets and Transformers.
 # Enables training of very deep networks by providing gradient shortcuts.
 #
-# NOTE: This simplified version does not use Fork() with tuple unpacking
+# NOTE: This simplified version does not use implicit fork with tuple unpacking
 # due to validator limitations with empty port signatures.
 # Full residual patterns will be added once primitives have proper
 # port definitions in the shape system.
