@@ -1,0 +1,20 @@
+/// ResNet Bottleneck Block
+/// 1x1 reduce -> 3x3 conv -> 1x1 expand with residual connection.
+/// Reference: He et al. (2015)
+neuron BottleneckBlock(channels, bottleneck):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv2d(channels, bottleneck, 1, 1, 0)
+            BatchNorm(bottleneck)
+            ReLU()
+            Conv2d(bottleneck, bottleneck, 3, 1, 1)
+            BatchNorm(bottleneck)
+            ReLU()
+            Conv2d(bottleneck, channels, 1, 1, 0)
+            BatchNorm(channels)
+            conv_out
+        (conv_out, skip) -> Add() -> added
+        added -> ReLU() -> out

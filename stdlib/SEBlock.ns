@@ -1,0 +1,17 @@
+/// Squeeze-and-Excitation Block
+/// Channel attention mechanism that learns per-channel importance weights.
+/// Reference: Hu et al. (2018), "Squeeze-and-Excitation Networks"
+neuron SEBlock(channels, reduction):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (features, attn_path)
+        attn_path ->
+            GlobalAvgPool()
+            Flatten()
+            Linear(channels, channels / reduction)
+            ReLU()
+            Linear(channels / reduction, channels)
+            Sigmoid()
+            attention
+        (features, attention) -> Multiply() -> out

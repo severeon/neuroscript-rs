@@ -1,0 +1,15 @@
+/// DenseNet Dense Block
+/// Concatenates input with conv features, then projects back.
+/// Reference: Huang et al. (2017), "Densely Connected Convolutional Networks"
+neuron DenseBlock(channels, growth_rate):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            BatchNorm(channels)
+            ReLU()
+            Conv2d(channels, growth_rate, 3, 1, 1)
+            features
+        (features, skip) -> Concat(1) -> concatenated
+        concatenated -> Conv2d(channels + growth_rate, channels, 1, 1, 0) -> out

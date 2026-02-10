@@ -1,13 +1,11 @@
-/// Basic residual connection: out = x + f(x)
-/// The simplest form of skip connection.
-neuron Residual(dim):
+neuron PreNormResidual(dim, dropout_rate):
     in: [*shape, dim]
     out: [*shape, dim]
     graph:
         in -> (main, skip)
         main ->
+            LayerNorm(dim)
             Linear(dim, dim)
-            ReLU()
-            Linear(dim, dim)
+            Dropout(dropout_rate)
             processed
         (processed, skip) -> Add() -> out

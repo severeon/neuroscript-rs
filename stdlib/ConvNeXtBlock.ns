@@ -1,0 +1,16 @@
+/// ConvNeXt Block
+/// Modernized ResNet block with depthwise convolution.
+/// Reference: Liu et al. (2022), "A ConvNet for the 2020s"
+neuron ConvNeXtBlock(dim, expansion):
+    in: [batch, dim, height, width]
+    out: [batch, dim, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            DepthwiseConv(dim, dim, 7, 1, 3)
+            LayerNorm(dim)
+            Linear(dim, dim * expansion)
+            GELU()
+            Linear(dim * expansion, dim)
+            processed
+        (processed, skip) -> Add() -> out

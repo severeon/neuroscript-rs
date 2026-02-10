@@ -1,0 +1,16 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron PatchEmbedding(in_channels, patch_size, embed_dim):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, *, embed_dim]
+  graph:
+    in -> Conv2d#0(in_channels, embed_dim, patch_size, patch_size, 0)
+    Conv2d#0(in_channels, embed_dim, patch_size, patch_size, 0) -> Flatten#1(2)
+    Flatten#1(2) -> Transpose#2(1, 2)
+    Transpose#2(1, 2) -> out

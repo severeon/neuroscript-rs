@@ -1,0 +1,17 @@
+/// ResNet Basic Block
+/// Two 3x3 convolutions with batch normalization and residual connection.
+/// Reference: He et al. (2015), "Deep Residual Learning for Image Recognition"
+neuron ResNetBasicBlock(channels):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv2d(channels, channels, 3, 1, 1)
+            BatchNorm(channels)
+            ReLU()
+            Conv2d(channels, channels, 3, 1, 1)
+            BatchNorm(channels)
+            conv_out
+        (conv_out, skip) -> Add() -> added
+        added -> ReLU() -> out

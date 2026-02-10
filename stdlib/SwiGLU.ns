@@ -1,0 +1,28 @@
+/// SwiGLU - SiLU-Gated Linear Unit
+///
+/// Implements the gated feed-forward variant used in LLaMA, PaLM, and other
+/// modern architectures. Splits input into two parallel paths: a gate path
+/// (Linear -> SiLU activation) and a value path (Linear), combines them
+/// via element-wise multiplication, then projects back to the original
+/// dimension.
+///
+/// Reference: Shazeer (2020) "GLU Variants Improve Transformer"
+///
+/// Pattern: Fork -> (Gate: Linear + SiLU, Value: Linear) -> Multiply -> Linear
+neuron SwiGLU(dim, hidden_dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (gate_path, value_path)
+
+        gate_path ->
+            Linear(dim, hidden_dim)
+            SiLU()
+            gate
+
+        value_path ->
+            Linear(dim, hidden_dim)
+            value
+
+        (gate, value) -> Multiply() -> projected
+        projected -> Linear(hidden_dim, dim) -> out

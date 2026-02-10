@@ -1,0 +1,31 @@
+/// Mobile Inverted Bottleneck Block (MBConv)
+/// Used in EfficientNet. Expand -> Depthwise -> SE -> Project with residual.
+/// Reference: Tan & Le (2019), "EfficientNet"
+neuron MBConvBlock(channels, expansion, reduction):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv2d(channels, channels * expansion, 1, 1, 0)
+            BatchNorm(channels * expansion)
+            SiLU()
+            DepthwiseConv(channels * expansion, channels * expansion, 3, 1, 1)
+            BatchNorm(channels * expansion)
+            SiLU()
+            se_input
+        se_input -> (features, attn_path)
+        attn_path ->
+            GlobalAvgPool()
+            Flatten()
+            Linear(channels * expansion, channels * expansion / reduction)
+            ReLU()
+            Linear(channels * expansion / reduction, channels * expansion)
+            Sigmoid()
+            attention
+        (features, attention) -> Multiply() -> se_out
+        se_out ->
+            Conv2d(channels * expansion, channels, 1, 1, 0)
+            BatchNorm(channels)
+            projected
+        (projected, skip) -> Add() -> out

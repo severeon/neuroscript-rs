@@ -1,0 +1,26 @@
+/// Relative Position Bias (T5-style)
+///
+/// Adds learned positional biases to input representations,
+/// capturing relative position information in sequences.
+///
+/// This is a simplified version using LearnedPositionalEmbedding
+/// to inject position-dependent biases. The input is forked: one
+/// path carries the original signal, the other passes through a
+/// learned positional embedding layer. The two are summed via Add,
+/// producing position-aware representations.
+///
+/// Parameters:
+/// - seq_len: Maximum sequence length supported
+/// - dim: Model dimension (must match input last dimension)
+///
+/// Reference: Raffel et al. (2020), "Exploring the Limits of
+/// Transfer Learning with a Unified Text-to-Text Transformer"
+neuron RelativePositionBias(seq_len, dim):
+    in: [batch, seq_len, dim]
+    out: [batch, seq_len, dim]
+    graph:
+        in -> (main, pos_path)
+        pos_path ->
+            LearnedPositionalEmbedding(seq_len, dim)
+            bias
+        (main, bias) -> Add() -> out

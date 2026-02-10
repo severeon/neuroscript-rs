@@ -1,0 +1,22 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SwiGLU(dim, hidden_dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> (gate_path, value_path)
+    gate_path -> Linear#0(dim, hidden_dim)
+    Linear#0(dim, hidden_dim) -> SiLU#1()
+    SiLU#1() -> gate
+    value_path -> Linear#2(dim, hidden_dim)
+    Linear#2(dim, hidden_dim) -> value
+    (gate, value) -> Multiply#3()
+    Multiply#3() -> projected
+    projected -> Linear#4(hidden_dim, dim)
+    Linear#4(hidden_dim, dim) -> out

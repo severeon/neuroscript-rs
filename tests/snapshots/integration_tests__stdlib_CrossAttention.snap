@@ -1,0 +1,23 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron CrossAttention(dim, num_heads):
+  inputs:
+    query: [batch, seq_q, dim]
+    memory: [batch, seq_kv, dim]
+  outputs:
+    default: [batch, seq_q, dim]
+  graph:
+    query -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> q
+    memory -> (k_path, v_path)
+    k_path -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> k
+    v_path -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> v
+    (q, k, v) -> ScaledDotProductAttention#3(dim, num_heads)
+    ScaledDotProductAttention#3(dim, num_heads) -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> out

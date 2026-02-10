@@ -4,16 +4,16 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron Residual(dim):
+neuron PreNormResidual(dim, dropout_rate):
   inputs:
     default: [*shape, dim]
   outputs:
     default: [*shape, dim]
   graph:
     in -> (main, skip)
-    main -> Linear#0(dim, dim)
-    Linear#0(dim, dim) -> ReLU#1()
-    ReLU#1() -> Linear#2(dim, dim)
-    Linear#2(dim, dim) -> processed
+    main -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> Dropout#2(dropout_rate)
+    Dropout#2(dropout_rate) -> processed
     (processed, skip) -> Add#3()
     Add#3() -> out

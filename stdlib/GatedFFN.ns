@@ -1,0 +1,31 @@
+/// Gated Feed-Forward Network (GatedFFN)
+///
+/// Implements a gated feed-forward network with SiLU gating and dropout.
+/// The input is forked into two parallel paths:
+///   - Gate path: Linear projection followed by SiLU activation
+///   - Value path: Linear projection (no activation)
+/// The gate and value are combined via element-wise multiplication,
+/// then dropout is applied and the result is projected back to the
+/// original dimension.
+///
+/// This is the SwiGLU-style FFN used in models like LLaMA and PaLM.
+///
+/// Pattern: Fork -> Parallel paths -> Gated multiplication -> Dropout -> Projection
+neuron GatedFFN(dim, expansion, dropout_rate):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (gate_path, value_path)
+
+        gate_path ->
+            Linear(dim, expansion)
+            SiLU()
+            gate
+
+        value_path ->
+            Linear(dim, expansion)
+            value
+
+        (gate, value) -> Multiply() -> combined
+        combined -> Dropout(dropout_rate) -> regularized
+        regularized -> Linear(expansion, dim) -> out

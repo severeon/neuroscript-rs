@@ -1,0 +1,22 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SEBlock(channels, reduction):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  graph:
+    in -> (features, attn_path)
+    attn_path -> GlobalAvgPool#0()
+    GlobalAvgPool#0() -> Flatten#1()
+    Flatten#1() -> Linear#2(channels, (channels / reduction))
+    Linear#2(channels, (channels / reduction)) -> ReLU#3()
+    ReLU#3() -> Linear#4((channels / reduction), channels)
+    Linear#4((channels / reduction), channels) -> Sigmoid#5()
+    Sigmoid#5() -> attention
+    (features, attention) -> Multiply#6()
+    Multiply#6() -> out

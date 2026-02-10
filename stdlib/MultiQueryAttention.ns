@@ -1,0 +1,20 @@
+/// Multi-Query Attention (MQA)
+/// Single shared key/value head across all query heads.
+/// Dramatically reduces KV cache memory.
+/// Reference: Shazeer (2019), "Fast Transformer Decoding"
+neuron MultiQueryAttention(dim, num_heads, head_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> (q_path, kv_path)
+        q_path ->
+            Linear(dim, dim)
+            q
+        kv_path -> (k_path, v_path)
+        k_path ->
+            Linear(dim, head_dim)
+            k
+        v_path ->
+            Linear(dim, head_dim)
+            v
+        (q, k, v) -> ScaledDotProductAttention(dim, num_heads) -> Linear(dim, dim) -> out

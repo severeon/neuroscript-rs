@@ -1,0 +1,17 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron RelativePositionBias(seq_len, dim):
+  inputs:
+    default: [batch, seq_len, dim]
+  outputs:
+    default: [batch, seq_len, dim]
+  graph:
+    in -> (main, pos_path)
+    pos_path -> LearnedPositionalEmbedding#0(seq_len, dim)
+    LearnedPositionalEmbedding#0(seq_len, dim) -> bias
+    (main, bias) -> Add#1()
+    Add#1() -> out

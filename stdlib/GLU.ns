@@ -1,0 +1,31 @@
+/// Gated Linear Unit (GLU)
+///
+/// Implements: out = Linear(gate * value)
+/// Where gate = Sigmoid(Linear(x)) and value = Linear(x)
+///
+/// The input is forked into two parallel paths:
+///   Gate path: Linear projection followed by Sigmoid activation
+///   Value path: Linear projection (no activation)
+/// The gate and value are combined via element-wise multiplication,
+/// then projected back to the original dimension.
+///
+/// Reference: Dauphin et al., Language Modeling with Gated
+/// Convolutional Networks (2017)
+///
+/// Pattern: Fork -> Parallel paths -> Gated multiplication -> Projection
+neuron GLU(dim, hidden_dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (gate_path, value_path)
+
+        gate_path ->
+            Linear(dim, hidden_dim)
+            Sigmoid()
+            gate
+
+        value_path ->
+            Linear(dim, hidden_dim)
+            value
+
+        (gate, value) -> Multiply() -> Linear(hidden_dim, dim) -> out

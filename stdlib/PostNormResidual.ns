@@ -1,0 +1,11 @@
+neuron PostNormResidual(dim, dropout_rate):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (main, skip)
+        main ->
+            Linear(dim, dim)
+            Dropout(dropout_rate)
+            processed
+        (processed, skip) -> Add() -> added
+        added -> LayerNorm(dim) -> out

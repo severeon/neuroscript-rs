@@ -1,0 +1,20 @@
+/// Patch Embedding for Vision Transformers
+///
+/// Converts an image into a sequence of patch embeddings using
+/// non-overlapping convolution. The Conv2d stride equals patch_size
+/// so patches tile the image without overlap.
+///
+/// Pipeline: Conv2d (extract patches) -> Flatten (collapse spatial) -> Transpose (sequence format)
+///
+/// Output sequence length: (height / patch_size) * (width / patch_size)
+///
+/// Reference: Dosovitskiy et al. (2020), "An Image is Worth 16x16 Words"
+neuron PatchEmbedding(in_channels, patch_size, embed_dim):
+    in: [batch, in_channels, height, width]
+    out: [batch, *, embed_dim]
+    graph:
+        in ->
+            Conv2d(in_channels, embed_dim, patch_size, patch_size, 0)
+            Flatten(2)
+            Transpose(1, 2)
+            out

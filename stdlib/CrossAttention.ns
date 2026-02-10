@@ -1,0 +1,34 @@
+/// Cross-Attention
+///
+/// Cross-attention mechanism for encoder-decoder transformers.
+/// Query comes from one sequence (e.g., decoder) while key and value
+/// come from another sequence (e.g., encoder output).
+///
+/// Implements: CrossAttn(Q, K, V) = Linear(Attention(W_q * Q, W_k * K, W_v * V))
+///
+/// Parameters:
+/// - dim: Model dimension for all projections
+/// - num_heads: Number of attention heads
+///
+/// Shape Contract:
+/// - Input query: [batch, seq_q, dim] query sequence (e.g., decoder hidden states)
+/// - Input memory: [batch, seq_kv, dim] memory sequence (e.g., encoder output)
+/// - Output: [batch, seq_q, dim] attended output
+///
+/// Usage: Encoder-decoder transformers where the decoder attends to encoder output.
+/// The query sequence length may differ from the context sequence length.
+neuron CrossAttention(dim, num_heads):
+    in query: [batch, seq_q, dim]
+    in memory: [batch, seq_kv, dim]
+    out: [batch, seq_q, dim]
+    graph:
+        # Project query from decoder sequence
+        query -> Linear(dim, dim) -> q
+
+        # Project key and value from encoder/memory sequence
+        memory -> (k_path, v_path)
+        k_path -> Linear(dim, dim) -> k
+        v_path -> Linear(dim, dim) -> v
+
+        # Apply scaled dot-product attention and output projection
+        (q, k, v) -> ScaledDotProductAttention(dim, num_heads) -> Linear(dim, dim) -> out
