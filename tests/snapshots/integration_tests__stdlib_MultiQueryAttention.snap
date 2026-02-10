@@ -1,0 +1,23 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MultiQueryAttention(dim, num_heads, head_dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (q_path, kv_path)
+    q_path -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> q
+    kv_path -> (k_path, v_path)
+    k_path -> Linear#1(dim, head_dim)
+    Linear#1(dim, head_dim) -> k
+    v_path -> Linear#2(dim, head_dim)
+    Linear#2(dim, head_dim) -> v
+    (q, k, v) -> ScaledDotProductAttention#3(dim, num_heads)
+    ScaledDotProductAttention#3(dim, num_heads) -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> out

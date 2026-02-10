@@ -1,0 +1,36 @@
+# Highway Connection - Gated Residual
+#
+# Implements a simplified highway network gate:
+#   output = gate * H(x) + (1-gate) * x
+#
+# The gate is a learned sigmoid function that controls how much of the
+# transformed input vs. the original input passes through.
+#
+# Since NeuroScript cannot express (1-gate) directly, this uses the
+# standard approximation: gate * transform + carry, where the Add()
+# combines the gated transform with the unchanged carry path.
+#
+# Reference: Srivastava et al., "Training Very Deep Networks" (2015)
+
+/// Highway Connection - gated residual
+/// Uses a learned gate to blend between transformed and original input.
+neuron HighwayConnection(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (transform_path, gate_path, carry_path)
+
+        transform_path ->
+            Linear(dim, dim)
+            ReLU()
+            transform
+
+        gate_path ->
+            Linear(dim, dim)
+            Sigmoid()
+            gate
+
+        (gate, transform) -> Multiply() -> gated
+
+        (gated, carry_path) -> Add() -> out
+

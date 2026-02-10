@@ -1,0 +1,23 @@
+/// GeGLU - GELU-Gated Linear Unit
+///
+/// Gating mechanism that uses GELU activation for the gate path.
+/// Fork input into two parallel linear projections. Gate path applies
+/// GELU activation. Combine via element-wise multiplication, then
+/// project back to the original dimension.
+///
+/// Pattern: Fork → (Linear+GELU, Linear) → Multiply → Linear
+/// Reference: Shazeer (2020), "GLU Variants Improve Transformer"
+neuron GeGLU(dim, hidden_dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (gate_path, value_path)
+        gate_path ->
+            Linear(dim, hidden_dim)
+            GELU()
+            gate
+        value_path ->
+            Linear(dim, hidden_dim)
+            value
+        (gate, value) -> Multiply() -> projected
+        projected -> Linear(hidden_dim, dim) -> out

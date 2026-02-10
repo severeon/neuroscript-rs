@@ -1,0 +1,23 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GroupedQueryAttention(dim, num_heads, num_kv_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (q_path, kv_path)
+    q_path -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> q
+    kv_path -> (k_path, v_path)
+    k_path -> Linear#1(dim, ((dim / num_heads) * num_kv_heads))
+    Linear#1(dim, ((dim / num_heads) * num_kv_heads)) -> k
+    v_path -> Linear#2(dim, ((dim / num_heads) * num_kv_heads))
+    Linear#2(dim, ((dim / num_heads) * num_kv_heads)) -> v
+    (q, k, v) -> ScaledDotProductAttention#3(dim, num_heads)
+    ScaledDotProductAttention#3(dim, num_heads) -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> out

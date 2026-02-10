@@ -1,0 +1,23 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HighwayConnection(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> (transform_path, gate_path, carry_path)
+    transform_path -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> ReLU#1()
+    ReLU#1() -> transform
+    gate_path -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> Sigmoid#3()
+    Sigmoid#3() -> gate
+    (gate, transform) -> Multiply#4()
+    Multiply#4() -> gated
+    (gated, carry_path) -> Add#5()
+    Add#5() -> out

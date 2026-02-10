@@ -1,0 +1,10 @@
+neuron Expert(dim, expansion, dropout_rate):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in ->
+            Linear(dim, expansion)
+            GELU()
+            Dropout(dropout_rate)
+            Linear(expansion, dim)
+            out

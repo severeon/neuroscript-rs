@@ -1,0 +1,13 @@
+/// Dense connection: concatenate input with transformed output
+/// Inspired by DenseNet (Huang et al. 2017)
+neuron DenseConnection(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (main, skip)
+        main ->
+            Linear(dim, dim)
+            ReLU()
+            transformed
+        (transformed, skip) -> Concat(-1) -> concatenated
+        concatenated -> Linear(dim * 2, dim) -> out

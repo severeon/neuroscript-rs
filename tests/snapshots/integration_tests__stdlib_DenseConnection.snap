@@ -4,7 +4,7 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron Residual(dim):
+neuron DenseConnection(dim):
   inputs:
     default: [*shape, dim]
   outputs:
@@ -13,7 +13,8 @@ neuron Residual(dim):
     in -> (main, skip)
     main -> Linear#0(dim, dim)
     Linear#0(dim, dim) -> ReLU#1()
-    ReLU#1() -> Linear#2(dim, dim)
-    Linear#2(dim, dim) -> processed
-    (processed, skip) -> Add#3()
-    Add#3() -> out
+    ReLU#1() -> transformed
+    (transformed, skip) -> Concat#2((0 - 1))
+    Concat#2((0 - 1)) -> concatenated
+    concatenated -> Linear#3((dim * 2), dim)
+    Linear#3((dim * 2), dim) -> out

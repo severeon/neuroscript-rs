@@ -1,0 +1,20 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron PostNormResidual(dim, dropout_rate):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> (main, skip)
+    main -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> Dropout#1(dropout_rate)
+    Dropout#1(dropout_rate) -> processed
+    (processed, skip) -> Add#2()
+    Add#2() -> added
+    added -> LayerNorm#3(dim)
+    LayerNorm#3(dim) -> out
