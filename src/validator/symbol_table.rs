@@ -143,9 +143,15 @@ fn process_destination_for_symbol_table<F>(
     match dest {
         // Tuple unpacking: source -> (a, b, c)
         Endpoint::Tuple(port_refs) => {
-            // Source must resolve to multiple ports
+            // Source must resolve to ports
             if let Some(source_ports) = resolve_endpoint_partial(source, ctx, table, true, errors) {
-                if source_ports.len() != port_refs.len() {
+                if source_ports.len() == 1 && port_refs.len() > 1 {
+                    // Implicit fork: single source replicates to all tuple bindings
+                    let single_port = &source_ports[0];
+                    for port_ref in port_refs {
+                        table.add_node(port_ref.node.clone(), vec![single_port.clone()]);
+                    }
+                } else if source_ports.len() != port_refs.len() {
                     errors.push(ValidationError::ArityMismatch {
                         expected: port_refs.len(),
                         got: source_ports.len(),
@@ -413,7 +419,27 @@ pub(super) fn check_port_compatibility(
     }
     */
 
-    // Check arity
+    // Check arity - allow implicit fork (1→N) for tuple destinations
+    if source_ports.len() == 1 && dest_ports.len() > 1 {
+        if let Endpoint::Tuple(_) = dest_endpoint {
+            // Implicit fork: validate single source shape against all destinations
+            for dst_port in dest_ports {
+                if !shapes_compatible_fn(&source_ports[0].shape, &dst_port.shape) {
+                    errors.push(ValidationError::PortMismatch {
+                        source_node: extract_node_name(source_endpoint),
+                        source_port: source_ports[0].name.clone(),
+                        source_shape: source_ports[0].shape.clone(),
+                        dest_node: extract_node_name(dest_endpoint),
+                        dest_port: dst_port.name.clone(),
+                        dest_shape: dst_port.shape.clone(),
+                        context: context_neuron.to_string(),
+                    });
+                }
+            }
+            return errors;
+        }
+    }
+
     if source_ports.len() != dest_ports.len() {
         errors.push(ValidationError::ArityMismatch {
             expected: dest_ports.len(),

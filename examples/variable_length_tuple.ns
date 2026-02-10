@@ -1,0 +1,56 @@
+# Variable-Length Tuple Unpacking (Implicit Fork)
+#
+# Demonstrates implicit forking: a single-output source flowing into
+# a multi-element tuple automatically replicates the tensor to all bindings.
+# No explicit Fork() or Fork3() needed.
+
+# 2-way implicit fork
+neuron TwoWayImplicitFork(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> (main, skip)
+        main -> Linear(dim, dim) -> processed
+        (processed, skip) -> Add() -> out
+
+# 3-way implicit fork (replaces Fork3)
+neuron ThreeWayImplicitFork(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> (a, b, c)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        (pa, pb) -> Add() -> ab
+        (ab, pc) -> Add() -> out
+
+# 4-way implicit fork (no Fork4 primitive needed)
+neuron FourWayImplicitFork(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> (a, b, c, d)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        d -> Linear(dim, dim) -> pd
+        (pa, pb) -> Add() -> ab
+        (pc, pd) -> Add() -> cd
+        (ab, cd) -> Add() -> out
+
+# 5-way implicit fork
+neuron FiveWayImplicitFork(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> (a, b, c, d, e)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        (pa, pb) -> Add() -> ab
+        c -> Linear(dim, dim) -> pc
+        (ab, pc) -> Add() -> abc
+        d -> Linear(dim, dim) -> pd
+        (abc, pd) -> Add() -> abcd
+        e -> Linear(dim, dim) -> pe
+        (abcd, pe) -> Add() -> out

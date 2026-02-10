@@ -133,6 +133,24 @@ pub(super) fn generate_forward_body(
             }
         };
 
+        // Determine source output count for implicit fork detection
+        let source_output_count = match &conn.source {
+            Endpoint::Ref(port_ref) => gen
+                .inference_ctx
+                .node_outputs
+                .get(&port_ref.node)
+                .map(|s| s.len())
+                .unwrap_or(1),
+            Endpoint::Call { id, .. } => gen
+                .inference_ctx
+                .call_outputs
+                .get(id)
+                .map(|s| s.len())
+                .unwrap_or(1),
+            Endpoint::Tuple(refs) => refs.len(),
+            _ => 1,
+        };
+
         // Process the destination
         let result_var = process_destination(
             output,
@@ -144,6 +162,7 @@ pub(super) fn generate_forward_body(
             &mut call_to_result,
             &mut match_to_result,
             &mut if_to_result,
+            source_output_count,
         )?;
 
         // Track the last result for implicit output
@@ -176,6 +195,10 @@ pub(super) fn generate_forward_body(
 }
 
 /// Process a destination endpoint, generating code and returning the result variable name
+///
+/// `source_output_count` indicates how many outputs the source produces.
+/// When 1 and destination is a multi-element tuple, we emit individual assignments
+/// (implicit fork) instead of tuple unpacking.
 fn process_destination(
     output: &mut String,
     gen: &mut CodeGenerator,
@@ -186,6 +209,7 @@ fn process_destination(
     call_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
+    source_output_count: usize,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
@@ -271,14 +295,22 @@ fn process_destination(
                 })
                 .collect();
 
-            writeln!(
-                output,
-                "{}{} = {}",
-                indent,
-                var_names.join(", "),
-                source_var
-            )
-            .unwrap();
+            if source_output_count == 1 && var_names.len() > 1 {
+                // Implicit fork: assign source to each binding individually
+                for var_name in &var_names {
+                    writeln!(output, "{}{} = {}", indent, var_name, source_var).unwrap();
+                }
+            } else {
+                // Multi-output source: standard tuple unpacking
+                writeln!(
+                    output,
+                    "{}{} = {}",
+                    indent,
+                    var_names.join(", "),
+                    source_var
+                )
+                .unwrap();
+            }
             Ok(source_var) // Return tuple as result
         }
         Endpoint::Call {
@@ -469,6 +501,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        1, // Within pipeline, each step produces single output
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -533,6 +566,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        1, // Within pipeline, each step produces single output
                     )?;
                     // Cache call/match/if results inside branch
                     if let Endpoint::Call { .. } = ep {
@@ -569,6 +603,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        1, // Within pipeline, each step produces single output
                     )?;
                     if let Endpoint::Call { .. } = ep {
                         let key = endpoint_key_impl(ep);

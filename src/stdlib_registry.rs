@@ -449,6 +449,15 @@ impl StdlibRegistry {
         );
 
         self.register(
+            "ForkN",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "ForkN",
+                "Split tensor into N references (generic multi-output)",
+            ),
+        );
+
+        self.register(
             "Add",
             ImplRef::with_desc(
                 "neuroscript_runtime.primitives.structural",

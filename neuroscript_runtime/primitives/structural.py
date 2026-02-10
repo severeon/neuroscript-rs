@@ -104,6 +104,28 @@ class Fork3(nn.Module):
         return (input, input, input)
 
 
+class ForkN(nn.Module):
+    """Generic N-way fork for explicit use.
+
+    Splits input tensor into N references. Unlike Fork (2-way) and Fork3 (3-way),
+    this supports any number of outputs.
+
+    Args:
+        n (int): Number of output references.
+
+    Shape:
+        - Input: [*] (any shape)
+        - Output: tuple of N references to the same tensor
+    """
+
+    def __init__(self, n: int):
+        super().__init__()
+        self.n = n
+
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+        return tuple(input for _ in range(self.n))
+
+
 class Add(nn.Module):
     """
     Add primitive: Element-wise addition of two tensors.
@@ -479,6 +501,7 @@ class Pad(nn.Module):
 __all__ = [
     "Fork",
     "Fork3",
+    "ForkN",
     "Add",
     "Multiply",
     "Concat",

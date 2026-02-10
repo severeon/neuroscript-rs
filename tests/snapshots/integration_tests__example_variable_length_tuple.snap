@@ -1,0 +1,83 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron FiveWayImplicitFork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> (a, b, c, d, e)
+    a -> Linear#14(dim, dim)
+    Linear#14(dim, dim) -> pa
+    b -> Linear#15(dim, dim)
+    Linear#15(dim, dim) -> pb
+    (pa, pb) -> Add#16()
+    Add#16() -> ab
+    c -> Linear#17(dim, dim)
+    Linear#17(dim, dim) -> pc
+    (ab, pc) -> Add#18()
+    Add#18() -> abc
+    d -> Linear#19(dim, dim)
+    Linear#19(dim, dim) -> pd
+    (abc, pd) -> Add#20()
+    Add#20() -> abcd
+    e -> Linear#21(dim, dim)
+    Linear#21(dim, dim) -> pe
+    (abcd, pe) -> Add#22()
+    Add#22() -> out
+
+neuron FourWayImplicitFork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> (a, b, c, d)
+    a -> Linear#7(dim, dim)
+    Linear#7(dim, dim) -> pa
+    b -> Linear#8(dim, dim)
+    Linear#8(dim, dim) -> pb
+    c -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> pc
+    d -> Linear#10(dim, dim)
+    Linear#10(dim, dim) -> pd
+    (pa, pb) -> Add#11()
+    Add#11() -> ab
+    (pc, pd) -> Add#12()
+    Add#12() -> cd
+    (ab, cd) -> Add#13()
+    Add#13() -> out
+
+neuron ThreeWayImplicitFork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> (a, b, c)
+    a -> Linear#2(dim, dim)
+    Linear#2(dim, dim) -> pa
+    b -> Linear#3(dim, dim)
+    Linear#3(dim, dim) -> pb
+    c -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> pc
+    (pa, pb) -> Add#5()
+    Add#5() -> ab
+    (ab, pc) -> Add#6()
+    Add#6() -> out
+
+neuron TwoWayImplicitFork(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> (main, skip)
+    main -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> processed
+    (processed, skip) -> Add#1()
+    Add#1() -> out
