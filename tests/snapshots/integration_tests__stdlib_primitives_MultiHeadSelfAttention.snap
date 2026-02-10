@@ -6,8 +6,8 @@ expression: formatted
 
 neuron MultiHeadSelfAttention(dim, num_heads):
   inputs:
-    default: [*, seq_len, dim]
+    default: [*batch, seq_len, dim]
   outputs:
-    default: [*, seq_len, dim]
+    default: [*batch, seq_len, dim]
   impl:
     Source: core,attention/MultiHeadSelfAttention

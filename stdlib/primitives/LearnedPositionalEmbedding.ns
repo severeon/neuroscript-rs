@@ -8,8 +8,8 @@
 /// - embedding_dim: Dimension of the embeddings (must match input)
 ///
 /// Shape Contract:
-/// - Input: [*, seq_len, embedding_dim] sequence of embeddings
-/// - Output: [*, seq_len, embedding_dim] embeddings with positions added
+/// - Input: [*batch, seq_len, embedding_dim] sequence of embeddings
+/// - Output: [*batch, seq_len, embedding_dim] embeddings with positions added
 ///
 /// Notes:
 /// - Position embeddings are learned parameters (not fixed functions)
@@ -19,6 +19,6 @@
 /// - Positions are added (not concatenated) to input embeddings
 /// - More flexible than sinusoidal but requires training
 neuron LearnedPositionalEmbedding(max_positions, embedding_dim):
-    in: [*, seq_len, embedding_dim]
-    out: [*, seq_len, embedding_dim]
+    in: [*batch, seq_len, embedding_dim]
+    out: [*batch, seq_len, embedding_dim]
     impl: core,embeddings/LearnedPositionalEmbedding

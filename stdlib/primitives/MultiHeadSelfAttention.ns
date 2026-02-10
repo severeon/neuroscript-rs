@@ -8,8 +8,8 @@
 /// - num_heads: Number of attention heads (dim must be divisible by num_heads)
 ///
 /// Shape Contract:
-/// - Input: [*, seq_len, dim] sequence of embeddings
-/// - Output: [*, seq_len, dim] attended sequence (same shape)
+/// - Input: [*batch, seq_len, dim] sequence of embeddings
+/// - Output: [*batch, seq_len, dim] attended sequence (same shape)
 ///
 /// Notes:
 /// - Includes Q, K, V projections and output projection
@@ -19,6 +19,6 @@
 /// - Can support causal masking for autoregressive models
 /// - Used in BERT, GPT, and virtually all transformers
 neuron MultiHeadSelfAttention(dim, num_heads):
-    in: [*, seq_len, dim]
-    out: [*, seq_len, dim]
+    in: [*batch, seq_len, dim]
+    out: [*batch, seq_len, dim]
     impl: core,attention/MultiHeadSelfAttention

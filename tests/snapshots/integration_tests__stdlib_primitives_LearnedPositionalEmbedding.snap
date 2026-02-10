@@ -6,8 +6,8 @@ expression: formatted
 
 neuron LearnedPositionalEmbedding(max_positions, embedding_dim):
   inputs:
-    default: [*, seq_len, embedding_dim]
+    default: [*batch, seq_len, embedding_dim]
   outputs:
-    default: [*, seq_len, embedding_dim]
+    default: [*batch, seq_len, embedding_dim]
   impl:
     Source: core,embeddings/LearnedPositionalEmbedding

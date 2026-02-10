@@ -6,8 +6,8 @@ expression: formatted
 
 neuron GroupNorm(num_groups, num_channels):
   inputs:
-    default: [*, num_channels, *, *]
+    default: [batch, num_channels, *spatial]
   outputs:
-    default: [*, num_channels, *, *]
+    default: [batch, num_channels, *spatial]
   impl:
     Source: core,normalization/GroupNorm

@@ -6,9 +6,9 @@ expression: formatted
 
 neuron ParallelFFN(dim):
   inputs:
-    default: [*, dim]
+    default: [*batch, dim]
   outputs:
-    default: [*, dim]
+    default: [*batch, dim]
   graph:
     in -> FFN#0(dim, (dim * 2))
     FFN#0(dim, (dim * 2)) -> out

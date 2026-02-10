@@ -6,9 +6,9 @@ expression: formatted
 
 neuron MatMul:
   inputs:
-    a: [*, n, m]
-    b: [*, m, p]
+    a: [*batch, n, m]
+    b: [*batch, m, p]
   outputs:
-    default: [*, n, p]
+    default: [*batch, n, p]
   impl:
     Source: core,operations/MatMul

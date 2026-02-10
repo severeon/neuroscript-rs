@@ -6,8 +6,8 @@ expression: formatted
 
 neuron Linear(in_dim, out_dim):
   inputs:
-    default: [*, in_dim]
+    default: [*batch, in_dim]
   outputs:
-    default: [*, out_dim]
+    default: [*batch, out_dim]
   impl:
     Source: core,nn/Linear

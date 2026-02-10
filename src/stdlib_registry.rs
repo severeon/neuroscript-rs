@@ -9,8 +9,8 @@
 //! Example:
 //! ```neuroscript
 //! neuron Linear(in_dim: int, out_dim: int):
-//!     in: [*, in_dim]
-//!     out: [*, out_dim]
+//!     in: [*batch, in_dim]
+//!     out: [*batch, out_dim]
 //!     impl: neuroscript_runtime.primitives.Linear
 //! ```
 //!

@@ -9,8 +9,8 @@
 
 /// Simplified single-block transformer (for testing)
 neuron SimpleTransformerBlock(dim):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*batch, seq, dim]
+    out: [*batch, seq, dim]
     graph:
         # Minimal viable transformer block
         in ->
@@ -22,8 +22,8 @@ neuron SimpleTransformerBlock(dim):
 
 /// Complete Transformer Block with proper residual connections
 neuron TransformerBlock(dim, num_heads, d_ff):
-    in: [batch, seq, dim]
-    out: [batch, seq, dim]
+    in: [*batch, seq, dim]
+    out: [*batch, seq, dim]
     graph:
         # First residual-attention with pre-norm
         in -> (skip1, attn_path)

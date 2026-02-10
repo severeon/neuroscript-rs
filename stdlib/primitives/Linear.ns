@@ -17,6 +17,6 @@
 /// - Weight shape: [out_dim, in_dim]
 /// - Includes learnable bias by default
 neuron Linear(in_dim, out_dim):
-    in: [*, in_dim]
-    out: [*, out_dim]
+    in: [*batch, in_dim]
+    out: [*batch, out_dim]
     impl: core,nn/Linear

@@ -6,8 +6,8 @@ expression: formatted
 
 neuron Softmax(dim):
   inputs:
-    default: [*, dim]
+    default: [*batch, dim]
   outputs:
-    default: [*, dim]
+    default: [*batch, dim]
   impl:
     Source: core,activations/Softmax

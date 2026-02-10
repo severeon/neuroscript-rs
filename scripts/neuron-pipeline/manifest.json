@@ -1,0 +1,288 @@
+{
+  "config": {
+    "max_attempts": 3,
+    "max_turns": 25,
+    "binary": "./target/release/neuroscript"
+  },
+  "neurons": [
+    {
+      "name": "GLU",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Linear",
+        "Sigmoid",
+        "Multiply"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/GLU.ns",
+      "params": "dim, hidden_dim",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "Gated Linear Unit. Fork input into two parallel paths. Gate path: Linear(dim, hidden_dim) then Sigmoid(). Value path: Linear(dim, hidden_dim). Combine gate and value with Multiply(). Project back with Linear(hidden_dim, dim).",
+      "attempts": 1,
+      "last_error": "file not created"
+    },
+    {
+      "name": "SwiGLU",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Linear",
+        "SiLU",
+        "Multiply"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/SwiGLU.ns",
+      "params": "dim, hidden_dim",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "SiLU-Gated Linear Unit (used in LLaMA, PaLM). Fork input into two parallel paths. Gate path: Linear(dim, hidden_dim) then SiLU(). Value path: Linear(dim, hidden_dim). Combine with Multiply(). Project back with Linear(hidden_dim, dim).",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "GeGLU",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Linear",
+        "GELU",
+        "Multiply"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/GeGLU.ns",
+      "params": "dim, hidden_dim",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "GELU-Gated Linear Unit. Fork input into two parallel paths. Gate path: Linear(dim, hidden_dim) then GELU(). Value path: Linear(dim, hidden_dim). Combine with Multiply(). Project back with Linear(hidden_dim, dim).",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "GatedFFN",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Linear",
+        "SiLU",
+        "Multiply",
+        "Dropout"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/GatedFFN.ns",
+      "params": "dim, expansion, dropout_rate",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "Gated Feed-Forward Network with SiLU gating and dropout. Fork input into two parallel paths. Gate path: Linear(dim, expansion) then SiLU(). Value path: Linear(dim, expansion). Combine with Multiply(). Then Dropout(dropout_rate) and project back with Linear(expansion, dim).",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "Expert",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Linear",
+        "GELU",
+        "Dropout"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/Expert.ns",
+      "params": "dim, expansion, dropout_rate",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "Single expert block for Mixture of Experts architectures. Simple FFN pipeline: Linear(dim, expansion) then GELU() then Dropout(dropout_rate) then Linear(expansion, dim). Named as Expert for semantic clarity when composing into MoE systems.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "PreNormResidual",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "LayerNorm",
+        "Linear",
+        "Dropout"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/PreNormResidual.ns",
+      "params": "dim, dropout_rate",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "Pre-normalization residual block. Fork input into skip and main paths. Main path: LayerNorm(dim) then Linear(dim, dim) then Dropout(dropout_rate). Add(main, skip) to produce output. Pre-norm places normalization BEFORE the transformation, which is the modern default (GPT-2+, ViT).",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "PostNormResidual",
+      "level": 1,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "LayerNorm",
+        "Linear",
+        "Dropout"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/PostNormResidual.ns",
+      "params": "dim, dropout_rate",
+      "input_shape": "[*shape, dim]",
+      "output_shape": "[*shape, dim]",
+      "description": "Post-normalization residual block. Fork input into skip and main paths. Main path: Linear(dim, dim) then Dropout(dropout_rate). Add(main, skip) then LayerNorm(dim) to produce output. Post-norm places normalization AFTER the residual addition (original Transformer style).",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "ResNetBasicBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "Conv2d",
+        "BatchNorm",
+        "ReLU"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/ResNetBasicBlock.ns",
+      "params": "channels",
+      "input_shape": "[batch, channels, height, width]",
+      "output_shape": "[batch, channels, *, *]",
+      "description": "ResNet basic residual block (He et al. 2015). Fork input into skip and conv paths. Conv path: Conv2d(channels, channels, 3, 1, 1) then BatchNorm(channels) then ReLU() then Conv2d(channels, channels, 3, 1, 1) then BatchNorm(channels). Add(conv_out, skip) then ReLU() to produce output. Uses kernel=3, stride=1, padding=1 to preserve spatial dimensions.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "SEBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Multiply",
+        "GlobalAvgPool",
+        "Flatten",
+        "Linear",
+        "ReLU",
+        "Sigmoid"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/SEBlock.ns",
+      "params": "channels, reduction",
+      "input_shape": "[batch, channels, height, width]",
+      "output_shape": "[batch, channels, height, width]",
+      "description": "Squeeze-and-Excitation block (Hu et al. 2018). Fork input into features and attention paths. Attention path: GlobalAvgPool() then Flatten() then Linear(channels, channels / reduction) then ReLU() then Linear(channels / reduction, channels) then Sigmoid(). Multiply(features, attention) to produce channel-reweighted output. Note: the attention path learns per-channel importance weights from global context.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "BottleneckBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "Conv2d",
+        "BatchNorm",
+        "ReLU"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/BottleneckBlock.ns",
+      "params": "channels, bottleneck",
+      "input_shape": "[batch, channels, height, width]",
+      "output_shape": "[batch, channels, *, *]",
+      "description": "ResNet bottleneck residual block. Fork input into skip and conv paths. Conv path: Conv2d(channels, bottleneck, 1, 1, 0) then BatchNorm(bottleneck) then ReLU() then Conv2d(bottleneck, bottleneck, 3, 1, 1) then BatchNorm(bottleneck) then ReLU() then Conv2d(bottleneck, channels, 1, 1, 0) then BatchNorm(channels). Add(conv_out, skip) then ReLU(). The 1x1 convs reduce and restore channels while 3x3 conv operates in the smaller bottleneck dimension.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "ConvNeXtBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "DepthwiseConv",
+        "LayerNorm",
+        "Linear",
+        "GELU"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/ConvNeXtBlock.ns",
+      "params": "dim, expansion",
+      "input_shape": "[batch, dim, height, width]",
+      "output_shape": "[batch, dim, height, width]",
+      "description": "ConvNeXt block (Liu et al. 2022, modernized ResNet). Fork input into skip and main paths. Main path: DepthwiseConv(dim, dim, 7, 1, 3) then LayerNorm(dim) then Linear(dim, dim * expansion) then GELU() then Linear(dim * expansion, dim). Add(main, skip) to produce output. Note: DepthwiseConv may need special handling for channel-wise convolution with large 7x7 kernel.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "ViTBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "LayerNorm",
+        "MultiHeadSelfAttention",
+        "FFN",
+        "Dropout"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/ViTBlock.ns",
+      "params": "dim, num_heads, expansion, dropout_rate",
+      "input_shape": "[batch, seq, dim]",
+      "output_shape": "[batch, seq, dim]",
+      "description": "Vision Transformer block (Dosovitskiy et al. 2020). Two residual sub-blocks. First: Fork -> skip1 and attn_path. attn_path: LayerNorm(dim) then MultiHeadSelfAttention(dim, num_heads) then Dropout(dropout_rate) then attn_out. Add(skip1, attn_out) -> attn_residual. Second: Fork -> skip2 and ffn_path. ffn_path: LayerNorm(dim) then FFN(dim, expansion) then Dropout(dropout_rate) then ffn_out. Add(skip2, ffn_out) -> out. Same structure as TransformerBlock but intended for vision patch sequences.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "MBConvBlock",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "Conv2d",
+        "DepthwiseConv",
+        "BatchNorm",
+        "SiLU",
+        "SEBlock"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/MBConvBlock.ns",
+      "params": "channels, expansion, reduction",
+      "input_shape": "[batch, channels, height, width]",
+      "output_shape": "[batch, channels, *, *]",
+      "description": "Mobile Inverted Bottleneck block (EfficientNet). Fork input into skip and main. Main path: Conv2d(channels, channels * expansion, 1, 1, 0) then BatchNorm(channels * expansion) then SiLU() for expansion. Then DepthwiseConv(channels * expansion, channels * expansion, 3, 1, 1) then BatchNorm(channels * expansion) then SiLU() for depthwise. Then SEBlock(channels * expansion, reduction) for squeeze-excitation. Then Conv2d(channels * expansion, channels, 1, 1, 0) then BatchNorm(channels) for projection. Add(main, skip) for residual. Depends on SEBlock being created first.",
+      "attempts": 0,
+      "last_error": null
+    },
+    {
+      "name": "PatchEmbedding",
+      "level": 2,
+      "status": "pending",
+      "dependencies": [
+        "Conv2d",
+        "Flatten",
+        "Transpose"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/PatchEmbedding.ns",
+      "params": "in_channels, patch_size, embed_dim",
+      "input_shape": "[batch, in_channels, height, width]",
+      "output_shape": "[batch, *, embed_dim]",
+      "description": "Image to patch embedding for Vision Transformers. Uses Conv2d(in_channels, embed_dim, patch_size, patch_size, 0) as a non-overlapping convolution to extract patches and project to embed_dim. Then Flatten() and Transpose() to reshape from [batch, embed_dim, num_patches_h, num_patches_w] to [batch, num_patches, embed_dim]. Note: output sequence length is (height/patch_size) * (width/patch_size).",
+      "attempts": 0,
+      "last_error": null
+    }
+  ]
+}
