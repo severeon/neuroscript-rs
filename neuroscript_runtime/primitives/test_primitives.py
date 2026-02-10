@@ -35,6 +35,8 @@ from neuroscript_runtime.primitives import (
     Fork,
     Fork3,
     Add,
+    Subtract,
+    Divide,
     Concat,
     # Attention
     ScaledDotProductAttention,
@@ -513,6 +515,84 @@ class TestStructuralOperations:
 
         with pytest.raises(ValueError, match="Cannot add tensors"):
             add((x, y))
+
+    def test_subtract_basic(self):
+        """Test basic Subtract operation."""
+        subtract = Subtract()
+        x = torch.randn(32, 512)
+        y = torch.randn(32, 512)
+        result = subtract((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, x - y)
+
+    def test_subtract_complement(self):
+        """Test Subtract for complement gate pattern (1 - gate)."""
+        subtract = Subtract()
+        ones = torch.ones(32, 512)
+        gate = torch.sigmoid(torch.randn(32, 512))
+        complement = subtract((ones, gate))
+
+        assert complement.shape == (32, 512)
+        assert torch.allclose(complement, 1.0 - gate)
+
+    def test_subtract_broadcasting(self):
+        """Test Subtract with broadcasting."""
+        subtract = Subtract()
+        x = torch.randn(32, 512)
+        y = torch.randn(512)  # Will broadcast
+        result = subtract((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, x - y)
+
+    def test_subtract_incompatible_shapes(self):
+        """Test Subtract error on incompatible shapes."""
+        subtract = Subtract()
+        x = torch.randn(32, 512)
+        y = torch.randn(32, 256)
+
+        with pytest.raises(ValueError, match="Cannot subtract tensors"):
+            subtract((x, y))
+
+    def test_divide_basic(self):
+        """Test basic Divide operation."""
+        divide = Divide()
+        x = torch.full((32, 512), 6.0)
+        y = torch.full((32, 512), 2.0)
+        result = divide((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, torch.full((32, 512), 3.0))
+
+    def test_divide_scaling(self):
+        """Test Divide for attention scaling pattern."""
+        divide = Divide()
+        scores = torch.randn(32, 8, 64, 64)
+        scale = torch.tensor(8.0)
+        result = divide((scores, scale))
+
+        assert result.shape == (32, 8, 64, 64)
+        assert torch.allclose(result, scores / 8.0)
+
+    def test_divide_broadcasting(self):
+        """Test Divide with broadcasting."""
+        divide = Divide()
+        x = torch.randn(32, 512)
+        y = torch.randn(512)  # Will broadcast
+        result = divide((x, y))
+
+        assert result.shape == (32, 512)
+        assert torch.allclose(result, x / y)
+
+    def test_divide_incompatible_shapes(self):
+        """Test Divide error on incompatible shapes."""
+        divide = Divide()
+        x = torch.randn(32, 512)
+        y = torch.randn(32, 256)
+
+        with pytest.raises(ValueError, match="Cannot divide tensors"):
+            divide((x, y))
 
     def test_concat_basic(self):
         """Test basic Concat operation."""

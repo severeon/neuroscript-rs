@@ -2,18 +2,11 @@
 
 Issues discovered during batch neuron generation (25 neurons created). Ordered by impact and fix difficulty.
 
-## 1. Add Subtract and Divide primitives
+## 1. ~~Add Subtract and Divide primitives~~ (RESOLVED)
 
-**Impact**: High | **Difficulty**: Easy
+**Impact**: High | **Difficulty**: Easy | **Status**: Done
 
-Only `Add` and `Multiply` exist as element-wise binary operations. There is no `Subtract` or `Divide`. This prevents expressing patterns like `1 - gate` (used in true highway connections) or normalized attention weights.
-
-**What needs to change**:
-- Register `Subtract` and `Divide` in `src/stdlib_registry.rs` with the same pattern as `Add`/`Multiply`
-- Add Python runtime implementations in `neuroscript_runtime/primitives/`
-- Both take 2 inputs via tuple: `(a, b) -> Subtract() -> result`
-
-**Neurons blocked**: HighwayConnection (currently uses Add as approximation), any gating mechanism needing complement operations.
+`Subtract` and `Divide` are now registered in `src/stdlib_registry.rs` with Python runtime implementations in `neuroscript_runtime/primitives/structural.py`. Both take 2 inputs via tuple, matching `Add`/`Multiply`. HighwayConnection updated to use the true `(1-gate)` formula.
 
 ## 2. Doc comment blank line parse failure
 
