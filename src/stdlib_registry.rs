@@ -476,6 +476,24 @@ impl StdlibRegistry {
         );
 
         self.register(
+            "Subtract",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Subtract",
+                "Element-wise subtraction (for complement/residual operations)",
+            ),
+        );
+
+        self.register(
+            "Divide",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Divide",
+                "Element-wise division (for normalization/scaling operations)",
+            ),
+        );
+
+        self.register(
             "Concat",
             ImplRef::with_desc(
                 "neuroscript_runtime.primitives.structural",

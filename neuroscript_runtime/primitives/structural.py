@@ -252,6 +252,114 @@ class Multiply(nn.Module):
         return result
 
 
+class Subtract(nn.Module):
+    """
+    Subtract primitive: Element-wise subtraction of two tensors.
+
+    Computes left - right. Primary use cases include complement operations
+    (1 - gate) for highway connections and residual difference computations.
+
+    NeuroScript signature:
+        neuron Subtract:
+            in left: [*shape]
+            in right: [*shape]
+            out: [*shape]
+            impl: neuroscript_runtime.primitives.Subtract
+
+    Shape:
+        - Input: tuple([*shape], [*shape]) where both tensors must be broadcastable
+        - Output: [*shape] (result of element-wise subtraction)
+
+    Example:
+        >>> subtract = Subtract()
+        >>> a = torch.ones(32, 512)
+        >>> gate = torch.sigmoid(torch.randn(32, 512))
+        >>> complement = subtract((a, gate))  # 1 - gate
+        >>> assert complement.shape == (32, 512)
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """
+        Subtract right tensor from left tensor element-wise.
+
+        Args:
+            inputs: Tuple of (left, right) tensors
+
+        Returns:
+            Element-wise difference (left - right)
+
+        Raises:
+            ValueError: If inputs cannot be broadcast together
+        """
+        left, right = inputs
+
+        try:
+            result = left - right
+        except RuntimeError as e:
+            raise ValueError(
+                f"Cannot subtract tensors with shapes {left.shape} and {right.shape}: {e}"
+            )
+
+        return result
+
+
+class Divide(nn.Module):
+    """
+    Divide primitive: Element-wise division of two tensors.
+
+    Computes left / right. Primary use cases include normalized attention
+    weights and scaling operations.
+
+    NeuroScript signature:
+        neuron Divide:
+            in left: [*shape]
+            in right: [*shape]
+            out: [*shape]
+            impl: neuroscript_runtime.primitives.Divide
+
+    Shape:
+        - Input: tuple([*shape], [*shape]) where both tensors must be broadcastable
+        - Output: [*shape] (result of element-wise division)
+
+    Example:
+        >>> divide = Divide()
+        >>> scores = torch.randn(32, 8, 64, 64)
+        >>> scale = torch.tensor(8.0)  # sqrt(d_k)
+        >>> scaled = divide((scores, scale))
+        >>> assert scaled.shape == (32, 8, 64, 64)
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """
+        Divide left tensor by right tensor element-wise.
+
+        Args:
+            inputs: Tuple of (left, right) tensors
+
+        Returns:
+            Element-wise quotient (left / right)
+
+        Raises:
+            ValueError: If inputs cannot be broadcast together
+        """
+        left, right = inputs
+
+        try:
+            result = left / right
+        except RuntimeError as e:
+            raise ValueError(
+                f"Cannot divide tensors with shapes {left.shape} and {right.shape}: {e}"
+            )
+
+        return result
+
+
 class Concat(nn.Module):
     """
     Concat primitive: Concatenate tensors along a specified dimension.
