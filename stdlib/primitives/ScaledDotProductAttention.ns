@@ -7,10 +7,10 @@
 /// - d_k: Dimension of keys (for scaling factor sqrt(d_k))
 ///
 /// Shape Contract:
-/// - Input query: [*, seq_q, d_k] query vectors
-/// - Input key: [*, seq_k, d_k] key vectors
-/// - Input value: [*, seq_v, d_v] value vectors (seq_v == seq_k)
-/// - Output: [*, seq_q, d_v] attention-weighted values
+/// - Input query: [*batch, seq_q, d_k] query vectors
+/// - Input key: [*batch, seq_k, d_k] key vectors
+/// - Input value: [*batch, seq_v, d_v] value vectors (seq_v == seq_k)
+/// - Output: [*batch, seq_q, d_v] attention-weighted values
 ///
 /// Notes:
 /// - Scaling by sqrt(d_k) prevents softmax saturation
@@ -18,8 +18,8 @@
 /// - Building block for multi-head attention
 /// - Can include optional attention mask for causal/padding masking
 neuron ScaledDotProductAttention(d_k):
-    in query: [*, seq_q, d_k]
-    in key: [*, seq_k, d_k]
-    in value: [*, seq_v, d_v]
-    out: [*, seq_q, d_v]
+    in query: [*batch, seq_q, d_k]
+    in key: [*batch, seq_k, d_k]
+    in value: [*batch, seq_v, d_v]
+    out: [*batch, seq_q, d_v]
     impl: core,attention/ScaledDotProductAttention

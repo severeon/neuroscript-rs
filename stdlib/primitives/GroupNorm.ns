@@ -8,8 +8,8 @@
 /// - num_channels: Total number of channels (must be divisible by num_groups)
 ///
 /// Shape Contract:
-/// - Input: [*, num_channels, *, *] feature maps with spatial dimensions
-/// - Output: [*, num_channels, *, *] same shape as input
+/// - Input: [batch, num_channels, *spatial] feature maps with spatial dimensions
+/// - Output: [batch, num_channels, *spatial] same shape as input
 ///
 /// Notes:
 /// - num_channels must be divisible by num_groups
@@ -19,6 +19,6 @@
 /// - Used in ResNeXt, BigGAN, and many generative models
 /// - Interpolates between LayerNorm (1 group) and InstanceNorm (channels groups)
 neuron GroupNorm(num_groups, num_channels):
-    in: [*, num_channels, *, *]
-    out: [*, num_channels, *, *]
+    in: [batch, num_channels, *spatial]
+    out: [batch, num_channels, *spatial]
     impl: core,normalization/GroupNorm

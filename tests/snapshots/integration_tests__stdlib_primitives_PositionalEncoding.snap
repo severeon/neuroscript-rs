@@ -6,8 +6,8 @@ expression: formatted
 
 neuron PositionalEncoding(dim, max_len):
   inputs:
-    default: [*, seq_len, dim]
+    default: [*batch, seq_len, dim]
   outputs:
-    default: [*, seq_len, dim]
+    default: [*batch, seq_len, dim]
   impl:
     Source: core,embeddings/PositionalEncoding

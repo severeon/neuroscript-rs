@@ -16,6 +16,6 @@
 /// - Used in normalization layers (gamma parameter)
 /// - Can be used for learned feature weighting
 neuron Scale(dim):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*batch, dim]
+    out: [*batch, dim]
     impl: core,operations/Scale

@@ -17,6 +17,6 @@
 /// - Numerically stable implementations subtract max(x) before exp
 /// - Cross-entropy loss often includes built-in softmax (use raw logits)
 neuron Softmax(dim):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*batch, dim]
+    out: [*batch, dim]
     impl: core,activations/Softmax

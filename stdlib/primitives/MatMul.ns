@@ -15,7 +15,7 @@
 /// - Core operation for attention mechanisms
 /// - Uses torch.matmul for optimal performance
 neuron MatMul:
-    in a: [*, n, m]
-    in b: [*, m, p]
-    out: [*, n, p]
+    in a: [*batch, n, m]
+    in b: [*batch, m, p]
+    out: [*batch, n, p]
     impl: core,operations/MatMul

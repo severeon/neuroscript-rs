@@ -16,6 +16,6 @@
 /// - Often combined with Linear (which can include or exclude bias)
 /// - Useful when separating weight and bias learning rates
 neuron Bias(dim):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*batch, dim]
+    out: [*batch, dim]
     impl: core,operations/Bias

@@ -6,9 +6,9 @@ expression: formatted
 
 neuron SimpleTransformerBlock(dim):
   inputs:
-    default: [*, dim]
+    default: [*batch, seq, dim]
   outputs:
-    default: [*, dim]
+    default: [*batch, seq, dim]
   graph:
     in -> LayerNorm#0(dim)
     LayerNorm#0(dim) -> Linear#1(dim, dim)
@@ -17,9 +17,9 @@ neuron SimpleTransformerBlock(dim):
 
 neuron TransformerBlock(dim, num_heads, d_ff):
   inputs:
-    default: [batch, seq, dim]
+    default: [*batch, seq, dim]
   outputs:
-    default: [batch, seq, dim]
+    default: [*batch, seq, dim]
   graph:
     in -> (skip1, attn_path)
     attn_path -> LayerNorm#3(dim)

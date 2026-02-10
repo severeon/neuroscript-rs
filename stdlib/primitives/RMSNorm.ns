@@ -7,8 +7,8 @@
 /// - dim: Size of the feature dimension to normalize
 ///
 /// Shape Contract:
-/// - Input: [*, dim] where dim is the normalized dimension
-/// - Output: [*, dim] same shape as input
+/// - Input: [*batch, dim] where dim is the normalized dimension
+/// - Output: [*batch, dim] same shape as input
 ///
 /// Notes:
 /// - Formula: RMSNorm(x) = x / sqrt(mean(x*x) + eps) * gamma
@@ -18,6 +18,6 @@
 /// - Includes learnable scale parameter (gamma)
 /// - Particularly effective in large language models
 neuron RMSNorm(dim):
-    in: [*, dim]
-    out: [*, dim]
+    in: [*batch, dim]
+    out: [*batch, dim]
     impl: core,normalization/RMSNorm
