@@ -501,7 +501,11 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
-                        1, // Within pipeline, each step produces single output
+                        // Pipeline steps are chained sequentially: each Call/Ref
+                        // endpoint produces a single tensor that feeds the next step.
+                        // Multi-output (tuple) sources only occur at connection level,
+                        // not within match/if pipeline arms.
+                        1,
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -566,7 +570,11 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
-                        1, // Within pipeline, each step produces single output
+                        // Pipeline steps are chained sequentially: each Call/Ref
+                        // endpoint produces a single tensor that feeds the next step.
+                        // Multi-output (tuple) sources only occur at connection level,
+                        // not within match/if pipeline arms.
+                        1,
                     )?;
                     // Cache call/match/if results inside branch
                     if let Endpoint::Call { .. } = ep {
@@ -603,7 +611,11 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
-                        1, // Within pipeline, each step produces single output
+                        // Pipeline steps are chained sequentially: each Call/Ref
+                        // endpoint produces a single tensor that feeds the next step.
+                        // Multi-output (tuple) sources only occur at connection level,
+                        // not within match/if pipeline arms.
+                        1,
                     )?;
                     if let Endpoint::Call { .. } = ep {
                         let key = endpoint_key_impl(ep);

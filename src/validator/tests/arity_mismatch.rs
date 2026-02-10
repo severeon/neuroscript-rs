@@ -119,6 +119,24 @@ fn test_explicit_fork_still_works() {
 }
 
 #[test]
+fn test_single_element_tuple_unpacking() {
+    // Single-output source -> (a) is a 1:1 match, should be valid (standard path, not implicit fork)
+    let mut program = ProgramBuilder::new()
+        .with_simple_neuron("OneOut", wildcard(), wildcard())
+        .with_composite(
+            "Composite",
+            vec![connection(
+                call_endpoint("OneOut"),
+                tuple_endpoint(vec!["a"]),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+}
+
+#[test]
 fn test_arity_mismatch_tuple_to_call() {
     let mut program = ProgramBuilder::new()
         .with_multi_port_neuron(
