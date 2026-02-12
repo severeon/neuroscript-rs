@@ -1,5 +1,6 @@
 use super::*;
 use crate::interfaces::*;
+use crate::{parse, validate};
 
 #[test]
 fn test_codegen_match() {
@@ -22,6 +23,7 @@ fn test_codegen_match() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -96,6 +98,7 @@ fn test_codegen_match_with_captured_dims() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -201,6 +204,7 @@ fn test_codegen_match_guards_with_bindings() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -267,6 +271,7 @@ fn test_codegen_optimized_match_fewer_branches() {
             doc: None,
             body: NeuronBody::Graph {
                 context_bindings: vec![],
+                context_unrolls: vec![],
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
@@ -443,6 +448,7 @@ fn test_codegen_optimized_match_with_guards() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -585,6 +591,7 @@ fn test_codegen_if_else() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::If(IfExpr {
@@ -652,4 +659,113 @@ fn test_codegen_if_else() {
     // Check linear instantiations
     // Since 'd' is a parameter, it's statically resolvable in __init__, so we expect static instantiation:
     assert!(code.contains("self.linear_"));
+}
+
+// ============================================================================
+// Unroll codegen integration tests (parse → expand → validate → codegen)
+// ============================================================================
+
+#[test]
+fn test_codegen_unroll_threaded() {
+    let source = include_str!("../../examples/unroll_threaded.ns");
+    let mut program = parse(source).expect("Parse should succeed");
+    validate(&mut program).expect("Validation should succeed");
+    let code = generate_pytorch(&program, "TransformerStack").expect("Codegen should succeed");
+
+    // Should have 6 separate TransformerBlock instances in __init__
+    for i in 0..6 {
+        assert!(
+            code.contains(&format!("self.transformer_block_{} = TransformerBlock(d_model)", i)),
+            "Should instantiate transformer_block_{}", i
+        );
+    }
+
+    // Should have 6 sequential calls in forward()
+    assert!(code.contains("self.transformer_block_0(x)"), "First call should use input x");
+    assert!(code.contains("self.transformer_block_5(x4)"), "Last call should chain from previous");
+
+    // Should NOT have 7th instance
+    assert!(!code.contains("transformer_block_6"), "Should not have 7th instance");
+}
+
+#[test]
+fn test_codegen_unroll_context() {
+    let source = include_str!("../../examples/unroll_context.ns");
+    let mut program = parse(source).expect("Parse should succeed");
+    validate(&mut program).expect("Validation should succeed");
+    let code = generate_pytorch(&program, "NamedStack").expect("Codegen should succeed");
+
+    // Should have 3 named block instances
+    assert!(code.contains("self.block_0 = TransformerBlock(d_model)"));
+    assert!(code.contains("self.block_1 = TransformerBlock(d_model)"));
+    assert!(code.contains("self.block_2 = TransformerBlock(d_model)"));
+
+    // Should NOT have block_3
+    assert!(!code.contains("block_3"), "Should only have 3 blocks");
+
+    // Forward should chain them
+    assert!(code.contains("self.block_0("));
+    assert!(code.contains("self.block_1("));
+    assert!(code.contains("self.block_2("));
+}
+
+#[test]
+fn test_codegen_unroll_static() {
+    let source = include_str!("../../examples/unroll_static.ns");
+    let mut program = parse(source).expect("Parse should succeed");
+    validate(&mut program).expect("Validation should succeed");
+    let code = generate_pytorch(&program, "SharedLayers").expect("Codegen should succeed");
+
+    // Should have exactly ONE class-level module
+    assert!(
+        code.contains("self.__class__.block = TransformerBlock(d_model)"),
+        "Should instantiate shared block at class level"
+    );
+
+    // Should have 3 sequential calls to the SAME module
+    let call_count = code.matches("self.__class__.block(").count();
+    assert_eq!(call_count, 3, "Should call shared block 3 times, got {}", call_count);
+
+    // Should NOT have suffixed instances
+    assert!(!code.contains("block_0"), "Static block should not be suffixed");
+    assert!(!code.contains("block_1"), "Static block should not be suffixed");
+}
+
+#[test]
+fn test_codegen_unroll_gpt2() {
+    let source = include_str!("../../examples/unroll_gpt2.ns");
+    let mut program = parse(source).expect("Parse should succeed");
+    validate(&mut program).expect("Validation should succeed");
+    let code = generate_pytorch(&program, "GPT2Small").expect("Codegen should succeed");
+
+    // Should have class definition
+    assert!(code.contains("class GPT2Small(nn.Module)"));
+
+    // Should have 12 transformer blocks
+    for i in 0..12 {
+        assert!(
+            code.contains(&format!("self.block_{}", i)),
+            "Should have block_{}", i
+        );
+    }
+    assert!(!code.contains("block_12"), "Should only have 12 blocks");
+
+    // Non-unrolled bindings should each appear exactly once in __init__
+    assert_eq!(
+        code.matches("self.embed = Embedding(").count(), 1,
+        "embed should appear once"
+    );
+    assert_eq!(
+        code.matches("self.ln_f = LayerNorm(").count(), 1,
+        "ln_f should appear once"
+    );
+    assert_eq!(
+        code.matches("self.head = Linear(").count(), 1,
+        "head should appear once"
+    );
+
+    // Forward should use embed, blocks, ln_f, head in order
+    assert!(code.contains("self.embed(x)"), "Should start with embed");
+    assert!(code.contains("self.ln_f("), "Should include ln_f");
+    assert!(code.contains("self.head("), "Should include head");
 }

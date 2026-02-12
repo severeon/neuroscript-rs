@@ -136,6 +136,10 @@ test_example_file!(test_tutorials_fork_join, "tutorials/02_fork_join.ns");
 test_example_file!(test_match_multiline, "match_multiline.ns");
 test_example_file!(test_real_world_resnet, "real_world/resnet.ns");
 test_example_file!(test_dropout, "dropout.ns");
+test_example_file!(test_unroll_threaded, "unroll_threaded.ns");
+test_example_file!(test_unroll_context, "unroll_context.ns");
+test_example_file!(test_unroll_static, "unroll_static.ns");
+test_example_file!(test_unroll_gpt2, "unroll_gpt2.ns");
 
 #[test]
 fn test_multiple_connections_in_graph() {
@@ -257,4 +261,82 @@ fn test_parse_variadic_input_port() {
         eprintln!("Error: {}", e);
     }
     assert!(result.is_ok(), "Failed to parse neuron with variadic input port");
+}
+
+// ============================================================================
+// Unroll grammar tests
+// ============================================================================
+
+#[test]
+fn test_parse_unroll_expr_inline() {
+    // Inline unroll expression: unroll(3): -> Block()
+    let input = "unroll(3): -> Block(dim)\n";
+    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse inline unroll expression");
+}
+
+#[test]
+fn test_parse_unroll_expr_with_param() {
+    // Unroll with parameter reference
+    let input = "unroll(num_layers): -> Block(dim)\n";
+    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse unroll with parameter reference");
+}
+
+#[test]
+fn test_parse_unroll_expr_indented() {
+    // Indented unroll expression with pipeline on next line
+    let input = "unroll(num_layers): ->\n    TransformerBlock(d_model)\n";
+    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse indented unroll expression");
+}
+
+#[test]
+fn test_parse_unroll_as_endpoint() {
+    // unroll can appear as an endpoint in a connection
+    let input = "unroll(3): -> Block()\n";
+    let result = NeuroScriptParser::parse(Rule::endpoint, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse unroll as endpoint");
+}
+
+#[test]
+fn test_parse_unroll_context_block() {
+    // Context-level unroll block
+    let input = "unroll(3):\n    block = TransformerBlock(d_model)\n";
+    let result = NeuroScriptParser::parse(Rule::unroll_context_block, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse unroll context block");
+}
+
+#[test]
+fn test_parse_unroll_context_with_annotation() {
+    // Context-level unroll with @static annotation
+    let input = "unroll(num_layers):\n    @static block = TransformerBlock(d_model)\n";
+    let result = NeuroScriptParser::parse(Rule::unroll_context_block, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse unroll context block with @static");
+}
+
+#[test]
+fn test_unroll_is_not_ident() {
+    // "unroll" should not parse as an identifier (it's a keyword)
+    let input = "unroll";
+    let result = NeuroScriptParser::parse(Rule::ident, input);
+    assert!(result.is_err(), "unroll should not parse as identifier");
 }

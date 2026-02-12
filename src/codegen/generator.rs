@@ -180,6 +180,7 @@ fn collect_dependencies(
     if let NeuronBody::Graph {
         context_bindings,
         connections,
+        ..
     } = &neuron.body
     {
         // Collect all called neuron names from bindings and connections
@@ -250,6 +251,12 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
         }
         Endpoint::Ref(_) => {
             // Port references don't call neurons
+        }
+        Endpoint::Unroll(u) => {
+            // Recurse into unroll pipeline (should be expanded before codegen)
+            for ep in &u.pipeline {
+                collect_calls_from_endpoint(ep, result);
+            }
         }
     }
 }

@@ -105,6 +105,7 @@ fn format_neuron(neuron: &NeuronDef) -> String {
         NeuronBody::Graph {
             context_bindings,
             connections,
+            ..
         } => {
             if !context_bindings.is_empty() {
                 output.push_str("  context:\n");
@@ -315,6 +316,14 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
                 result.push('\n');
             }
             result.trim_end().to_string()
+        }
+        Endpoint::Unroll(unroll_expr) => {
+            let mut result = format!("unroll({}):", format_value(&unroll_expr.count));
+            result.push_str(" -> ");
+            let pipeline_str: Vec<String> =
+                unroll_expr.pipeline.iter().map(format_endpoint).collect();
+            result.push_str(&pipeline_str.join(" -> "));
+            result
         }
     }
 }

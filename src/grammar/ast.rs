@@ -9,9 +9,9 @@ use crate::doc_parser;
 use crate::grammar::error;
 use crate::grammar::Rule;
 use crate::interfaces::{
-    BinOp, Binding, Connection, Dim, DimExpr, Documentation, Endpoint, GlobalBinding, ImplRef,
-    MatchArm, MatchExpr, NeuronBody, NeuronDef, Param, ParseError, Port, PortRef, Program, Shape,
-    UseStmt, Value,
+    BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Documentation, Endpoint,
+    GlobalBinding, ImplRef, MatchArm, MatchExpr, NeuronBody, NeuronDef, Param, ParseError, Port,
+    PortRef, Program, Shape, UnrollExpr, UseStmt, Value,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -29,6 +29,7 @@ struct NeuronBuilderState {
     inputs: Vec<Port>,
     outputs: Vec<Port>,
     context_bindings: Vec<Binding>,
+    context_unrolls: Vec<ContextUnroll>,
     connections: Vec<Connection>,
     impl_ref: Option<ImplRef>,
 }
@@ -212,6 +213,7 @@ impl AstBuilder {
         } else {
             NeuronBody::Graph {
                 context_bindings: state.context_bindings,
+                context_unrolls: state.context_unrolls,
                 connections: state.connections,
             }
         };
@@ -273,8 +275,9 @@ impl AstBuilder {
                 state.outputs.extend(ports);
             }
             Rule::context_section => {
-                let bindings = self.build_context_section(section)?;
+                let (bindings, unrolls) = self.build_context_section(section)?;
                 state.context_bindings.extend(bindings);
+                state.context_unrolls.extend(unrolls);
             }
             Rule::graph_section => {
                 let conns = self.build_graph_section(section)?;
@@ -488,19 +491,147 @@ impl AstBuilder {
         }
     }
 
-    /// Build bindings from context_section
-    fn build_context_section(&mut self, pair: Pair<Rule>) -> Result<Vec<Binding>, ParseError> {
+    /// Build bindings and unroll blocks from context_section
+    fn build_context_section(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<(Vec<Binding>, Vec<ContextUnroll>), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::context_section);
 
         let mut bindings = vec![];
+        let mut unrolls = vec![];
 
         for inner in pair.into_inner() {
-            if inner.as_rule() == Rule::context_binding {
-                bindings.push(self.build_context_binding(inner)?);
+            match inner.as_rule() {
+                Rule::context_binding => {
+                    bindings.push(self.build_context_binding(inner)?);
+                }
+                Rule::unroll_context_block => {
+                    // The PEG grammar greedily matches all subsequent context_bindings
+                    // into the unroll block. Use indentation to separate bindings that
+                    // belong inside the unroll from those that follow it at the same level.
+                    let (unroll, overflow) =
+                        self.build_unroll_context_block_with_overflow(inner)?;
+                    unrolls.push(unroll);
+                    bindings.extend(overflow);
+                }
+                _ => {}
             }
         }
 
-        Ok(bindings)
+        Ok((bindings, unrolls))
+    }
+
+    /// Build an unroll context block, returning overflow bindings that belong
+    /// to the parent context section (at shallower indentation).
+    fn build_unroll_context_block_with_overflow(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<(ContextUnroll, Vec<Binding>), ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::unroll_context_block);
+
+        // Get the column of the unroll keyword to establish the baseline
+        let unroll_col = pair.as_span().start_pos().line_col().1;
+
+        let mut inner = pair.into_inner();
+        inner.next(); // Skip keyword_unroll
+        inner.next(); // Skip lparen
+
+        let count = self.build_value(inner.next().unwrap())?;
+
+        // Skip rparen, colon
+        inner.next();
+        inner.next();
+
+        let mut unroll_bindings = vec![];
+        let mut overflow_bindings = vec![];
+        let mut first_binding_col: Option<usize> = None;
+
+        for p in inner {
+            match p.as_rule() {
+                Rule::context_binding => {
+                    let col = p.as_span().start_pos().line_col().1;
+
+                    if first_binding_col.is_none() {
+                        // First binding establishes the expected inner indentation
+                        first_binding_col = Some(col);
+                    }
+
+                    if col > unroll_col {
+                        // More indented than unroll keyword → belongs inside
+                        unroll_bindings.push(self.build_context_binding(p)?);
+                    } else {
+                        // Same or less indentation → overflow to parent
+                        overflow_bindings.push(self.build_context_binding(p)?);
+                    }
+                }
+                Rule::NEWLINE => {}
+                _ => {}
+            }
+        }
+
+        Ok((
+            ContextUnroll {
+                count,
+                bindings: unroll_bindings,
+            },
+            overflow_bindings,
+        ))
+    }
+
+    /// Build a graph-level unroll expression
+    fn build_unroll_expr(&mut self, pair: Pair<Rule>) -> Result<UnrollExpr, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::unroll_expr);
+
+        let mut inner = pair.into_inner();
+        inner.next(); // Skip keyword_unroll
+        inner.next(); // Skip lparen
+
+        let count = self.build_value(inner.next().unwrap())?;
+
+        // Skip rparen, colon, arrow
+        inner.next();
+        inner.next();
+        inner.next();
+
+        let pipeline_pair = inner.next().unwrap();
+        let pipeline = self.build_unroll_pipeline(pipeline_pair)?;
+        let id = self.next_id();
+
+        Ok(UnrollExpr {
+            count,
+            pipeline,
+            id,
+        })
+    }
+
+    /// Build a pipeline inside an unroll expression
+    fn build_unroll_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::unroll_pipeline);
+
+        let mut endpoints = vec![];
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::endpoint => {
+                    endpoints.push(self.build_endpoint(inner)?);
+                }
+                Rule::indented_pipeline => {
+                    for item in inner.into_inner() {
+                        if item.as_rule() == Rule::indented_pipeline_item {
+                            for endpoint_pair in item.into_inner() {
+                                if endpoint_pair.as_rule() == Rule::endpoint {
+                                    endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(endpoints)
     }
 
     /// Build a context binding with optional annotation
@@ -840,6 +971,7 @@ impl AstBuilder {
         match inner.as_rule() {
             Rule::match_expr => Ok(Endpoint::Match(self.build_match_expr(inner)?)),
             Rule::if_expr => Ok(Endpoint::If(self.build_if_expr(inner)?)),
+            Rule::unroll_expr => Ok(Endpoint::Unroll(self.build_unroll_expr(inner)?)),
             Rule::tuple_endpoint => self.build_tuple_endpoint(inner),
             Rule::call_endpoint => self.build_call_endpoint(inner),
             Rule::ref_endpoint => self.build_ref_endpoint(inner),

@@ -180,6 +180,7 @@ fn collect_calls(endpoint: &Endpoint, called: &mut HashSet<String>) {
             }
         }
         Endpoint::Ref(_) => {}
+        Endpoint::Unroll(_) => {}
     }
 }
 
@@ -369,6 +370,7 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match { ... }".to_string(),
         Endpoint::If(_) => "if { ... }".to_string(),
+        Endpoint::Unroll(_) => "unroll { ... }".to_string(),
     }
 }
 
@@ -409,6 +411,6 @@ fn collect_match_exprs(neuron_name: &str, endpoint: &Endpoint, result: &mut Vec<
                 }
             }
         }
-        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) => {}
+        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Unroll(_) => {}
     }
 }

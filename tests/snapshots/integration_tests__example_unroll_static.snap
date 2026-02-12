@@ -1,0 +1,21 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SharedLayers(d_model, num_layers = 3):
+  inputs:
+    default: [*, seq, d_model]
+  outputs:
+    default: [*, seq, d_model]
+  graph:
+    in -> unroll(num_layers): -> block -> out
+
+neuron TransformerBlock(d_model):
+  inputs:
+    default: [*, seq, d_model]
+  outputs:
+    default: [*, seq, d_model]
+  impl:
+    Source: core,transformer/TransformerBlock

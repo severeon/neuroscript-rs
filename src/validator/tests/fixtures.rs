@@ -73,6 +73,7 @@ impl ProgramBuilder {
             outputs: vec![default_port(wildcard())],
             body: NeuronBody::Graph {
                 context_bindings: vec![],
+                context_unrolls: vec![],
                 connections,
             },
             max_cycle_depth,
@@ -97,6 +98,7 @@ impl ProgramBuilder {
             outputs,
             body: NeuronBody::Graph {
                 context_bindings: vec![],
+                context_unrolls: vec![],
                 connections,
             },
             max_cycle_depth,

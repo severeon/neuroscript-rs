@@ -38,6 +38,7 @@ keyword_lazy = @{ "lazy" ~ !ident_cont }
 keyword_if = @{ "if" ~ !ident_cont }
 keyword_elif = @{ "elif" ~ !ident_cont }
 keyword_else = @{ "else" ~ !ident_cont }
+keyword_unroll = @{ "unroll" ~ !ident_cont }
 
 // ============================================================================
 // Operators
@@ -98,6 +99,7 @@ keyword = _{
   | keyword_true | keyword_false
   | keyword_context | keyword_static | keyword_global | keyword_lazy
   | keyword_if | keyword_elif | keyword_else
+  | keyword_unroll
 }
 
 // Identifiers: foo, _bar, baz123
@@ -280,9 +282,9 @@ binding = {
 // Context Bindings
 // ============================================================================
 
-// context: always indented
+// context: always indented, supports both regular bindings and unroll blocks
 context_section = {
-    keyword_context ~ colon ~ NEWLINE ~ (NEWLINE* ~ context_binding)+
+    keyword_context ~ colon ~ NEWLINE ~ (NEWLINE* ~ (unroll_context_block | context_binding))+
 }
 
 context_binding = {
@@ -330,10 +332,11 @@ indented_pipeline_item = {
   | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ NEWLINE*)
 }
 
-// Endpoint: in, out, foo, Foo(args), (a, b), match: ..., if ...
+// Endpoint: in, out, foo, Foo(args), (a, b), match: ..., if ..., unroll(n): -> ...
 endpoint = {
     match_expr
   | if_expr
+  | unroll_expr
   | tuple_endpoint
   | ref_endpoint
   | call_endpoint
@@ -392,6 +395,27 @@ branch_pipeline = {
     (NEWLINE ~ indented_pipeline)
     // Inline pipeline
   | (endpoint ~ (arrow ~ endpoint)*)
+}
+
+// ============================================================================
+// Unroll Expressions
+// ============================================================================
+
+// Graph-level unroll: unroll(count): -> pipeline
+// The -> after the colon indicates threaded (sequential chaining) mode
+unroll_expr = {
+    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ arrow ~ unroll_pipeline
+}
+
+// Pipeline inside an unroll (same structure as match_pipeline)
+unroll_pipeline = {
+    (NEWLINE ~ indented_pipeline)
+  | (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
+}
+
+// Context-level unroll: unroll(count):\n  bindings...
+unroll_context_block = {
+    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ NEWLINE ~ (NEWLINE* ~ context_binding)+
 }
 
 // ============================================================================

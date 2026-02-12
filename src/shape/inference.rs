@@ -540,6 +540,9 @@ impl ShapeInferenceEngine {
             Endpoint::If(if_expr) => {
                 self.validate_if_destination(if_expr, &source_shapes, ctx, program)?;
             }
+            Endpoint::Unroll(_) => {
+                // Unroll should be expanded before shape inference
+            }
         }
 
         Ok(())
@@ -1000,6 +1003,7 @@ impl ShapeInferenceEngine {
             ),
             Endpoint::Match(_) => "match".to_string(),
             Endpoint::If(_) => "if".to_string(),
+            Endpoint::Unroll(_) => "unroll".to_string(),
         }
     }
 
@@ -1147,6 +1151,9 @@ fn resolve_match_endpoint(
         Endpoint::If(_) => Err(ShapeError::UnsupportedFeature(
             "Nested if expressions not yet supported in match pipeline".to_string(),
         )),
+        Endpoint::Unroll(_) => Err(ShapeError::UnsupportedFeature(
+            "Unroll should be expanded before shape inference".to_string(),
+        )),
     }
 }
 
@@ -1220,13 +1227,10 @@ fn resolve_endpoint_shape(
             if let Some(shapes) = ctx.call_outputs.get(&if_expr.id) {
                 Ok(shapes.clone())
             } else {
-                // If ID not found, it means it hasn't been processed as a destination yet.
-                // This implies it's being used as a source without being a destination first?
-                // Or we are in a cycle?
-                // For now return empty or error?
                 Ok(vec![])
             }
         }
+        Endpoint::Unroll(_) => Ok(vec![]),
     }
 }
 
