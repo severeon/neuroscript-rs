@@ -1,0 +1,60 @@
+# Category: Language Features
+# Purpose: Demonstrate variadic input ports with Concat
+# Feature: Variadic ports allow a neuron to accept any number of inputs
+
+# Variadic Concat primitive — accepts 2, 3, or more inputs
+neuron Concat(dim):
+    in *inputs: [*shape]
+    out: [*shape_out]
+    impl: core,structural/Concat
+
+# Two-input concat (classic case)
+neuron TwoWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 2]
+    graph:
+        in -> (a, b)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        (pa, pb) -> Concat(1) -> out
+
+# Three-input concat
+neuron ThreeWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 3]
+    graph:
+        in -> (a, b, c)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        (pa, pb, pc) -> Concat(1) -> out
+
+# Four-input concat (e.g., InceptionBlock-style)
+neuron FourWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 4]
+    graph:
+        in -> (a, b, c, d)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        d -> Linear(dim, dim) -> pd
+        (pa, pb, pc, pd) -> Concat(1) -> out
+
+# ConcatNorm: variadic concat piped into normalization
+neuron ConcatNorm(dim):
+    in *inputs: [*shape]
+    out: [*, dim]
+    graph:
+        in -> Concat(1) -> LayerNorm(dim) -> out
+
+# Supporting primitives
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*, dim]
+    out: [*, dim]
+    impl: core,normalization/LayerNorm

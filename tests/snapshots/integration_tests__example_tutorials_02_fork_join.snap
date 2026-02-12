@@ -15,11 +15,9 @@ neuron Add:
 
 neuron Concat:
   inputs:
-    a: [*, dim_a]
-    b: [*, dim_b]
-    c: [*, dim_c]
+    *inputs: [*shape]
   outputs:
-    default: [*, (dim_a + dim_b)]
+    default: [*shape_out]
   impl:
     Source: core,builtin/Concat
 

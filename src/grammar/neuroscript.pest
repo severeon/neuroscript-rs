@@ -216,8 +216,10 @@ port_def = {
 // Indented: in:\n  name: [shape]\n  name2: [shape]
 in_section = {
     keyword_in ~ (
+        // Variadic: in *inputs: [shape]
+        (star ~ ident ~ colon ~ shape)
         // Inline with optional name
-        (ident ~ colon ~ shape)
+      | (ident ~ colon ~ shape)
       | (colon ~ shape)
       | (colon ~ NEWLINE ~ (NEWLINE* ~ port_def)+)
     )
