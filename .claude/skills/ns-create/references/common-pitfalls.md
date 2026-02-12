@@ -146,3 +146,27 @@ When using tuple unpacking (implicit or explicit), the names you assign override
 in -> (processed, residual)            # implicit fork — your names
 (processed, residual) -> Add() -> out  # matched by position, not name
 ```
+
+## 11. Inlining Instead of Reusing Stdlib
+
+**Wrong**: Duplicating a pattern that already exists in stdlib
+```neuroscript
+# Inlining the SE pattern manually
+se_input -> (features, attn_path)
+attn_path ->
+    GlobalAvgPool()
+    Flatten()
+    Linear(channels, channels / reduction)
+    ReLU()
+    Linear(channels / reduction, channels)
+    Sigmoid()
+    attention
+(features, attention) -> Multiply() -> se_out
+```
+
+**Right**: Reference the stdlib neuron by name
+```neuroscript
+se_input -> SEBlock(channels, reduction) -> se_out
+```
+
+All stdlib neurons (primitives and composites) are loaded automatically. Check `stdlib/*.ns` before inlining a sub-pattern.

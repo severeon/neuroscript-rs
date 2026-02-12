@@ -17,19 +17,9 @@ neuron MBConvBlock(channels, expansion, reduction):
     SiLU#2() -> DepthwiseConv#3((channels * expansion), (channels * expansion), 3, 1, 1)
     DepthwiseConv#3((channels * expansion), (channels * expansion), 3, 1, 1) -> BatchNorm#4((channels * expansion))
     BatchNorm#4((channels * expansion)) -> SiLU#5()
-    SiLU#5() -> se_input
-    se_input -> (features, attn_path)
-    attn_path -> GlobalAvgPool#6()
-    GlobalAvgPool#6() -> Flatten#7()
-    Flatten#7() -> Linear#8((channels * expansion), ((channels * expansion) / reduction))
-    Linear#8((channels * expansion), ((channels * expansion) / reduction)) -> ReLU#9()
-    ReLU#9() -> Linear#10(((channels * expansion) / reduction), (channels * expansion))
-    Linear#10(((channels * expansion) / reduction), (channels * expansion)) -> Sigmoid#11()
-    Sigmoid#11() -> attention
-    (features, attention) -> Multiply#12()
-    Multiply#12() -> se_out
-    se_out -> Conv2d#13((channels * expansion), channels, 1, 1, 0)
-    Conv2d#13((channels * expansion), channels, 1, 1, 0) -> BatchNorm#14(channels)
-    BatchNorm#14(channels) -> projected
-    (projected, skip) -> Add#15()
-    Add#15() -> out
+    SiLU#5() -> SEBlock#6((channels * expansion), reduction)
+    SEBlock#6((channels * expansion), reduction) -> Conv2d#7((channels * expansion), channels, 1, 1, 0)
+    Conv2d#7((channels * expansion), channels, 1, 1, 0) -> BatchNorm#8(channels)
+    BatchNorm#8(channels) -> projected
+    (projected, skip) -> Add#9()
+    Add#9() -> out

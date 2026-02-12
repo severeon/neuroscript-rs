@@ -67,14 +67,8 @@ The word `context` cannot be used as a port name or identifier because it's rese
 
 **Neurons affected**: CrossAttention (worked around by using `memory`).
 
-## 6. Inter-neuron stdlib references need `use` statements
+## ~~6. Inter-neuron stdlib references need `use` statements~~ (RESOLVED)
 
-**Impact**: Low | **Difficulty**: Already implemented
+**Impact**: Low | **Difficulty**: Already implemented | **Status**: Done
 
-This turned out to not be a limitation — `use` statements work. However, none of the generated neurons currently use `use` statements to reference other stdlib neurons. MBConvBlock inlined the SE pattern instead of importing SEBlock.
-
-**What needs to change**:
-
-- No language change needed
-- Update the ns-create skill to recommend `use stdlib, SEBlock/*` when a dependency exists in stdlib
-- Verify that `use` + compilation works end-to-end for stdlib-to-stdlib references
+Stdlib neurons can reference other stdlib neurons directly by name — all `.ns` files in `stdlib/` are loaded and merged automatically. No `use` statement is needed for stdlib-to-stdlib references. MBConvBlock has been refactored to use `SEBlock(channels * expansion, reduction)` instead of inlining the SE pattern. The ns-create skill now recommends reusing stdlib composites. See `examples/stdlib_composition.ns` for a demonstration of composing stdlib neurons (PreNormFFNBlock uses FFN; EfficientStage uses MBConvBlock which uses SEBlock).

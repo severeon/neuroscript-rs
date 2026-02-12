@@ -1,0 +1,30 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron EfficientStage(channels, expansion, reduction):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  graph:
+    in -> MBConvBlock#4(channels, expansion, reduction)
+    MBConvBlock#4(channels, expansion, reduction) -> MBConvBlock#5(channels, expansion, reduction)
+    MBConvBlock#5(channels, expansion, reduction) -> MBConvBlock#6(channels, expansion, reduction)
+    MBConvBlock#6(channels, expansion, reduction) -> out
+
+neuron PreNormFFNBlock(dim, d_ff):
+  inputs:
+    default: [*batch, seq, dim]
+  outputs:
+    default: [*batch, seq, dim]
+  graph:
+    in -> (main, skip)
+    main -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> FFN#1(dim, d_ff)
+    FFN#1(dim, d_ff) -> Dropout#2(0.1)
+    Dropout#2(0.1) -> processed
+    (processed, skip) -> Add#3()
+    Add#3() -> out

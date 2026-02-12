@@ -1,0 +1,31 @@
+# Example: Composing stdlib neurons
+#
+# Demonstrates reusing stdlib composite neurons (FFN, SEBlock,
+# TransformerBlock, MBConvBlock) instead of inlining their patterns.
+# All stdlib neurons are available by name — no `use` statement needed.
+
+/// Pre-norm residual FFN block
+/// Composes stdlib's FFN inside a residual connection with layer normalization.
+neuron PreNormFFNBlock(dim, d_ff):
+    in: [*batch, seq, dim]
+    out: [*batch, seq, dim]
+    graph:
+        in -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            FFN(dim, d_ff)
+            Dropout(0.1)
+            processed
+        (processed, skip) -> Add() -> out
+
+/// EfficientNet-style convolution stage
+/// Composes MBConvBlock (which itself uses SEBlock) three times.
+neuron EfficientStage(channels, expansion, reduction):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in ->
+            MBConvBlock(channels, expansion, reduction)
+            MBConvBlock(channels, expansion, reduction)
+            MBConvBlock(channels, expansion, reduction)
+            out

@@ -31,6 +31,8 @@ Before creating, verify the neuron doesn't already exist:
 - Check `stdlib/*.ns` for composite library neurons
 - Check `examples/` for similar patterns
 
+**Reuse stdlib composites**: If the neuron you're building contains a sub-pattern that already exists in `stdlib/`, reference it by name instead of inlining the logic. All stdlib neurons (primitives and composites) are automatically loaded and available by name in any `.ns` file. For example, use `SEBlock(channels, reduction)` instead of inlining the squeeze-and-excitation pattern. See `examples/stdlib_composition.ns` for examples of composing stdlib neurons.
+
 ### 3. Choose Pattern
 
 | Pattern | When to Use | Template |
