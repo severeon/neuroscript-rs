@@ -1,0 +1,170 @@
+---
+sidebar_position: 4
+title: Conditionals
+description: Route tensors with if/elif/else based on parameters
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Conditionals (if / elif / else)
+
+NeuroScript's `if`/`elif`/`else` expressions let you choose between pipelines based on neuron **parameters** — values known at compile time like flags, counts, or modes. This complements [match expressions](./match-guards), which branch on tensor **shapes** at runtime.
+
+## When to Use Each
+
+| Construct | Branches on | Known at | Use for |
+|-----------|------------|----------|---------|
+| `if`/`elif`/`else` | Parameter values | Compile time | Feature flags, mode selection, depth guards |
+| `match` with guards | Tensor shapes | Runtime | Adaptive processing based on input dimensions |
+
+## Basic Syntax
+
+The simplest form is an inline `if`/`else`:
+
+```neuroscript
+if condition: pipeline else: pipeline
+```
+
+Or as a multi-line block inside a pipeline:
+
+```neuroscript
+in ->
+    if condition: NeuronA()
+    else: NeuronB()
+    out
+```
+
+## Inline Conditionals
+
+Use inline `if`/`else` when each branch is a short pipeline:
+
+<InteractiveExample
+  title="Optional Pooling"
+  description="A flag parameter controls whether pooling is applied"
+  initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
+  in: [batch, in_ch, h, w]
+  out: [batch, out_ch, h, w]
+  context:
+    conv = Conv2d(in_ch, out_ch, 3, padding=1)
+    bn = BatchNorm(out_ch)
+    act = ReLU()
+  graph:
+    in -> conv -> bn -> act
+    act -> if has_pool: MaxPool(2, stride=2) -> out else: Identity() -> out`}
+/>
+
+Here `has_pool` is a parameter with a default value of `true`. The compiler statically resolves which branch to include.
+
+## Multi-Line Conditionals
+
+When branches contain multi-step pipelines, use the indented block form:
+
+<InteractiveExample
+  title="Multi-Line Conditional"
+  description="Indented if/else with multi-step branches that feed into the next pipeline step"
+  initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
+  in: [batch, in_ch, h, w]
+  out: [batch, out_ch, h, w]
+  context:
+    conv = Conv2d(in_ch, out_ch, 3, padding=1)
+    bn = BatchNorm(out_ch)
+    act = ReLU()
+    @lazy pool = MaxPool(2, stride=2)
+  graph:
+    in ->
+      conv
+      bn
+      act
+      if has_pool: pool
+      else: Identity()
+      out`}
+/>
+
+Both branches flow into `out` — the conditional sits inline within the pipeline, and the next step after the `if`/`else` block receives whichever branch was selected.
+
+## Using elif
+
+For multi-way branching, add `elif` arms:
+
+```neuroscript
+neuron FlexibleNorm(dim, mode=1):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            if mode == 0: Identity()
+            elif mode == 1: LayerNorm(dim)
+            elif mode == 2: BatchNorm(dim)
+            else: RMSNorm(dim)
+            out
+```
+
+Each condition is checked in order. The first truthy condition wins. The `else` arm is the fallback.
+
+## Conditionals with Context Bindings
+
+When a conditional branch references a neuron that should only be instantiated if the condition is true, use `@lazy`:
+
+<InteractiveExample
+  title="Lazy Conditional"
+  description="@lazy ensures the pool module is only instantiated when has_pool is true"
+  initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
+  in: [batch, in_ch, h, w]
+  out: [batch, out_ch, h, w]
+  context:
+    conv = Conv2d(in_ch, out_ch, 3, padding=1)
+    bn = BatchNorm(out_ch)
+    act = ReLU()
+    @lazy pool = MaxPool(2, stride=2)
+  graph:
+    in -> conv -> bn -> act
+    act ->
+      if has_pool: pool
+      else: Identity()
+      out`}
+/>
+
+Without `@lazy`, the pool module would be instantiated in `__init__` even when `has_pool` is `false`. The `@lazy` annotation defers instantiation until the binding is actually used.
+
+## Composing Conditional Neurons
+
+Conditionals compose naturally — callers control the flag:
+
+```neuroscript
+neuron CNN(in_channels, num_classes):
+    in: [batch, in_channels, h, w]
+    out: [batch, num_classes]
+    context:
+        conv1 = ConvBlock(in_channels, 32)             # has_pool defaults to true
+        conv2 = ConvBlock(32, 64)                       # has_pool defaults to true
+        conv3 = ConvBlock(64, 128, has_pool=false)      # no pooling on last block
+    graph:
+        in -> conv1 -> conv2 -> conv3 -> GlobalAvgPool() -> Flatten(1) -> Linear(128, num_classes) -> out
+```
+
+## Comparison with Match Expressions
+
+Both constructs route data, but they serve different purposes:
+
+```neuroscript
+# if/elif/else: parameter-based (compile-time)
+in ->
+    if use_attention: MultiHeadSelfAttention(dim, heads)
+    else: Linear(dim, dim)
+    out
+
+# match: shape-based (runtime)
+in -> match:
+    [*, d] where d > 512: Linear(d, 512) -> out
+    [*, d]: Linear(d, 256) -> Linear(256, 512) -> out
+```
+
+Use `if`/`elif`/`else` when the decision depends on a parameter. Use `match` when it depends on the actual tensor shape flowing through the graph.
+
+## Try It Yourself
+
+Experiment with conditionals:
+- Change the `has_pool` default value and see how the output changes
+- Add an `elif` arm for a third option
+- Combine `if`/`else` with `@lazy` bindings for conditional module instantiation
+- Click "Show Analysis" to see which branch the compiler selects

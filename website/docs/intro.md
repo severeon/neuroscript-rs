@@ -62,27 +62,24 @@ neuron DynamicBranch(dim):
             [*, _, dim]: light_branch -> out
 ```
 
-### Recursion
+### Conditionals and Recursion
 
-NeuroScript supports recursive neuron definitions, enabling fractal architectures and repeated structures:
+NeuroScript supports `if`/`elif`/`else` for parameter-based branching and recursive neuron definitions:
 
 ```neuroscript
-neuron FractalNet(dim, depth):
+neuron RecursiveStack(dim, depth):
     in: [*, dim]
     out: [*, dim]
-    
+    context:
+        @lazy recurse = RecursiveStack(dim, depth - 1)
     graph:
-        in -> match:
-            # Base case
-            if depth == 0:
-                Linear(dim, dim) -> out
-            
-            # Recursive step
-            else:
-                Fork() -> (left, right)
-                left -> FractalNet(dim, depth - 1) -> l_out
-                right -> FractalNet(dim, depth - 1) -> r_out
-                (l_out, r_out) -> Add() -> out
+        in ->
+            if depth > 0:
+                Linear(dim, dim)
+                GELU()
+                recurse
+            else: Identity()
+            out
 ```
 
 ## Getting Started

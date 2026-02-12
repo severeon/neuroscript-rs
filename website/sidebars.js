@@ -24,6 +24,9 @@ const sidebars = {
         'tutorials/shape-inference',
         'tutorials/fork-join',
         'tutorials/match-guards',
+        'tutorials/conditionals',
+        'tutorials/unroll',
+        'tutorials/variadic-ports',
       ],
     },
     {

@@ -1,0 +1,200 @@
+---
+sidebar_position: 5
+title: Unroll
+description: Compile-time loop expansion for repeated layers
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Unroll
+
+The `unroll` construct expands repeated layers at **compile time**. Instead of writing the same neuron call N times, you write it once and let the compiler generate the repetitions. Each iteration gets its own independent weights by default.
+
+## Why "Unroll"?
+
+The name is intentional — this is not a runtime loop. The compiler literally unrolls the construct into N separate graph nodes before code generation. The count must be a constant or neuron parameter, never a runtime value.
+
+## Sequential Threading
+
+The most common form chains iterations sequentially — the output of iteration *k* feeds the input of iteration *k+1*:
+
+<InteractiveExample
+  title="Transformer Stack"
+  description="N transformer blocks chained sequentially via unroll"
+  initialCode={`neuron TransformerBlock(d_model):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  impl: core,transformer/TransformerBlock
+
+neuron TransformerStack(d_model, num_layers):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  graph:
+    in ->
+      unroll(num_layers): ->
+        TransformerBlock(d_model)
+      out`}
+/>
+
+The `->` after the colon is what makes this sequential. It means "thread the data through each iteration." The unrolled block must have compatible input/output shapes since each output becomes the next input.
+
+## Context-Scoped Bindings
+
+When you need named bindings for each iteration, declare them inside an `unroll` block in the `context:` section:
+
+<InteractiveExample
+  title="Context-Scoped Unroll"
+  description="Each iteration gets its own independent block instance"
+  initialCode={`neuron TransformerBlock(d_model):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  impl: core,transformer/TransformerBlock
+
+neuron NamedStack(d_model, num_layers=3):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  context:
+    unroll(num_layers):
+      block = TransformerBlock(d_model)
+  graph:
+    in ->
+      unroll(num_layers): ->
+        block
+      out`}
+/>
+
+The compiler matches context-unroll bindings to graph-unroll references by the unroll parameter. Iteration 0 gets instance 0, iteration 1 gets instance 1, and so on. Each `block` is an independent module with its own weights.
+
+## Weight Sharing with @static
+
+To reuse the **same weights** across all iterations (like a Universal Transformer), combine `unroll` with `@static`:
+
+<InteractiveExample
+  title="Weight Sharing"
+  description="@static makes all iterations share one set of weights"
+  initialCode={`neuron TransformerBlock(d_model):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  impl: core,transformer/TransformerBlock
+
+neuron UniversalTransformer(d_model, num_steps=6):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  context:
+    unroll(num_steps):
+      @static block = TransformerBlock(d_model)
+  graph:
+    in ->
+      unroll(num_steps): ->
+        block
+      out`}
+/>
+
+`@static` means one instance, reused across all references. The generated code creates a single `TransformerBlock` in `__init__` and calls it `num_steps` times in `forward`.
+
+## End-to-End Example: GPT-2
+
+`unroll` composes naturally with other pipeline steps — it's just another block in the chain:
+
+<InteractiveExample
+  title="GPT-2 Small"
+  description="Full model: embedding → unrolled transformer blocks → head"
+  initialCode={`neuron Linear(in_dim, out_dim):
+  in: [*shape, in_dim]
+  out: [*shape, out_dim]
+  impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+  in: [*shape, dim]
+  out: [*shape, dim]
+  impl: core,normalization/LayerNorm
+
+neuron Embedding(vocab_size, d_model):
+  in: [*shape]
+  out: [*shape, d_model]
+  impl: core,nn/Embedding
+
+neuron TransformerBlock(d_model):
+  in: [*, seq, d_model]
+  out: [*, seq, d_model]
+  impl: core,transformer/TransformerBlock
+
+neuron GPT2Small(vocab_size=50257, d_model=768, num_layers=12):
+  in: [*, seq]
+  out: [*, seq, vocab_size]
+  context:
+    embed = Embedding(vocab_size, d_model)
+    unroll(num_layers):
+      block = TransformerBlock(d_model)
+    ln_f = LayerNorm(d_model)
+    head = Linear(d_model, vocab_size)
+  graph:
+    in -> embed -> e
+    e ->
+      unroll(num_layers): ->
+        block
+      mid
+    mid -> ln_f -> head -> out`}
+/>
+
+This replaces what would otherwise be 12 hand-written `TransformerBlock` calls.
+
+## Multiple Bindings Per Iteration
+
+Each unroll iteration can contain multiple bindings:
+
+```neuroscript
+neuron MultiScaleEncoder(dim, num_scales):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    context:
+        unroll(num_scales):
+            encoder = TransformerBlock(dim, 8, dim * 4)
+            norm = LayerNorm(dim)
+    graph:
+        in ->
+            unroll(num_scales): ->
+                encoder
+                norm
+            out
+```
+
+Each iteration gets its own independent `encoder` and `norm` pair.
+
+## Mixed Scoping
+
+Unroll-scoped and regular bindings compose freely:
+
+```neuroscript
+neuron HybridStack(dim, num_layers):
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    context:
+        @static shared_norm = LayerNorm(dim)
+        unroll(num_layers):
+            block = TransformerBlock(dim, 8, dim * 4)
+    graph:
+        in ->
+            unroll(num_layers): ->
+                block
+                shared_norm
+            out
+```
+
+Each iteration gets its own `block` (independent weights), but all iterations share the same `shared_norm` instance.
+
+## Key Rules
+
+- The count must be a **constant or parameter** — no runtime values
+- The `->` after the colon means **sequential threading** (output feeds next input)
+- Each iteration gets **independent weights** unless `@static` is used
+- Context-unroll bindings are **scoped** — they can only be referenced inside a matching graph-unroll
+- Referencing an unroll-scoped binding outside a matching unroll is a **compile error**
+
+## Try It Yourself
+
+Experiment with unroll:
+- Change `num_layers` to see how the expanded graph changes
+- Add `@static` to see the difference in generated code
+- Add multiple bindings per iteration
+- Click "Show Analysis" to see the unrolled structure
