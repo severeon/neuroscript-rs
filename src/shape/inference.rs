@@ -409,7 +409,10 @@ impl ShapeInferenceEngine {
                 let mut call_ctx = ctx.clone();
 
                 if has_variadic_input {
-                    // Variadic: validate each source shape against the single variadic port
+                    // Variadic: validate each source shape individually against the single
+                    // variadic port's shape pattern. Cross-input compatibility (e.g., all
+                    // non-concat dims must match) is left to the runtime — the type system
+                    // only ensures each input satisfies the declared shape constraint.
                     let variadic_port = &called_neuron.inputs[0];
                     for (i, src_shape) in source_shapes.iter().enumerate() {
                         self.validate_connection_shapes(src_shape, &variadic_port.shape, &mut call_ctx, &format!(

@@ -273,3 +273,75 @@ fn test_non_variadic_still_enforces_arity() {
         )
     });
 }
+
+#[test]
+fn test_variadic_port_accepts_single_input() {
+    // a -> VariadicNeuron() should also be valid (single input to variadic)
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "VariadicNeuron",
+            vec![variadic_port("inputs", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_simple_neuron("OneOut", wildcard(), wildcard())
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("OneOut")),
+                connection(call_endpoint("OneOut"), call_endpoint("VariadicNeuron")),
+                connection(call_endpoint("VariadicNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_variadic_output_port_rejected() {
+    // Variadic output ports are not supported
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "BadNeuron",
+            vec![default_port(wildcard())],
+            vec![variadic_port("outputs", wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("BadNeuron")),
+                connection(call_endpoint("BadNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::Custom(msg) if msg.contains("Variadic output ports"))
+    });
+}
+
+#[test]
+fn test_variadic_port_requires_explicit_name() {
+    // A variadic port named "default" should be rejected
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "BadVariadic",
+            vec![variadic_port("default", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("BadVariadic")),
+                connection(call_endpoint("BadVariadic"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::Custom(msg) if msg.contains("explicit name"))
+    });
+}
