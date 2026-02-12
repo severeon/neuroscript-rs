@@ -116,10 +116,8 @@ neuron Add:
     impl: core,builtin/Add
 
 neuron Concat:
-    in a: [*, dim_a]
-    in b: [*, dim_b]
-    in c: [*, dim_c]
-    out: [*, dim_a + dim_b + dim_c]
+    in *inputs: [*shape]
+    out: [*shape_out]
     impl: core,builtin/Concat
 
 neuron Linear(in_dim, out_dim):

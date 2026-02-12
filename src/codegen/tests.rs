@@ -11,10 +11,12 @@ fn test_codegen_match() {
         inputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+            variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+            variadic: false,
         }],
         max_cycle_depth: Some(10),
         doc: None,
@@ -83,10 +85,12 @@ fn test_codegen_match_with_captured_dims() {
         inputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]),
+            variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+            variadic: false,
         }],
         max_cycle_depth: Some(10),
         doc: None,
@@ -186,10 +190,12 @@ fn test_codegen_match_guards_with_bindings() {
         inputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]),
+            variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+            variadic: false,
         }],
         max_cycle_depth: Some(10),
         doc: None,
@@ -250,10 +256,12 @@ fn test_codegen_optimized_match_fewer_branches() {
             inputs: vec![Port {
                 name: "default".to_string(),
                 shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]),
+                variadic: false,
             }],
             outputs: vec![Port {
                 name: "default".to_string(),
                 shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                variadic: false,
             }],
             max_cycle_depth: Some(10),
             doc: None,
@@ -424,10 +432,12 @@ fn test_codegen_optimized_match_with_guards() {
         inputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]),
+            variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+            variadic: false,
         }],
         max_cycle_depth: Some(10),
         doc: None,
@@ -564,10 +574,12 @@ fn test_codegen_if_else() {
         inputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Literal(64)]),
+            variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
             shape: Shape::new(vec![Dim::Wildcard, Dim::Wildcard]), // Simplified output shape
+            variadic: false,
         }],
         max_cycle_depth: Some(10),
         doc: None,

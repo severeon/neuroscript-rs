@@ -76,7 +76,8 @@ fn format_neuron(neuron: &NeuronDef) -> String {
         output.push_str("  inputs:\n");
         for port in &neuron.inputs {
             output.push_str(&format!(
-                "    {}: {}\n",
+                "    {}{}: {}\n",
+                if port.variadic { "*" } else { "" },
                 port.name,
                 format_shape(&port.shape)
             ));

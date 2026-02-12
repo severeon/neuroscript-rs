@@ -25,9 +25,8 @@ neuron Split(dim, sizes):
 
 # Example 4: Concat - Concatenate tensors
 neuron Concat:
-    in a: [*, dim_a]
-    in b: [*, dim_b]
-    out: [*, dim_a + dim_b]
+    in *inputs: [*shape]
+    out: [*shape_out]
     impl: core,builtin/Concat
 
 # Example 5: Reshape - Change tensor shape

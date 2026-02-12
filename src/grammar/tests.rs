@@ -243,3 +243,18 @@ neuron Test:
     }
     assert!(result_multi.is_ok(), "Failed to parse neuron_def with multiple blank lines after doc comment");
 }
+
+#[test]
+fn test_parse_variadic_input_port() {
+    // Variadic input port syntax: in *inputs: [*shape]
+    let input = r#"neuron Concat(dim):
+    in *inputs: [*shape]
+    out: [*shape_out]
+    impl: core,structural/Concat
+"#;
+    let result = NeuroScriptParser::parse(Rule::neuron_def, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse neuron with variadic input port");
+}

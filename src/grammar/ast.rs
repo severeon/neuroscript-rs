@@ -343,9 +343,13 @@ impl AstBuilder {
     fn build_port_section(&mut self, pair: Pair<Rule>) -> Result<Vec<Port>, ParseError> {
         let mut ports = vec![];
         let mut name: Option<String> = None;
+        let mut is_variadic = false;
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
+                Rule::star => {
+                    is_variadic = true;
+                }
                 Rule::port_def => {
                     ports.push(self.build_port_def(inner)?);
                 }
@@ -355,12 +359,15 @@ impl AstBuilder {
                     let s = self.build_shape(inner)?;
                     if let Some(n) = name.take() {
                         // We had an ident before, this is "in name: [shape]"
-                        ports.push(Port { name: n, shape: s });
+                        ports.push(Port { name: n, shape: s, variadic: is_variadic });
+                        is_variadic = false;
                     } else {
                         ports.push(Port {
                             name: "default".to_string(),
                             shape: s,
+                            variadic: is_variadic,
                         });
+                        is_variadic = false;
                     }
                 }
                 Rule::ident => {
@@ -386,7 +393,7 @@ impl AstBuilder {
 
         let shape = self.build_shape(inner.next().unwrap())?;
 
-        Ok(Port { name, shape })
+        Ok(Port { name, shape, variadic: false })
     }
 
     /// Build a Shape from a shape pair

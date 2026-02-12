@@ -125,6 +125,34 @@ macro_rules! check_example_build {
     };
 }
 
+#[test]
+fn test_variadic_input_port() {
+    let input = r#"neuron Concat(dim):
+    in *inputs: [*shape]
+    out: [*shape_out]
+    impl: core,structural/Concat
+"#;
+    let program = parse_program(input).expect("Failed to parse variadic port");
+    let neuron = &program.neurons["Concat"];
+    assert_eq!(neuron.inputs.len(), 1);
+    assert!(neuron.inputs[0].variadic, "Input port should be variadic");
+    assert_eq!(neuron.inputs[0].name, "inputs");
+    assert!(!neuron.outputs[0].variadic, "Output port should not be variadic");
+}
+
+#[test]
+fn test_non_variadic_port_stays_false() {
+    let input = r#"neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+    let program = parse_program(input).expect("Failed to parse");
+    let neuron = &program.neurons["Linear"];
+    assert!(!neuron.inputs[0].variadic, "Regular input port should not be variadic");
+    assert!(!neuron.outputs[0].variadic, "Regular output port should not be variadic");
+}
+
 check_example_build!(build_primitives_activations, "primitives/activations.ns");
 check_example_build!(build_primitives_structural, "primitives/structural.ns");
 check_example_build!(build_primitives_operations, "primitives/operations.ns");

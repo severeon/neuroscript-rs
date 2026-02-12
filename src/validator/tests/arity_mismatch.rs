@@ -171,3 +171,177 @@ fn test_arity_mismatch_tuple_to_call() {
         )
     });
 }
+
+#[test]
+fn test_variadic_port_accepts_two_inputs() {
+    // (a, b) -> VariadicNeuron() should be valid when VariadicNeuron has variadic input
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "VariadicNeuron",
+            vec![variadic_port("inputs", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_multi_port_neuron(
+            "Fork",
+            vec![default_port(wildcard())],
+            vec![port("a", wildcard()), port("b", wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("Fork")),
+                connection(call_endpoint("Fork"), tuple_endpoint(vec!["a", "b"])),
+                connection(tuple_endpoint(vec!["a", "b"]), call_endpoint("VariadicNeuron")),
+                connection(call_endpoint("VariadicNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_variadic_port_accepts_three_inputs() {
+    // (a, b, c) -> VariadicNeuron() should be valid
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "VariadicNeuron",
+            vec![variadic_port("inputs", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_multi_port_neuron(
+            "Fork3",
+            vec![default_port(wildcard())],
+            vec![port("a", wildcard()), port("b", wildcard()), port("c", wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("Fork3")),
+                connection(call_endpoint("Fork3"), tuple_endpoint(vec!["a", "b", "c"])),
+                connection(
+                    tuple_endpoint(vec!["a", "b", "c"]),
+                    call_endpoint("VariadicNeuron"),
+                ),
+                connection(call_endpoint("VariadicNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_non_variadic_still_enforces_arity() {
+    // (a, b, c) -> NonVariadic() with 2 inputs should still fail
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "TwoIn",
+            vec![port("left", wildcard()), port("right", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_multi_port_neuron(
+            "Fork3",
+            vec![default_port(wildcard())],
+            vec![port("a", wildcard()), port("b", wildcard()), port("c", wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("Fork3")),
+                connection(call_endpoint("Fork3"), tuple_endpoint(vec!["a", "b", "c"])),
+                connection(
+                    tuple_endpoint(vec!["a", "b", "c"]),
+                    call_endpoint("TwoIn"),
+                ),
+                connection(call_endpoint("TwoIn"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(
+            e,
+            ValidationError::ArityMismatch {
+                expected: 2,
+                got: 3,
+                ..
+            }
+        )
+    });
+}
+
+#[test]
+fn test_variadic_port_accepts_single_input() {
+    // a -> VariadicNeuron() should also be valid (single input to variadic)
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "VariadicNeuron",
+            vec![variadic_port("inputs", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_simple_neuron("OneOut", wildcard(), wildcard())
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("OneOut")),
+                connection(call_endpoint("OneOut"), call_endpoint("VariadicNeuron")),
+                connection(call_endpoint("VariadicNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_variadic_output_port_rejected() {
+    // Variadic output ports are not supported
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "BadNeuron",
+            vec![default_port(wildcard())],
+            vec![variadic_port("outputs", wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("BadNeuron")),
+                connection(call_endpoint("BadNeuron"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::Custom(msg) if msg.contains("Variadic output ports"))
+    });
+}
+
+#[test]
+fn test_variadic_port_requires_explicit_name() {
+    // A variadic port named "default" should be rejected
+    let mut program = ProgramBuilder::new()
+        .with_multi_port_neuron(
+            "BadVariadic",
+            vec![variadic_port("default", wildcard())],
+            vec![default_port(wildcard())],
+        )
+        .with_composite(
+            "Composite",
+            vec![
+                connection(ref_endpoint("in"), call_endpoint("BadVariadic")),
+                connection(call_endpoint("BadVariadic"), ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::Custom(msg) if msg.contains("needs an explicit name"))
+    });
+}

@@ -129,6 +129,7 @@ pub struct CodeGenerator<'a> {
 pub struct Port {
     pub name: String, // "default" if unnamed
     pub shape: Shape,
+    pub variadic: bool, // true for `in *inputs: [shape]`
 }
 
 /// A value in the language
