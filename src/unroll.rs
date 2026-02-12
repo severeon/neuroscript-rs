@@ -808,4 +808,259 @@ mod tests {
             panic!("Expected Graph body, got Primitive");
         }
     }
+
+    /// Mixed regular bindings and unrolls in the same context section.
+    /// Verifies ordering: layer1 (regular), block_0..2 (unrolled), layer2 (regular).
+    #[test]
+    fn test_mixed_bindings_and_unrolls() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "Mixed".to_string(),
+            NeuronDef {
+                name: "Mixed".to_string(),
+                params: vec![make_param("dim", Some(256))],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![
+                        Binding {
+                            name: "layer1".to_string(),
+                            call_name: "Linear".to_string(),
+                            args: vec![
+                                Value::Name("dim".to_string()),
+                                Value::Name("dim".to_string()),
+                            ],
+                            kwargs: vec![],
+                            scope: Scope::Instance { lazy: false },
+                            frozen: false,
+                        },
+                        // layer2 comes after the unroll in the source, but the AST
+                        // builder moves overflow bindings back to context_bindings
+                        Binding {
+                            name: "layer2".to_string(),
+                            call_name: "Linear".to_string(),
+                            args: vec![
+                                Value::Name("dim".to_string()),
+                                Value::Name("dim".to_string()),
+                            ],
+                            kwargs: vec![],
+                            scope: Scope::Instance { lazy: false },
+                            frozen: false,
+                        },
+                    ],
+                    context_unrolls: vec![ContextUnroll {
+                        count: Value::Int(3),
+                        bindings: vec![Binding {
+                            name: "block".to_string(),
+                            call_name: "TransformerBlock".to_string(),
+                            args: vec![Value::Name("dim".to_string())],
+                            kwargs: vec![],
+                            scope: Scope::Instance { lazy: false },
+                            frozen: false,
+                        }],
+                    }],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_ok(), "expand_unrolls failed: {:?}", result);
+
+        let neuron = program.neurons.get("Mixed").unwrap();
+        if let NeuronBody::Graph {
+            context_bindings,
+            context_unrolls,
+            ..
+        } = &neuron.body
+        {
+            assert!(context_unrolls.is_empty());
+            // Original bindings (layer1, layer2) + 3 expanded (block_0..2)
+            assert_eq!(context_bindings.len(), 5);
+            assert_eq!(context_bindings[0].name, "layer1");
+            assert_eq!(context_bindings[1].name, "layer2");
+            assert_eq!(context_bindings[2].name, "block_0");
+            assert_eq!(context_bindings[3].name, "block_1");
+            assert_eq!(context_bindings[4].name, "block_2");
+        } else {
+            panic!("Expected Graph body, got Primitive");
+        }
+    }
+
+    /// @lazy bindings inside unroll should expand correctly, preserving the
+    /// lazy scope on each suffixed copy.
+    #[test]
+    fn test_unroll_with_lazy_binding() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "LazyUnroll".to_string(),
+            NeuronDef {
+                name: "LazyUnroll".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![ContextUnroll {
+                        count: Value::Int(2),
+                        bindings: vec![Binding {
+                            name: "block".to_string(),
+                            call_name: "TransformerBlock".to_string(),
+                            args: vec![],
+                            kwargs: vec![],
+                            scope: Scope::Instance { lazy: true },
+                            frozen: false,
+                        }],
+                    }],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_ok(), "expand_unrolls failed: {:?}", result);
+
+        let neuron = program.neurons.get("LazyUnroll").unwrap();
+        if let NeuronBody::Graph {
+            context_bindings, ..
+        } = &neuron.body
+        {
+            assert_eq!(context_bindings.len(), 2);
+            assert_eq!(context_bindings[0].name, "block_0");
+            assert_eq!(context_bindings[1].name, "block_1");
+            // Each expanded binding preserves the @lazy scope
+            assert_eq!(
+                context_bindings[0].scope,
+                Scope::Instance { lazy: true }
+            );
+            assert_eq!(
+                context_bindings[1].scope,
+                Scope::Instance { lazy: true }
+            );
+        } else {
+            panic!("Expected Graph body, got Primitive");
+        }
+    }
+
+    /// Unroll inside a match arm pipeline is NOT expanded (expansion only
+    /// handles top-level connection destinations). The unexpanded Endpoint::Unroll
+    /// will be caught by the validator with "Unroll should be expanded before
+    /// validation". This test verifies the unroll passes through expansion
+    /// unchanged and the validator rejects it.
+    #[test]
+    fn test_unroll_inside_match_arm_not_expanded() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "MatchUnroll".to_string(),
+            NeuronDef {
+                name: "MatchUnroll".to_string(),
+                params: vec![make_param("dim", Some(256))],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: Endpoint::Ref(PortRef::new("in")),
+                        destination: Endpoint::Match(MatchExpr {
+                            arms: vec![MatchArm {
+                                pattern: Shape { dims: vec![] },
+                                guard: None,
+                                is_reachable: true,
+                                pipeline: vec![Endpoint::Unroll(UnrollExpr {
+                                    count: Value::Int(3),
+                                    pipeline: vec![Endpoint::Call {
+                                        name: "Block".to_string(),
+                                        args: vec![],
+                                        kwargs: vec![],
+                                        id: 0,
+                                        frozen: false,
+                                    }],
+                                    id: 50,
+                                })],
+                            }],
+                            id: 100,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        // Expansion succeeds (it doesn't look inside match arms)
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_ok());
+
+        // But the Unroll endpoint is still present inside the match arm
+        let neuron = program.neurons.get("MatchUnroll").unwrap();
+        if let NeuronBody::Graph { connections, .. } = &neuron.body {
+            let has_inner_unroll = connections.iter().any(|c| {
+                if let Endpoint::Match(m) = &c.destination {
+                    m.arms.iter().any(|arm| {
+                        arm.pipeline.iter().any(|ep| matches!(ep, Endpoint::Unroll(_)))
+                    })
+                } else {
+                    false
+                }
+            });
+            assert!(has_inner_unroll, "Unroll inside match arm should survive expansion unchanged");
+        } else {
+            panic!("Expected Graph body, got Primitive");
+        }
+    }
+
+    /// Using a name that isn't a neuron parameter should produce an error.
+    /// This covers the case where someone writes unroll(x) with a forward
+    /// pass variable rather than a neuron parameter.
+    #[test]
+    fn test_unroll_with_non_param_variable() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "DynCount".to_string(),
+            NeuronDef {
+                name: "DynCount".to_string(),
+                params: vec![make_param("dim", Some(256))],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![ContextUnroll {
+                        count: Value::Name("num_layers".to_string()), // not a param!
+                        bindings: vec![Binding {
+                            name: "block".to_string(),
+                            call_name: "Block".to_string(),
+                            args: vec![],
+                            kwargs: vec![],
+                            scope: Scope::Instance { lazy: false },
+                            frozen: false,
+                        }],
+                    }],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            ValidationError::InvalidUnrollCount { neuron, reason } => {
+                assert_eq!(neuron, "DynCount");
+                assert!(
+                    reason.contains("num_layers"),
+                    "Error should mention the unresolved variable, got: {}",
+                    reason
+                );
+            }
+            other => panic!("Expected InvalidUnrollCount, got: {}", other),
+        }
+    }
 }
