@@ -22,13 +22,14 @@ pub mod grammar;
 pub mod interfaces;
 pub mod ir;
 pub mod optimizer;
+#[cfg(feature = "cli")]
 pub mod package;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
 pub mod unroll;
 pub mod validator;
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "wasm")]
 pub mod wasm;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)

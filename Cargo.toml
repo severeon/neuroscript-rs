@@ -8,29 +8,46 @@ description = "Neural architecture composition language"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["pest-parser"]
+default = ["pest-parser", "cli"]
 pest-parser = []  # Use new pest-based parser instead of handwritten lexer/parser
+cli = [
+    "dep:clap",
+    "dep:git2",
+    "dep:dirs",
+    "dep:ed25519-dalek",
+    "dep:rand",
+    "dep:hex",
+    "dep:sha2",
+    "dep:toml",
+    "dep:semver",
+    "miette/fancy",
+]
+wasm = ["dep:wasm-bindgen"]
 
 [dependencies]
-wasm-bindgen = "0.2"
 thiserror = "1.0"      # Clean error types
-miette = { version = "7", features = ["fancy"] }  # Beautiful error reporting
+miette = "7"           # Error reporting (fancy feature added by cli)
 num-bigint = "0.4"     # Arbitrary precision integers for shape algebra
 num-integer = "0.1"    # Integer traits (gcd, lcm)
 num-traits = "0.2"     # Numeric traits (Zero, One)
-clap = { version = "4", features = ["derive"] }  # CLI argument parsing
 pest = "2.7"           # PEG parser generator
 pest_derive = "2.7"    # Derive macro for pest
 serde = { version = "1.0", features = ["derive"] }  # Serialization
 serde_json = "1.0"     # JSON serialization for WASM API
-toml = "0.8"           # TOML parsing for Axon.toml
-semver = "1.0"         # Semantic versioning
-git2 = "0.18"          # Git operations for dependency fetching
-sha2 = "0.10"          # SHA-256 checksums
-dirs = "5.0"           # Cross-platform directory paths
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }  # Ed25519 signing
-rand = "0.8"           # Cryptographic random number generation
-hex = "0.4"            # Hex encoding for keys and signatures
+
+# WASM support (optional)
+wasm-bindgen = { version = "0.2", optional = true }
+
+# CLI/native-only dependencies (optional, enabled by 'cli' feature)
+clap = { version = "4", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
+semver = { version = "1.0", optional = true }
+git2 = { version = "0.18", optional = true }
+sha2 = { version = "0.10", optional = true }
+dirs = { version = "5.0", optional = true }
+ed25519-dalek = { version = "2.1", features = ["rand_core"], optional = true }
+rand = { version = "0.8", optional = true }
+hex = { version = "0.4", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
@@ -38,5 +55,11 @@ insta = { version = "1.34", features = ["yaml"] }  # Snapshot testing
 tempfile = "3.8"       # Temporary directories for testing
 
 [[bin]]
+name = "neuroscript"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[[bin]]
 name = "neuroscript-doc"
 path = "src/bin/neuroscript-doc.rs"
+required-features = ["cli"]
