@@ -12,7 +12,7 @@ The `unroll` construct expands repeated layers at **compile time**. Instead of w
 
 ## Why "Unroll"?
 
-The name is intentional — this is not a runtime loop. The compiler literally unrolls the construct into N separate graph nodes before code generation. The count must be a constant or neuron parameter, never a runtime value.
+The name is intentional — this is not a runtime loop. The compiler literally unrolls the construct into N separate graph nodes before code generation. The count must be a literal integer or a parameter with a default value, never a runtime value.
 
 ## Sequential Threading
 
@@ -21,7 +21,7 @@ The most common form chains iterations sequentially — the output of iteration 
 <InteractiveExample
   title="Transformer Stack"
   description="N transformer blocks chained sequentially via unroll"
-  initialCode={`neuron TransformerStack(d_model, num_heads, d_ff, num_layers):
+  initialCode={`neuron TransformerStack(d_model, num_heads, d_ff, num_layers=6):
     in: [batch, seq, d_model]
     out: [batch, seq, d_model]
     graph:
@@ -109,7 +109,7 @@ This replaces what would otherwise be 12 hand-written `TransformerBlock` calls.
 Each unroll iteration can contain multiple bindings:
 
 ```neuroscript
-neuron MultiScaleEncoder(dim, num_heads, d_ff, num_scales):
+neuron MultiScaleEncoder(dim, num_heads, d_ff, num_scales=4):
     in: [*, seq, dim]
     out: [*, seq, dim]
     context:
@@ -131,7 +131,7 @@ Each iteration gets its own independent `encoder` and `norm` pair.
 Unroll-scoped and regular bindings compose freely:
 
 ```neuroscript
-neuron HybridStack(dim, num_heads, d_ff, num_layers):
+neuron HybridStack(dim, num_heads, d_ff, num_layers=6):
     in: [*, seq, dim]
     out: [*, seq, dim]
     context:
@@ -150,7 +150,7 @@ Each iteration gets its own `block` (independent weights), but all iterations sh
 
 ## Key Rules
 
-- The count must be a **constant or parameter** — no runtime values
+- The count must be a **literal integer or a parameter with a default value** — it must be resolvable at compile time
 - The `->` after the colon means **sequential threading** (output feeds next input)
 - Each iteration gets **independent weights** unless `@static` is used
 - Context-unroll bindings are **scoped** — they can only be referenced inside a matching graph-unroll

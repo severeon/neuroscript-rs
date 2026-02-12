@@ -14,6 +14,7 @@ const MONO_FONT = '"Fira Code", "Cascadia Code", "SF Mono", Monaco, "Inconsolata
  */
 export default function NeuroEditor({
   mode = 'tutorial',
+  layout,
   initialCode = '',
   title,
   description,
@@ -29,6 +30,11 @@ export default function NeuroEditor({
   defaultExampleId = 'mlp',
 }) {
   const isPlayground = mode === 'playground';
+
+  // Layout: 'vertical' stacks panels top/bottom (full width each),
+  //         'horizontal' places them side-by-side (current default for playground)
+  const resolvedLayout = layout || (isPlayground ? 'horizontal' : 'vertical');
+  const isVertical = resolvedLayout === 'vertical';
 
   // Resolve feature flags: explicit prop > mode default
   const feat = {
@@ -297,20 +303,29 @@ export default function NeuroEditor({
         </div>
       )}
 
-      {/* Side-by-side editors */}
+      {/* Editor panels */}
       <div style={{
         display: 'flex',
-        gap: '1rem',
-        minHeight: editorHeight,
-        flexDirection: feat.responsive && isMobile ? 'column' : 'row',
+        gap: isVertical ? '0.5rem' : '1rem',
+        ...(isVertical
+          ? { flexDirection: 'column' }
+          : {
+              minHeight: editorHeight,
+              flexDirection: feat.responsive && isMobile ? 'column' : 'row',
+            }),
       }}>
         {/* Source */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          ...(isVertical ? {} : { flex: 1 }),
+        }}>
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '0.5rem',
+            marginBottom: '0.25rem',
           }}>
             {isPlayground
               ? <h3 style={{ margin: 0 }}>Source (NeuroScript)</h3>
@@ -326,14 +341,19 @@ export default function NeuroEditor({
             onChange={handleChange}
             disabled={isPlayground && !ready}
             spellCheck="false"
+            wrap="off"
+            rows={isVertical ? Math.max(input.split('\n').length + 1, 4) : undefined}
             style={{
-              flex: 1,
               fontFamily: MONO_FONT,
-              padding: '1rem',
-              resize: 'none',
+              padding: '0.75rem',
+              resize: isVertical ? 'vertical' : 'none',
               borderRadius: '8px',
-              fontSize: '13px',
+              fontSize: isPlayground ? '13px' : '12px',
               lineHeight: isPlayground ? '1.6' : '1.5',
+              tabSize: 4,
+              ...(isVertical
+                ? { width: '100%' }
+                : { flex: 1 }),
               ...(isPlayground ? {
                 border: '1px solid var(--ifm-color-emphasis-300)',
                 backgroundColor: 'var(--ifm-background-color)',
@@ -349,52 +369,61 @@ export default function NeuroEditor({
         </div>
 
         {/* Output */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          ...(isVertical ? {} : { flex: 1 }),
+        }}>
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '0.5rem',
+            marginBottom: '0.25rem',
           }}>
             {isPlayground
               ? <h3 style={{ margin: 0 }}>Output (PyTorch)</h3>
               : <strong style={{ fontSize: '0.9rem', color: '#666' }}>PyTorch Output</strong>}
-            {feat.copyButton && output && (
-              <button
-                onClick={handleCopy}
-                className="button button--sm button--secondary"
-                style={{ fontSize: '12px' }}
-              >
-                {copied ? '\u2713 Copied!' : '\uD83D\uDCCB Copy'}
-              </button>
-            )}
-            {feat.analysis && analysisData && !isPlayground && (
-              <button
-                onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '0.8rem',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                  backgroundColor: showAnalysisPanel ? '#e0f0e0' : '#fff',
-                  cursor: 'pointer',
-                }}
-              >
-                {showAnalysisPanel ? 'Hide Analysis' : 'Show Analysis'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {feat.copyButton && output && (
+                <button
+                  onClick={handleCopy}
+                  className="button button--sm button--secondary"
+                  style={{ fontSize: '12px' }}
+                >
+                  {copied ? '\u2713 Copied!' : '\uD83D\uDCCB Copy'}
+                </button>
+              )}
+              {feat.analysis && analysisData && !isPlayground && (
+                <button
+                  onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.8rem',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    backgroundColor: showAnalysisPanel ? '#e0f0e0' : '#fff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {showAnalysisPanel ? 'Hide Analysis' : 'Show Analysis'}
+                </button>
+              )}
+            </div>
           </div>
 
           {error ? (
             <div style={{
-              flex: 1,
-              padding: '1rem',
+              padding: '0.75rem',
               fontFamily: MONO_FONT,
-              fontSize: '13px',
+              fontSize: isPlayground ? '13px' : '12px',
               whiteSpace: 'pre-wrap',
               overflow: 'auto',
               borderRadius: '8px',
               lineHeight: isPlayground ? '1.6' : '1.5',
+              ...(isVertical
+                ? { maxHeight: '400px' }
+                : { flex: 1 }),
               ...(isPlayground ? {
                 backgroundColor: 'var(--ifm-color-danger-contrast-background)',
                 color: 'var(--ifm-color-danger-contrast-foreground)',
@@ -410,17 +439,19 @@ export default function NeuroEditor({
             </div>
           ) : (
             <div style={{
-              flex: 1,
               fontFamily: MONO_FONT,
-              padding: '1rem',
+              padding: '0.75rem',
               backgroundColor: '#1e1e1e',
               color: '#d4d4d4',
               overflow: 'auto',
               borderRadius: '8px',
               border: '1px solid #333',
               whiteSpace: 'pre',
-              fontSize: '13px',
+              fontSize: isPlayground ? '13px' : '12px',
               lineHeight: isPlayground ? '1.6' : '1.5',
+              ...(isVertical
+                ? { maxHeight: '400px' }
+                : { flex: 1 }),
               ...(isPlayground ? { minHeight: '400px' } : {}),
             }}>
               {output || (isPlayground ? 'Compiled PyTorch code will appear here...' : '')}
