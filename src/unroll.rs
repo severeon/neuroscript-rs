@@ -8,6 +8,16 @@ use crate::interfaces::*;
 /// Maximum allowed unroll count to prevent resource exhaustion.
 const MAX_UNROLL_COUNT: usize = 1024;
 
+/// Maximum recursion depth for `max_endpoint_id` to prevent stack overflow
+/// on deeply nested IR structures.
+const MAX_ENDPOINT_DEPTH: usize = 100;
+
+/// Prefix for temporary variables generated during graph-level unroll expansion.
+const UNROLL_TEMP_PREFIX: &str = "_unroll";
+
+/// Port names that act as pipeline terminators (not chained through intermediate iterations).
+const TERMINAL_PORTS: &[&str] = &["out", "in"];
+
 /// Expand all unroll constructs in a program.
 ///
 /// This modifies the program in place, replacing:
@@ -41,8 +51,12 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
             }
 
             // --- Expand context unrolls ---
-            let mut new_bindings = context_bindings.clone();
-            let mut expanded_context_names: Vec<(String, Vec<String>)> = Vec::new();
+            // Pre-allocate with estimated capacity: existing bindings + unrolled ones
+            let estimated_new = context_unrolls.iter().map(|u| u.bindings.len()).sum::<usize>()
+                * 4; // rough overestimate per binding
+            let mut new_bindings = Vec::with_capacity(context_bindings.len() + estimated_new);
+            new_bindings.extend_from_slice(context_bindings);
+            let mut unroll_binding_map: Vec<(String, Vec<String>)> = Vec::new();
 
             for unroll in context_unrolls {
                 match resolve_count(&unroll.count, &params) {
@@ -51,7 +65,7 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                             if matches!(binding.scope, Scope::Static) {
                                 // @static: single shared instance, no suffix
                                 new_bindings.push(binding.clone());
-                                expanded_context_names.push((
+                                unroll_binding_map.push((
                                     binding.name.clone(),
                                     vec![binding.name.clone()],
                                 ));
@@ -69,7 +83,7 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                                         frozen: binding.frozen,
                                     });
                                 }
-                                expanded_context_names
+                                unroll_binding_map
                                     .push((binding.name.clone(), suffixed_names));
                             }
                         }
@@ -96,7 +110,7 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                         conn,
                         &params,
                         name,
-                        &expanded_context_names,
+                        &unroll_binding_map,
                         &mut next_id,
                         &mut errors,
                     ) {
@@ -168,13 +182,20 @@ fn find_max_endpoint_id(connections: &[Connection]) -> usize {
 }
 
 fn max_endpoint_id(endpoint: &Endpoint) -> usize {
+    max_endpoint_id_inner(endpoint, 0)
+}
+
+fn max_endpoint_id_inner(endpoint: &Endpoint, depth: usize) -> usize {
+    if depth > MAX_ENDPOINT_DEPTH {
+        return 0;
+    }
     match endpoint {
         Endpoint::Call { id, .. } => *id,
         Endpoint::Match(m) => {
             let mut max = m.id;
             for arm in &m.arms {
                 for ep in &arm.pipeline {
-                    max = max.max(max_endpoint_id(ep));
+                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
                 }
             }
             max
@@ -183,12 +204,12 @@ fn max_endpoint_id(endpoint: &Endpoint) -> usize {
             let mut max = expr.id;
             for branch in &expr.branches {
                 for ep in &branch.pipeline {
-                    max = max.max(max_endpoint_id(ep));
+                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
                 }
             }
             if let Some(else_branch) = &expr.else_branch {
                 for ep in else_branch {
-                    max = max.max(max_endpoint_id(ep));
+                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
                 }
             }
             max
@@ -196,7 +217,7 @@ fn max_endpoint_id(endpoint: &Endpoint) -> usize {
         Endpoint::Unroll(u) => {
             let mut max = u.id;
             for ep in &u.pipeline {
-                max = max.max(max_endpoint_id(ep));
+                max = max.max(max_endpoint_id_inner(ep, depth + 1));
             }
             max
         }
@@ -216,7 +237,7 @@ fn expand_connection_unroll(
     conn: &Connection,
     params: &[Param],
     neuron_name: &str,
-    expanded_context_names: &[(String, Vec<String>)],
+    unroll_binding_map: &[(String, Vec<String>)],
     next_id: &mut usize,
     errors: &mut Vec<ValidationError>,
 ) -> Option<Vec<Connection>> {
@@ -270,7 +291,7 @@ fn expand_connection_unroll(
     for i in 0..count {
         let expanded_body: Vec<Endpoint> = body_pipeline
             .iter()
-            .map(|ep| rewrite_endpoint_for_iteration(ep, i, expanded_context_names, next_id))
+            .map(|ep| rewrite_endpoint_for_iteration(ep, i, unroll_binding_map, next_id))
             .collect();
 
         let is_last_iteration = i == count - 1;
@@ -287,7 +308,7 @@ fn expand_connection_unroll(
 
         if !is_last_iteration {
             // Create intermediate temp ref for next iteration
-            let temp_name = format!("_unroll_{}_{}", unroll.id, i);
+            let temp_name = format!("{}_{}_{}", UNROLL_TEMP_PREFIX, unroll.id, i);
             result.push(Connection {
                 source: current_source,
                 destination: Endpoint::Ref(PortRef::new(&temp_name)),
@@ -296,7 +317,7 @@ fn expand_connection_unroll(
         } else if let Some(tail) = &tail_endpoint {
             // Final iteration: connect to the tail endpoint (e.g., `out`)
             let rewritten_tail =
-                rewrite_endpoint_for_iteration(tail, i, expanded_context_names, next_id);
+                rewrite_endpoint_for_iteration(tail, i, unroll_binding_map, next_id);
             result.push(Connection {
                 source: current_source,
                 destination: rewritten_tail,
@@ -314,7 +335,7 @@ fn expand_connection_unroll(
 fn split_pipeline_tail(pipeline: &[Endpoint]) -> (&[Endpoint], Option<&Endpoint>) {
     if let Some(last) = pipeline.last() {
         if let Endpoint::Ref(port_ref) = last {
-            if port_ref.node == "out" || port_ref.node == "in" {
+            if TERMINAL_PORTS.contains(&port_ref.node.as_str()) {
                 let body = &pipeline[..pipeline.len() - 1];
                 return (body, Some(last));
             }
@@ -329,7 +350,7 @@ fn split_pipeline_tail(pipeline: &[Endpoint]) -> (&[Endpoint], Option<&Endpoint>
 fn rewrite_endpoint_for_iteration(
     endpoint: &Endpoint,
     iteration: usize,
-    expanded_context_names: &[(String, Vec<String>)],
+    unroll_binding_map: &[(String, Vec<String>)],
     next_id: &mut usize,
 ) -> Endpoint {
     match endpoint {
@@ -352,7 +373,7 @@ fn rewrite_endpoint_for_iteration(
         }
         Endpoint::Ref(port_ref) => {
             // Check if this ref matches an expanded context-unroll base name
-            for (base_name, suffixed_names) in expanded_context_names {
+            for (base_name, suffixed_names) in unroll_binding_map {
                 if port_ref.node == *base_name {
                     if suffixed_names.len() > 1 {
                         // N suffixed bindings: rewrite to iteration-specific name
@@ -371,9 +392,10 @@ fn rewrite_endpoint_for_iteration(
             }
             endpoint.clone()
         }
-        // Nested unrolls should have been caught earlier; panic as a safety net
+        // Nested unrolls are validated and rejected in expand_connection_unroll
+        // before this function is ever called. If we reach here, it's a bug.
         Endpoint::Unroll(_) => {
-            panic!("Nested unroll constructs are not supported — should have been caught during expansion")
+            unreachable!("Nested unroll should have been rejected during expansion")
         }
         // Pass through other endpoint types unchanged
         _ => endpoint.clone(),
@@ -651,6 +673,19 @@ mod tests {
         } else {
             panic!("Expected Graph body");
         }
+    }
+
+    #[test]
+    fn test_resolve_count_param_no_default() {
+        // Parameter exists but has no default value — can't resolve at compile time
+        let params = vec![Param {
+            name: "num_layers".to_string(),
+            default: None,
+        }];
+        assert_eq!(
+            resolve_count(&Value::Name("num_layers".to_string()), &params),
+            None
+        );
     }
 
     #[test]
