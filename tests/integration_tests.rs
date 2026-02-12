@@ -319,9 +319,6 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         }
         Endpoint::Unroll(unroll_expr) => {
             let mut result = format!("unroll({}):", format_value(&unroll_expr.count));
-            if let Some(ref idx) = unroll_expr.index_var {
-                result.push_str(&format!(" [{}]", idx));
-            }
             result.push_str(" -> ");
             let pipeline_str: Vec<String> =
                 unroll_expr.pipeline.iter().map(format_endpoint).collect();

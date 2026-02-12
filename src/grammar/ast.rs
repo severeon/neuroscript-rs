@@ -589,35 +589,17 @@ impl AstBuilder {
 
         let count = self.build_value(inner.next().unwrap())?;
 
-        // Skip rparen, colon
+        // Skip rparen, colon, arrow
+        inner.next();
         inner.next();
         inner.next();
 
-        // Check for optional index variable
-        let mut index_var = None;
-        let next = inner.next().unwrap();
-        let pipeline_pair = if next.as_rule() == Rule::unroll_index {
-            // Extract index variable name
-            let idx_inner: Vec<_> = next.into_inner().collect();
-            for p in &idx_inner {
-                if p.as_rule() == Rule::ident {
-                    index_var = Some(p.as_str().to_string());
-                }
-            }
-            // Skip arrow
-            inner.next();
-            inner.next().unwrap()
-        } else {
-            // next was the arrow, skip it
-            inner.next().unwrap()
-        };
-
+        let pipeline_pair = inner.next().unwrap();
         let pipeline = self.build_unroll_pipeline(pipeline_pair)?;
         let id = self.next_id();
 
         Ok(UnrollExpr {
             count,
-            index_var,
             pipeline,
             id,
         })

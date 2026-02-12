@@ -5,6 +5,9 @@
 
 use crate::interfaces::*;
 
+/// Maximum allowed unroll count to prevent resource exhaustion.
+const MAX_UNROLL_COUNT: usize = 1024;
+
 /// Expand all unroll constructs in a program.
 ///
 /// This modifies the program in place, replacing:
@@ -42,7 +45,7 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
             let mut expanded_context_names: Vec<(String, Vec<String>)> = Vec::new();
 
             for unroll in context_unrolls {
-                match resolve_count(&unroll.count, &params, name) {
+                match resolve_count(&unroll.count, &params) {
                     Some(count) => {
                         for binding in &unroll.bindings {
                             if matches!(binding.scope, Scope::Static) {
@@ -132,16 +135,16 @@ fn has_unroll_endpoint(endpoint: &Endpoint) -> bool {
 /// - `Value::Int(n)` where n > 0 -> Some(n)
 /// - `Value::Name(name)` -> look up param default
 /// - Everything else -> None (caller should push error)
-fn resolve_count(count: &Value, params: &[Param], _neuron_name: &str) -> Option<usize> {
+fn resolve_count(count: &Value, params: &[Param]) -> Option<usize> {
     match count {
-        Value::Int(n) if *n > 0 => Some(*n as usize),
-        Value::Int(_) => None, // zero or negative
+        Value::Int(n) if *n > 0 && (*n as usize) <= MAX_UNROLL_COUNT => Some(*n as usize),
+        Value::Int(_) => None, // zero, negative, or exceeds limit
         Value::Name(name) => {
             // Look up parameter default value
             for param in params {
                 if &param.name == name {
                     if let Some(Value::Int(n)) = &param.default {
-                        if *n > 0 {
+                        if *n > 0 && (*n as usize) <= MAX_UNROLL_COUNT {
                             return Some(*n as usize);
                         }
                     }
@@ -222,7 +225,7 @@ fn expand_connection_unroll(
         _ => return None,
     };
 
-    let count = match resolve_count(&unroll.count, params, neuron_name) {
+    let count = match resolve_count(&unroll.count, params) {
         Some(c) => c,
         None => {
             errors.push(ValidationError::InvalidUnrollCount {
@@ -237,6 +240,15 @@ fn expand_connection_unroll(
         errors.push(ValidationError::InvalidUnrollCount {
             neuron: neuron_name.to_string(),
             reason: "Unroll count must be > 0".to_string(),
+        });
+        return None;
+    }
+
+    // Check for nested unrolls in the pipeline
+    if unroll.pipeline.iter().any(|ep| has_unroll_endpoint(ep)) {
+        errors.push(ValidationError::InvalidUnrollCount {
+            neuron: neuron_name.to_string(),
+            reason: "Nested unroll constructs are not supported".to_string(),
         });
         return None;
     }
@@ -359,6 +371,10 @@ fn rewrite_endpoint_for_iteration(
             }
             endpoint.clone()
         }
+        // Nested unrolls should have been caught earlier; panic as a safety net
+        Endpoint::Unroll(_) => {
+            panic!("Nested unroll constructs are not supported — should have been caught during expansion")
+        }
         // Pass through other endpoint types unchanged
         _ => endpoint.clone(),
     }
@@ -378,21 +394,21 @@ mod tests {
     #[test]
     fn test_resolve_count_literal() {
         let params = vec![];
-        assert_eq!(resolve_count(&Value::Int(3), &params, "Test"), Some(3));
-        assert_eq!(resolve_count(&Value::Int(1), &params, "Test"), Some(1));
-        assert_eq!(resolve_count(&Value::Int(0), &params, "Test"), None);
-        assert_eq!(resolve_count(&Value::Int(-1), &params, "Test"), None);
+        assert_eq!(resolve_count(&Value::Int(3), &params), Some(3));
+        assert_eq!(resolve_count(&Value::Int(1), &params), Some(1));
+        assert_eq!(resolve_count(&Value::Int(0), &params), None);
+        assert_eq!(resolve_count(&Value::Int(-1), &params), None);
     }
 
     #[test]
     fn test_resolve_count_param_ref() {
         let params = vec![make_param("num_layers", Some(6))];
         assert_eq!(
-            resolve_count(&Value::Name("num_layers".to_string()), &params, "Test"),
+            resolve_count(&Value::Name("num_layers".to_string()), &params),
             Some(6)
         );
         assert_eq!(
-            resolve_count(&Value::Name("unknown".to_string()), &params, "Test"),
+            resolve_count(&Value::Name("unknown".to_string()), &params),
             None
         );
     }
@@ -510,7 +526,7 @@ mod tests {
                         source: Endpoint::Ref(PortRef::new("in")),
                         destination: Endpoint::Unroll(UnrollExpr {
                             count: Value::Int(3),
-                            index_var: None,
+
                             pipeline: vec![
                                 Endpoint::Call {
                                     name: "TransformerBlock".to_string(),
@@ -602,7 +618,7 @@ mod tests {
                         source: Endpoint::Ref(PortRef::new("in")),
                         destination: Endpoint::Unroll(UnrollExpr {
                             count: Value::Int(1),
-                            index_var: None,
+
                             pipeline: vec![
                                 Endpoint::Call {
                                     name: "Block".to_string(),
@@ -632,6 +648,123 @@ mod tests {
             for conn in connections {
                 assert!(!has_unroll_endpoint(&conn.destination));
             }
+        } else {
+            panic!("Expected Graph body");
+        }
+    }
+
+    #[test]
+    fn test_resolve_count_exceeds_max() {
+        let params = vec![];
+        assert_eq!(resolve_count(&Value::Int(1024), &params), Some(1024));
+        assert_eq!(resolve_count(&Value::Int(1025), &params), None);
+        assert_eq!(resolve_count(&Value::Int(999999), &params), None);
+    }
+
+    #[test]
+    fn test_nested_unroll_errors() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "Nested".to_string(),
+            NeuronDef {
+                name: "Nested".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: Endpoint::Ref(PortRef::new("in")),
+                        destination: Endpoint::Unroll(UnrollExpr {
+                            count: Value::Int(2),
+                            pipeline: vec![
+                                Endpoint::Unroll(UnrollExpr {
+                                    count: Value::Int(3),
+                                    pipeline: vec![Endpoint::Call {
+                                        name: "Block".to_string(),
+                                        args: vec![],
+                                        kwargs: vec![],
+                                        id: 0,
+                                        frozen: false,
+                                    }],
+                                    id: 50,
+                                }),
+                                Endpoint::Ref(PortRef::new("out")),
+                            ],
+                            id: 100,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| matches!(e, ValidationError::InvalidUnrollCount { .. })));
+    }
+
+    #[test]
+    fn test_multiple_context_unrolls() {
+        let mut program = Program::new();
+        program.neurons.insert(
+            "Multi".to_string(),
+            NeuronDef {
+                name: "Multi".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![
+                        ContextUnroll {
+                            count: Value::Int(2),
+                            bindings: vec![Binding {
+                                name: "attn".to_string(),
+                                call_name: "Attention".to_string(),
+                                args: vec![],
+                                kwargs: vec![],
+                                scope: Scope::Instance { lazy: false },
+                                frozen: false,
+                            }],
+                        },
+                        ContextUnroll {
+                            count: Value::Int(3),
+                            bindings: vec![Binding {
+                                name: "ffn".to_string(),
+                                call_name: "FFN".to_string(),
+                                args: vec![],
+                                kwargs: vec![],
+                                scope: Scope::Instance { lazy: false },
+                                frozen: false,
+                            }],
+                        },
+                    ],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_ok());
+
+        let neuron = program.neurons.get("Multi").unwrap();
+        if let NeuronBody::Graph {
+            context_bindings, ..
+        } = &neuron.body
+        {
+            // 2 attn + 3 ffn = 5 bindings
+            assert_eq!(context_bindings.len(), 5);
+            assert_eq!(context_bindings[0].name, "attn_0");
+            assert_eq!(context_bindings[1].name, "attn_1");
+            assert_eq!(context_bindings[2].name, "ffn_0");
+            assert_eq!(context_bindings[3].name, "ffn_1");
+            assert_eq!(context_bindings[4].name, "ffn_2");
         } else {
             panic!("Expected Graph body");
         }

@@ -404,11 +404,8 @@ branch_pipeline = {
 // Graph-level unroll: unroll(count): -> pipeline
 // The -> after the colon indicates threaded (sequential chaining) mode
 unroll_expr = {
-    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ unroll_index? ~ arrow ~ unroll_pipeline
+    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ arrow ~ unroll_pipeline
 }
-
-// Optional index variable binding: [i]
-unroll_index = { lbracket ~ ident ~ rbracket }
 
 // Pipeline inside an unroll (same structure as match_pipeline)
 unroll_pipeline = {

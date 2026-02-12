@@ -240,11 +240,7 @@ impl std::fmt::Display for MatchExpr {
 
 impl std::fmt::Display for UnrollExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "unroll({}): ", self.count)?;
-        if let Some(ref idx) = self.index_var {
-            write!(f, "[{}] ", idx)?;
-        }
-        write!(f, "-> ")?;
+        write!(f, "unroll({}): -> ", self.count)?;
         for (i, e) in self.pipeline.iter().enumerate() {
             if i > 0 {
                 write!(f, " -> ")?;

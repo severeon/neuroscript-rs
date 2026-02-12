@@ -228,8 +228,6 @@ pub struct IfExpr {
 pub struct UnrollExpr {
     /// Number of iterations (must resolve to positive integer)
     pub count: Value,
-    /// Optional index variable name (e.g., `[i]`)
-    pub index_var: Option<String>,
     /// Pipeline endpoints to repeat
     pub pipeline: Vec<Endpoint>,
     /// Unique identifier for this unroll
