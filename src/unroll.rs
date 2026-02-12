@@ -243,60 +243,72 @@ fn expand_connection_unroll(
 
     let mut result = Vec::new();
 
-    // For each iteration, we create a copy of the pipeline with:
-    // 1. Call endpoints get unique IDs per iteration
-    // 2. Ref endpoints matching context-unroll base names get suffixed
-    // 3. Iterations are chained via intermediate temp refs
+    // Separate the pipeline into "body" (repeated each iteration) and
+    // "tail" (only emitted on the final iteration). A trailing Ref("out")
+    // or Ref("in") in the pipeline is the tail — it's a terminus, not
+    // something that should be chained through intermediate iterations.
+    let (body_pipeline, tail_endpoint) = split_pipeline_tail(&unroll.pipeline);
+
+    if body_pipeline.is_empty() && tail_endpoint.is_none() {
+        return Some(vec![]);
+    }
+
     let mut prev_source = conn.source.clone();
 
     for i in 0..count {
-        let expanded_pipeline: Vec<Endpoint> = unroll
-            .pipeline
+        let expanded_body: Vec<Endpoint> = body_pipeline
             .iter()
             .map(|ep| rewrite_endpoint_for_iteration(ep, i, expanded_context_names, next_id))
             .collect();
 
-        if expanded_pipeline.is_empty() {
-            continue;
-        }
+        let is_last_iteration = i == count - 1;
 
-        // Chain: prev_source -> pipeline[0] -> pipeline[1] -> ... -> pipeline[last]
+        // Chain: prev_source -> body[0] -> body[1] -> ... -> body[last]
         let mut current_source = prev_source.clone();
-        for (j, ep) in expanded_pipeline.iter().enumerate() {
-            let is_last_in_pipeline = j == expanded_pipeline.len() - 1;
-            let is_last_iteration = i == count - 1;
-
-            if is_last_in_pipeline && !is_last_iteration {
-                // End of this iteration but not the last: create intermediate ref
-                let temp_name = format!("_unroll_{}_{}", unroll.id, i);
-                result.push(Connection {
-                    source: current_source.clone(),
-                    destination: ep.clone(),
-                });
-                // The output of this endpoint becomes the temp ref for next iteration
-                result.push(Connection {
-                    source: ep.clone(),
-                    destination: Endpoint::Ref(PortRef::new(&temp_name)),
-                });
-                prev_source = Endpoint::Ref(PortRef::new(&temp_name));
-            } else {
-                result.push(Connection {
-                    source: current_source.clone(),
-                    destination: ep.clone(),
-                });
-                current_source = ep.clone();
-            }
+        for ep in &expanded_body {
+            result.push(Connection {
+                source: current_source.clone(),
+                destination: ep.clone(),
+            });
+            current_source = ep.clone();
         }
 
-        // If this is the last iteration and last pipeline item is not `out`,
-        // set prev_source for potential continuation
-        if i == count - 1 {
-            // The chain ends at the last endpoint of the last iteration
-            // If there's a trailing `out` in the pipeline, it's already connected
+        if !is_last_iteration {
+            // Create intermediate temp ref for next iteration
+            let temp_name = format!("_unroll_{}_{}", unroll.id, i);
+            result.push(Connection {
+                source: current_source,
+                destination: Endpoint::Ref(PortRef::new(&temp_name)),
+            });
+            prev_source = Endpoint::Ref(PortRef::new(&temp_name));
+        } else if let Some(tail) = &tail_endpoint {
+            // Final iteration: connect to the tail endpoint (e.g., `out`)
+            let rewritten_tail =
+                rewrite_endpoint_for_iteration(tail, i, expanded_context_names, next_id);
+            result.push(Connection {
+                source: current_source,
+                destination: rewritten_tail,
+            });
         }
     }
 
     Some(result)
+}
+
+/// Split a pipeline into (body, optional_tail).
+///
+/// If the last element is a terminal Ref (like `out` or `in`), it's separated
+/// as the tail so it's only emitted on the final iteration.
+fn split_pipeline_tail(pipeline: &[Endpoint]) -> (&[Endpoint], Option<&Endpoint>) {
+    if let Some(last) = pipeline.last() {
+        if let Endpoint::Ref(port_ref) = last {
+            if port_ref.node == "out" || port_ref.node == "in" {
+                let body = &pipeline[..pipeline.len() - 1];
+                return (body, Some(last));
+            }
+        }
+    }
+    (pipeline, None)
 }
 
 /// Rewrite an endpoint for a specific unroll iteration:
@@ -329,14 +341,20 @@ fn rewrite_endpoint_for_iteration(
         Endpoint::Ref(port_ref) => {
             // Check if this ref matches an expanded context-unroll base name
             for (base_name, suffixed_names) in expanded_context_names {
-                if port_ref.node == *base_name && suffixed_names.len() > 1 {
-                    // This ref should be rewritten to the iteration-specific suffixed name
-                    if iteration < suffixed_names.len() {
-                        return Endpoint::Ref(PortRef {
-                            node: suffixed_names[iteration].clone(),
-                            port: port_ref.port.clone(),
-                        });
+                if port_ref.node == *base_name {
+                    if suffixed_names.len() > 1 {
+                        // N suffixed bindings: rewrite to iteration-specific name
+                        if iteration < suffixed_names.len() {
+                            return Endpoint::Ref(PortRef {
+                                node: suffixed_names[iteration].clone(),
+                                port: port_ref.port.clone(),
+                            });
+                        }
                     }
+                    // Single name (@static): keep the same ref name but return as-is.
+                    // The codegen will handle calling the same module multiple times
+                    // because each connection through the chain creates a fresh call.
+                    return endpoint.clone();
                 }
             }
             endpoint.clone()

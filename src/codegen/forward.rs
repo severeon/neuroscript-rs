@@ -78,6 +78,11 @@ pub(super) fn generate_forward_body(
     // Build a map from If endpoints to their result variable names
     let mut if_to_result: HashMap<String, String> = HashMap::new();
 
+    // Track the last call result for bound modules (context bindings).
+    // This is separate from var_names so the module reference is preserved
+    // for subsequent calls (e.g., @static bindings called multiple times).
+    let mut binding_call_results: HashMap<String, String> = HashMap::new();
+
     // Track the last result variable (for implicit output)
     let mut last_result = None;
 
@@ -85,11 +90,17 @@ pub(super) fn generate_forward_body(
     for conn in connections {
         // Resolve the source to a variable name
         let source_var = match &conn.source {
-            Endpoint::Ref(port_ref) => gen
-                .var_names
-                .get(&port_ref.node)
-                .cloned()
-                .unwrap_or_else(|| port_ref.node.clone()),
+            Endpoint::Ref(port_ref) => {
+                // Check binding call results first (for modules called multiple times)
+                if let Some(result) = binding_call_results.get(&port_ref.node) {
+                    result.clone()
+                } else {
+                    gen.var_names
+                        .get(&port_ref.node)
+                        .cloned()
+                        .unwrap_or_else(|| port_ref.node.clone())
+                }
+            }
             Endpoint::Tuple(refs) => {
                 let vars: Vec<String> = refs
                     .iter()
@@ -167,6 +178,7 @@ pub(super) fn generate_forward_body(
             &mut call_to_result,
             &mut match_to_result,
             &mut if_to_result,
+            &mut binding_call_results,
             source_output_count,
         )?;
 
@@ -214,6 +226,7 @@ fn process_destination(
     call_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
+    binding_call_results: &mut HashMap<String, String>,
     source_output_count: usize,
 ) -> Result<String, CodegenError> {
     match endpoint {
@@ -270,8 +283,9 @@ fn process_destination(
                     )
                     .unwrap();
 
-                    // Also update the port_ref.node to map to result_var for future connections
-                    gen.var_names
+                    // Store the call result separately so the module reference is preserved
+                    // in var_names for subsequent calls (e.g., @static called N times).
+                    binding_call_results
                         .insert(port_ref.node.clone(), result_var.clone());
                     return Ok(result_var);
                 }
@@ -506,6 +520,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        binding_call_results,
                         // Pipeline steps are chained sequentially: each Call/Ref
                         // endpoint produces a single tensor that feeds the next step.
                         // Multi-output (tuple) sources only occur at connection level,
@@ -575,6 +590,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        binding_call_results,
                         // Pipeline steps are chained sequentially: each Call/Ref
                         // endpoint produces a single tensor that feeds the next step.
                         // Multi-output (tuple) sources only occur at connection level,
@@ -616,6 +632,7 @@ fn process_destination(
                         call_to_result,
                         match_to_result,
                         if_to_result,
+                        binding_call_results,
                         // Pipeline steps are chained sequentially: each Call/Ref
                         // endpoint produces a single tensor that feeds the next step.
                         // Multi-output (tuple) sources only occur at connection level,
