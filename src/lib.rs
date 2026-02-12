@@ -26,6 +26,7 @@ pub mod package;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
+pub mod unroll;
 pub mod validator;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
@@ -47,6 +48,9 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 /// 3. No cycles in the dependency graph
 /// 4. Shape compatibility for all connections
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
+    // Expand unroll constructs before any validation
+    unroll::expand_unrolls(program)?;
+
     // First run basic validation
     validator::Validator::validate(program)?;
 
