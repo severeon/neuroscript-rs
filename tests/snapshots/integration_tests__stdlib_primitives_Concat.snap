@@ -6,8 +6,7 @@ expression: formatted
 
 neuron Concat(dim):
   inputs:
-    a: [*shape_a]
-    b: [*shape_b]
+    *inputs: [*shape]
   outputs:
     default: [*shape_out]
   impl:

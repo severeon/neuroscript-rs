@@ -1,0 +1,87 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Concat(dim):
+  inputs:
+    *inputs: [*shape]
+  outputs:
+    default: [*shape_out]
+  impl:
+    Source: core,structural/Concat
+
+neuron ConcatNorm(dim):
+  inputs:
+    *inputs: [*shape]
+  outputs:
+    default: [*, dim]
+  graph:
+    in -> Concat#12(1)
+    Concat#12(1) -> LayerNorm#13(dim)
+    LayerNorm#13(dim) -> out
+
+neuron FourWayConcat(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 4)]
+  graph:
+    in -> (a, b, c, d)
+    a -> Linear#7(dim, dim)
+    Linear#7(dim, dim) -> pa
+    b -> Linear#8(dim, dim)
+    Linear#8(dim, dim) -> pb
+    c -> Linear#9(dim, dim)
+    Linear#9(dim, dim) -> pc
+    d -> Linear#10(dim, dim)
+    Linear#10(dim, dim) -> pd
+    (pa, pb, pc, pd) -> Concat#11(1)
+    Concat#11(1) -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron ThreeWayConcat(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 3)]
+  graph:
+    in -> (a, b, c)
+    a -> Linear#3(dim, dim)
+    Linear#3(dim, dim) -> pa
+    b -> Linear#4(dim, dim)
+    Linear#4(dim, dim) -> pb
+    c -> Linear#5(dim, dim)
+    Linear#5(dim, dim) -> pc
+    (pa, pb, pc) -> Concat#6(1)
+    Concat#6(1) -> out
+
+neuron TwoWayConcat(dim):
+  inputs:
+    default: [*, dim]
+  outputs:
+    default: [*, (dim * 2)]
+  graph:
+    in -> (a, b)
+    a -> Linear#0(dim, dim)
+    Linear#0(dim, dim) -> pa
+    b -> Linear#1(dim, dim)
+    Linear#1(dim, dim) -> pb
+    (pa, pb) -> Concat#2(1)
+    Concat#2(1) -> out

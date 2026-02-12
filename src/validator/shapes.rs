@@ -126,6 +126,7 @@ pub(super) fn substitute_params(ports: &[Port], params: &[Param], args: &[Value]
         .map(|port| Port {
             name: port.name.clone(),
             shape: substitute_shape(&port.shape, &bindings),
+            variadic: port.variadic,
         })
         .collect()
 }

@@ -143,6 +143,16 @@ pub fn port(name: &str, shape: Shape) -> Port {
     Port {
         name: name.to_string(),
         shape,
+        variadic: false,
+    }
+}
+
+/// Create a variadic port with the given name and shape
+pub fn variadic_port(name: &str, shape: Shape) -> Port {
+    Port {
+        name: name.to_string(),
+        shape,
+        variadic: true,
     }
 }
 
@@ -151,6 +161,7 @@ pub fn default_port(shape: Shape) -> Port {
     Port {
         name: "default".to_string(),
         shape,
+        variadic: false,
     }
 }
 

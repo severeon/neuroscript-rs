@@ -25,10 +25,9 @@ neuron ClassificationHead(feature_dim, num_classes):
 
 neuron Concat:
   inputs:
-    a: [*, dim_a]
-    b: [*, dim_b]
+    *inputs: [*shape]
   outputs:
-    default: [*, (dim_a + dim_b)]
+    default: [*shape_out]
   impl:
     Source: core,builtin/Concat
 

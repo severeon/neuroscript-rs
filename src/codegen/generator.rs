@@ -118,7 +118,10 @@ impl<'a> CodeGenerator<'a> {
         neuron: &NeuronDef,
     ) -> Result<(), CodegenError> {
         // Determine input parameter(s)
-        let input_params = if neuron.inputs.len() == 1 && neuron.inputs[0].name == "default" {
+        let input_params = if neuron.inputs.len() == 1 && neuron.inputs[0].variadic {
+            // Variadic port: single tuple parameter (matches Python runtime convention)
+            neuron.inputs[0].name.clone()
+        } else if neuron.inputs.len() == 1 && neuron.inputs[0].name == "default" {
             "x".to_string()
         } else {
             neuron

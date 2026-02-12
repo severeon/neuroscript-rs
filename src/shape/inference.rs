@@ -385,8 +385,12 @@ impl ShapeInferenceEngine {
                     ShapeError::UnknownNode(format!("{} (called in connection)", name))
                 })?;
 
-                // Validate input arity
-                if source_shapes.len() != called_neuron.inputs.len() {
+                // Check for variadic input port
+                let has_variadic_input = called_neuron.inputs.len() == 1
+                    && called_neuron.inputs[0].variadic;
+
+                // Validate input arity (skip for variadic inputs)
+                if !has_variadic_input && source_shapes.len() != called_neuron.inputs.len() {
                     return Err(ShapeError::Mismatch {
                          expected: Shape { dims: vec![] },
                          got: Shape { dims: vec![] },
@@ -404,33 +408,59 @@ impl ShapeInferenceEngine {
                 // Create call context to isolate variadic bindings
                 let mut call_ctx = ctx.clone();
 
-                // Validate each input shape with full compatibility checking
-                // Use call_ctx to capture variadics
-                for (i, (src_shape, input_port)) in source_shapes
-                    .iter()
-                    .zip(called_neuron.inputs.iter())
-                    .enumerate()
-                {
-                    // Check shape compatibility
-                    self.validate_connection_shapes(src_shape, &input_port.shape, &mut call_ctx, &format!(
-                        "Connection: {} -> {}() input {} ({})",
-                        self.format_endpoint(&conn.source),
-                        name,
-                        i,
-                        input_port.name
-                    )).map_err(|msg| {
-                        ShapeError::ConstraintViolation {
-                            message: format!("Input {} ({}) shape mismatch: {}", i, input_port.name, msg),
-                        context: format!(
-                            "Connection: {} -> {}()\n  Source shape: {}\n  Expected shape: {}\n  Resolved dimensions: {:?}",
+                if has_variadic_input {
+                    // Variadic: validate each source shape against the single variadic port
+                    let variadic_port = &called_neuron.inputs[0];
+                    for (i, src_shape) in source_shapes.iter().enumerate() {
+                        self.validate_connection_shapes(src_shape, &variadic_port.shape, &mut call_ctx, &format!(
+                            "Connection: {} -> {}() variadic input {} ({})",
                             self.format_endpoint(&conn.source),
                             name,
-                            src_shape,
-                            input_port.shape,
-                            call_ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
-                        ),
-                        }
-                    })?;
+                            i,
+                            variadic_port.name
+                        )).map_err(|msg| {
+                            ShapeError::ConstraintViolation {
+                                message: format!("Variadic input {} shape mismatch: {}", i, msg),
+                                context: format!(
+                                    "Connection: {} -> {}()\n  Source shape: {}\n  Expected shape: {}\n  Resolved dimensions: {:?}",
+                                    self.format_endpoint(&conn.source),
+                                    name,
+                                    src_shape,
+                                    variadic_port.shape,
+                                    call_ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
+                                ),
+                            }
+                        })?;
+                    }
+                } else {
+                    // Validate each input shape with full compatibility checking
+                    // Use call_ctx to capture variadics
+                    for (i, (src_shape, input_port)) in source_shapes
+                        .iter()
+                        .zip(called_neuron.inputs.iter())
+                        .enumerate()
+                    {
+                        // Check shape compatibility
+                        self.validate_connection_shapes(src_shape, &input_port.shape, &mut call_ctx, &format!(
+                            "Connection: {} -> {}() input {} ({})",
+                            self.format_endpoint(&conn.source),
+                            name,
+                            i,
+                            input_port.name
+                        )).map_err(|msg| {
+                            ShapeError::ConstraintViolation {
+                                message: format!("Input {} ({}) shape mismatch: {}", i, input_port.name, msg),
+                            context: format!(
+                                "Connection: {} -> {}()\n  Source shape: {}\n  Expected shape: {}\n  Resolved dimensions: {:?}",
+                                self.format_endpoint(&conn.source),
+                                name,
+                                src_shape,
+                                input_port.shape,
+                                call_ctx.resolved_dims.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ")
+                            ),
+                            }
+                        })?;
+                    }
                 }
 
                 // Compute output shapes

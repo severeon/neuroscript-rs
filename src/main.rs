@@ -842,13 +842,13 @@ fn cmd_list(
         let inputs: Vec<String> = neuron
             .inputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         let outputs: Vec<String> = neuron
             .outputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         println!("  {} ({})", name, kind);
@@ -904,12 +904,12 @@ fn list_stdlib_neurons(verbose: bool) -> miette::Result<()> {
                 let inputs: Vec<String> = neuron
                     .inputs
                     .iter()
-                    .map(|p| format!("{}: {}", p.name, p.shape))
+                    .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
                     .collect();
                 let outputs: Vec<String> = neuron
                     .outputs
                     .iter()
-                    .map(|p| format!("{}: {}", p.name, p.shape))
+                    .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
                     .collect();
 
                 if verbose {
@@ -965,13 +965,13 @@ fn print_neuron_map(neurons: &std::collections::HashMap<String, neuroscript::Neu
         let inputs: Vec<String> = neuron
             .inputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         let outputs: Vec<String> = neuron
             .outputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         println!("  {} ({})", name, kind);
@@ -1297,13 +1297,13 @@ fn print_neuron_summary(program: &neuroscript::Program, verbose: bool) {
         let inputs: Vec<String> = neuron
             .inputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         let outputs: Vec<String> = neuron
             .outputs
             .iter()
-            .map(|p| format!("{}: {}", p.name, p.shape))
+            .map(|p| format!("{}{}: {}", if p.variadic { "*" } else { "" }, p.name, p.shape))
             .collect();
 
         println!("  {} ({})", name, kind);
