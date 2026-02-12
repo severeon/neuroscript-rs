@@ -20,7 +20,6 @@ export default function NeuroEditor({
   description,
   showAnalysis,
   showExampleSelector,
-  showNeuronSelector,
   showCompileButton,
   showCopyButton,
   showStats,
@@ -40,7 +39,6 @@ export default function NeuroEditor({
   const feat = {
     analysis:        showAnalysis        ?? !isPlayground,
     exampleSelector: showExampleSelector ?? isPlayground,
-    neuronSelector:  showNeuronSelector  ?? isPlayground,
     compileButton:   showCompileButton   ?? true,
     copyButton:      showCopyButton      ?? isPlayground,
     stats:           showStats           ?? isPlayground,
@@ -67,7 +65,6 @@ export default function NeuroEditor({
   const [ready, setReady]                     = useState(false);
   const [selectedExample, setSelectedExample] = useState(defaultExampleId);
   const [availableNeurons, setAvailableNeurons] = useState([]);
-  const [selectedNeuron, setSelectedNeuron]   = useState(null);
   const [analysisData, setAnalysisData]       = useState(null);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const [copied, setCopied]                   = useState(false);
@@ -84,15 +81,16 @@ export default function NeuroEditor({
       const cleanSource = source.replace(/^use .*$/gm, '# $&');
       const fullSource = STDLIB_BUNDLE + '\n' + cleanSource;
 
-      // Neuron list (playground)
-      if (feat.neuronSelector) {
+      // Auto-detect neuron: list all, pick single neuron automatically
+      try {
         const neuronsJson = list_neurons(fullSource);
         const neurons = JSON.parse(neuronsJson);
         setAvailableNeurons(neurons);
         if (!neuronName && neurons.length === 1) {
           neuronName = neurons[0];
-          setSelectedNeuron(neurons[0]);
         }
+      } catch (_) {
+        setAvailableNeurons([]);
       }
 
       const result = compile(fullSource, neuronName || undefined);
@@ -116,7 +114,7 @@ export default function NeuroEditor({
     } finally {
       setCompiling(false);
     }
-  }, [ready, feat.neuronSelector, feat.analysis]);
+  }, [ready, feat.analysis]);
 
   // -- Debounce --
   const debouncedCompile = useCallback((source, neuronName) => {
@@ -128,7 +126,6 @@ export default function NeuroEditor({
   const loadExample = useCallback((example) => {
     setInput(example.code);
     setSelectedExample(example.id);
-    setSelectedNeuron(example.targetNeuron);
     handleCompile(example.code, example.targetNeuron);
   }, [handleCompile]);
 
@@ -164,7 +161,7 @@ export default function NeuroEditor({
   const handleChange = (e) => {
     const val = e.target.value;
     setInput(val);
-    debouncedCompile(val, selectedNeuron);
+    debouncedCompile(val);
   };
 
   const handleExampleChange = (e) => {
@@ -172,9 +169,7 @@ export default function NeuroEditor({
     if (ex) loadExample(ex);
   };
 
-  const handleNeuronChange = (e) => setSelectedNeuron(e.target.value);
-
-  const handleManualCompile = () => handleCompile(input, selectedNeuron);
+  const handleManualCompile = () => handleCompile(input);
 
   const handleCopy = async () => {
     try {
@@ -200,7 +195,7 @@ export default function NeuroEditor({
     }>
       {/* Tutorial header */}
       {title && <h3 style={{ marginBottom: '0.5rem' }}>{title}</h3>}
-      {description && <p style={{ marginBottom: '1rem', color: '#666' }}>{description}</p>}
+      {description && <p style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)' }}>{description}</p>}
 
       {/* Playground toolbar */}
       {(feat.exampleSelector || feat.compileButton) && (
@@ -230,33 +225,6 @@ export default function NeuroEditor({
                       <option key={ex.id} value={ex.id}>{ex.title}</option>
                     ))}
                   </optgroup>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {feat.neuronSelector && availableNeurons.length > 1 && (
-            <div style={{ minWidth: '200px' }}>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>
-                Compile:
-              </label>
-              <select
-                value={selectedNeuron || ''}
-                onChange={handleNeuronChange}
-                disabled={!ready}
-                style={{
-                  width: '100%',
-                  padding: '0.5rem',
-                  borderRadius: '4px',
-                  border: '1px solid var(--ifm-color-emphasis-300)',
-                  backgroundColor: 'var(--ifm-background-color)',
-                  color: 'var(--ifm-font-color-base)',
-                  fontSize: '14px',
-                }}
-              >
-                <option value="">Auto-detect</option>
-                {availableNeurons.map(n => (
-                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
@@ -329,7 +297,7 @@ export default function NeuroEditor({
           }}>
             {isPlayground
               ? <h3 style={{ margin: 0 }}>Source (NeuroScript)</h3>
-              : <strong style={{ fontSize: '0.9rem', color: '#666' }}>NeuroScript</strong>}
+              : <strong style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-600)' }}>NeuroScript</strong>}
             {compiling && isPlayground && (
               <span style={{ fontSize: '12px', color: 'var(--ifm-color-primary)' }}>
                 Compiling...
@@ -354,16 +322,12 @@ export default function NeuroEditor({
               ...(isVertical
                 ? { width: '100%' }
                 : { flex: 1 }),
+              backgroundColor: 'var(--ifm-pre-background)',
+              color: 'var(--ifm-pre-color)',
+              border: '1px solid var(--ifm-color-emphasis-300)',
               ...(isPlayground ? {
-                border: '1px solid var(--ifm-color-emphasis-300)',
-                backgroundColor: 'var(--ifm-background-color)',
-                color: 'var(--ifm-font-color-base)',
                 minHeight: '400px',
-              } : {
-                border: '1px solid #ccc',
-                backgroundColor: '#1e1e1e',
-                color: '#d4d4d4',
-              }),
+              } : {}),
             }}
           />
         </div>
@@ -383,12 +347,12 @@ export default function NeuroEditor({
           }}>
             {isPlayground
               ? <h3 style={{ margin: 0 }}>Output (PyTorch)</h3>
-              : <strong style={{ fontSize: '0.9rem', color: '#666' }}>PyTorch Output</strong>}
+              : <strong style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-600)' }}>PyTorch Output</strong>}
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               {feat.copyButton && output && (
                 <button
                   onClick={handleCopy}
-                  className="button button--sm button--secondary"
+                  className="button button--sm button--outline button--primary"
                   style={{ fontSize: '12px' }}
                 >
                   {copied ? '\u2713 Copied!' : '\uD83D\uDCCB Copy'}
@@ -397,14 +361,8 @@ export default function NeuroEditor({
               {feat.analysis && analysisData && !isPlayground && (
                 <button
                   onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.8rem',
-                    borderRadius: '4px',
-                    border: '1px solid #ccc',
-                    backgroundColor: showAnalysisPanel ? '#e0f0e0' : '#fff',
-                    cursor: 'pointer',
-                  }}
+                  className={`button button--sm ${showAnalysisPanel ? 'button--primary' : 'button--outline button--primary'}`}
+                  style={{ fontSize: '12px' }}
                 >
                   {showAnalysisPanel ? 'Hide Analysis' : 'Show Analysis'}
                 </button>
@@ -430,9 +388,9 @@ export default function NeuroEditor({
                 border: '1px solid var(--ifm-color-danger)',
                 minHeight: '400px',
               } : {
-                backgroundColor: '#fff0f0',
-                color: '#d00',
-                border: '1px solid #ffcccc',
+                backgroundColor: 'var(--ifm-color-danger-contrast-background)',
+                color: 'var(--ifm-color-danger)',
+                border: '1px solid var(--ifm-color-danger)',
               }),
             }}>
               {error}
@@ -441,11 +399,11 @@ export default function NeuroEditor({
             <div style={{
               fontFamily: MONO_FONT,
               padding: '0.75rem',
-              backgroundColor: '#1e1e1e',
-              color: '#d4d4d4',
+              backgroundColor: 'var(--ifm-pre-background)',
+              color: 'var(--ifm-pre-color)',
               overflow: 'auto',
               borderRadius: '8px',
-              border: '1px solid #333',
+              border: '1px solid var(--ifm-color-emphasis-300)',
               whiteSpace: 'pre',
               fontSize: isPlayground ? '13px' : '12px',
               lineHeight: isPlayground ? '1.6' : '1.5',
@@ -465,9 +423,9 @@ export default function NeuroEditor({
         <div style={{
           marginTop: '1rem',
           padding: '1rem',
-          backgroundColor: '#f8f9fa',
+          backgroundColor: 'var(--ifm-color-emphasis-100)',
           borderRadius: '8px',
-          border: '1px solid #e0e0e0',
+          border: '1px solid var(--ifm-color-emphasis-300)',
         }}>
           <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Shape Analysis</h4>
 
@@ -476,7 +434,7 @@ export default function NeuroEditor({
               <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
                 {neuron.name}
                 {neuron.params.length > 0 && (
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>
+                  <span style={{ fontWeight: 'normal', color: 'var(--ifm-color-emphasis-600)' }}>
                     ({neuron.params.map(p => p.name).join(', ')})
                   </span>
                 )}
@@ -490,9 +448,8 @@ export default function NeuroEditor({
               }}>
                 {neuron.inputs.map((port, i) => (
                   <React.Fragment key={`in-${i}`}>
-                    <span style={{ color: '#666' }}>in{port.name !== 'default' ? ` ${port.name}` : ''}:</span>
-                    <code style={{
-                      backgroundColor: '#e8f5e9',
+                    <span style={{ color: 'var(--ifm-color-emphasis-600)' }}>in{port.name !== 'default' ? ` ${port.name}` : ''}:</span>
+                    <code className="shape-input" style={{
                       padding: '2px 6px',
                       borderRadius: '3px',
                       fontSize: '0.85rem',
@@ -501,9 +458,8 @@ export default function NeuroEditor({
                 ))}
                 {neuron.outputs.map((port, i) => (
                   <React.Fragment key={`out-${i}`}>
-                    <span style={{ color: '#666' }}>out{port.name !== 'default' ? ` ${port.name}` : ''}:</span>
-                    <code style={{
-                      backgroundColor: '#e3f2fd',
+                    <span style={{ color: 'var(--ifm-color-emphasis-600)' }}>out{port.name !== 'default' ? ` ${port.name}` : ''}:</span>
+                    <code className="shape-output" style={{
                       padding: '2px 6px',
                       borderRadius: '3px',
                       fontSize: '0.85rem',
@@ -514,11 +470,11 @@ export default function NeuroEditor({
 
               {neuron.connections.length > 0 && (
                 <div style={{ marginTop: '0.5rem', paddingLeft: '1rem' }}>
-                  <span style={{ color: '#666', fontSize: '0.85rem' }}>Connections:</span>
+                  <span style={{ color: 'var(--ifm-color-emphasis-600)', fontSize: '0.85rem' }}>Connections:</span>
                   <div style={{
-                    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                    fontFamily: MONO_FONT,
                     fontSize: '0.8rem',
-                    color: '#444',
+                    color: 'var(--ifm-color-emphasis-700)',
                     marginTop: '0.25rem',
                   }}>
                     {neuron.connections.map((conn, i) => (
@@ -535,7 +491,7 @@ export default function NeuroEditor({
               <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Match Expressions</h5>
               {analysisData.match_expressions.map((matchExpr, idx) => (
                 <div key={idx} style={{ marginBottom: '0.5rem', paddingLeft: '1rem' }}>
-                  <div style={{ fontSize: '0.85rem', color: '#666' }}>In {matchExpr.neuron}:</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--ifm-color-emphasis-600)' }}>In {matchExpr.neuron}:</div>
                   {matchExpr.arms.map((arm, armIdx) => (
                     <div key={armIdx} style={{
                       display: 'flex',
@@ -545,16 +501,15 @@ export default function NeuroEditor({
                       marginLeft: '1rem',
                       opacity: arm.is_reachable ? 1 : 0.5,
                     }}>
-                      <code style={{
-                        backgroundColor: arm.is_reachable ? '#fff3e0' : '#f5f5f5',
+                      <code className="shape-match" style={{
                         padding: '2px 6px',
                         borderRadius: '3px',
                       }}>
                         {arm.pattern}
-                        {arm.guard && <span style={{ color: '#666' }}> where {arm.guard}</span>}
+                        {arm.guard && <span style={{ color: 'var(--ifm-color-emphasis-600)' }}> where {arm.guard}</span>}
                       </code>
                       {!arm.is_reachable && (
-                        <span style={{ color: '#999', fontSize: '0.8rem' }}>(unreachable)</span>
+                        <span style={{ color: 'var(--ifm-color-emphasis-500)', fontSize: '0.8rem' }}>(unreachable)</span>
                       )}
                     </div>
                   ))}
