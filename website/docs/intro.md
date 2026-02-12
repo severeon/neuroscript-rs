@@ -75,9 +75,9 @@ neuron RecursiveStack(dim, depth):
     graph:
         in ->
             if depth > 0:
-                Linear(dim, dim)
-                GELU()
-                recurse
+                Linear(dim, dim)   # process input
+                GELU()             # activate
+                recurse            # recurse with depth - 1
             else: Identity()
             out
 ```
