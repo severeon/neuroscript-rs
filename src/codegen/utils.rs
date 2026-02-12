@@ -165,6 +165,11 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // Tuple unpacking doesn't contain calls in current IR
         }
         Endpoint::Ref(_) => {}
+        Endpoint::Unroll(u) => {
+            for ep in &u.pipeline {
+                collect_calls_from_endpoint_impl(ep, calls);
+            }
+        }
     }
 }
 

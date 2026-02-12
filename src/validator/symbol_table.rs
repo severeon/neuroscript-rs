@@ -398,6 +398,9 @@ where
 
             Ok(all_branch_ports[0].clone())
         }
+        Endpoint::Unroll(_) => Err(Box::new(ValidationError::Custom(
+            "Unroll should be expanded before validation".to_string(),
+        ))),
     }
 }
 
@@ -509,6 +512,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
+        Endpoint::Unroll(_) => "Unroll".to_string(),
     }
 }
 
@@ -538,5 +542,6 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match".to_string(),
         Endpoint::If(_) => "if".to_string(),
+        Endpoint::Unroll(_) => "unroll".to_string(),
     }
 }

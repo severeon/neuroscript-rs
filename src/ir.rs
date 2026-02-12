@@ -181,6 +181,7 @@ impl std::fmt::Display for Endpoint {
             }
             Endpoint::Match(m) => write!(f, "{}", m),
             Endpoint::If(expr) => write!(f, "{}", expr),
+            Endpoint::Unroll(u) => write!(f, "{}", u),
         }
     }
 }
@@ -232,6 +233,33 @@ impl std::fmt::Display for MatchExpr {
                 write!(f, "{}", e)?;
             }
             writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for UnrollExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unroll({}): ", self.count)?;
+        if let Some(ref idx) = self.index_var {
+            write!(f, "[{}] ", idx)?;
+        }
+        write!(f, "-> ")?;
+        for (i, e) in self.pipeline.iter().enumerate() {
+            if i > 0 {
+                write!(f, " -> ")?;
+            }
+            write!(f, "{}", e)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for ContextUnroll {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "unroll({}):", self.count)?;
+        for b in &self.bindings {
+            writeln!(f, "      {}", b)?;
         }
         Ok(())
     }
@@ -299,13 +327,16 @@ impl std::fmt::Display for NeuronDef {
             }
             NeuronBody::Graph {
                 context_bindings,
+                context_unrolls,
                 connections,
-                ..
             } => {
-                if !context_bindings.is_empty() {
+                if !context_bindings.is_empty() || !context_unrolls.is_empty() {
                     writeln!(f, "  context:")?;
                     for b in context_bindings {
                         writeln!(f, "    {}", b)?;
+                    }
+                    for u in context_unrolls {
+                        write!(f, "    {}", u)?;
                     }
                 }
                 writeln!(f, "  graph:")?;

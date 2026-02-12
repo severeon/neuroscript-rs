@@ -22,6 +22,7 @@ fn test_codegen_match() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -96,6 +97,7 @@ fn test_codegen_match_with_captured_dims() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -201,6 +203,7 @@ fn test_codegen_match_guards_with_bindings() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -267,6 +270,7 @@ fn test_codegen_optimized_match_fewer_branches() {
             doc: None,
             body: NeuronBody::Graph {
                 context_bindings: vec![],
+                context_unrolls: vec![],
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
@@ -443,6 +447,7 @@ fn test_codegen_optimized_match_with_guards() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
@@ -585,6 +590,7 @@ fn test_codegen_if_else() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::If(IfExpr {

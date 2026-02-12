@@ -179,6 +179,8 @@ pub enum Endpoint {
     Match(MatchExpr),
     /// Conditional expression
     If(IfExpr),
+    /// Compile-time unroll expression (expanded before validation)
+    Unroll(UnrollExpr),
 }
 
 /// A connection: source -> destination
@@ -219,6 +221,28 @@ pub struct IfExpr {
     pub branches: Vec<IfBranch>,            // if and elifs
     pub else_branch: Option<Vec<Endpoint>>, // optional else
     pub id: usize,
+}
+
+/// Compile-time unroll expression for graph-level sequential chaining
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnrollExpr {
+    /// Number of iterations (must resolve to positive integer)
+    pub count: Value,
+    /// Optional index variable name (e.g., `[i]`)
+    pub index_var: Option<String>,
+    /// Pipeline endpoints to repeat
+    pub pipeline: Vec<Endpoint>,
+    /// Unique identifier for this unroll
+    pub id: usize,
+}
+
+/// Compile-time unroll block within a context section
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContextUnroll {
+    /// Number of iterations (must resolve to positive integer)
+    pub count: Value,
+    /// Bindings to replicate
+    pub bindings: Vec<Binding>,
 }
 
 // ImplRef is already defined above as a struct
@@ -264,7 +288,8 @@ pub enum NeuronBody {
     Primitive(ImplRef),
     /// Composite: defined by internal graph
     Graph {
-        context_bindings: Vec<Binding>, // New unified bindings
+        context_bindings: Vec<Binding>,
+        context_unrolls: Vec<ContextUnroll>,
         connections: Vec<Connection>,
     },
 }
@@ -482,6 +507,10 @@ pub enum ValidationError {
         neuron: String,
         reason: String,
     },
+    InvalidUnrollCount {
+        neuron: String,
+        reason: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -570,6 +599,13 @@ impl std::fmt::Display for ValidationError {
                     f,
                     "Invalid recursion in binding '{}' of neuron '{}': {}",
                     binding, neuron, reason
+                )
+            }
+            ValidationError::InvalidUnrollCount { neuron, reason } => {
+                write!(
+                    f,
+                    "Invalid unroll count in neuron '{}': {}",
+                    neuron, reason
                 )
             }
             ValidationError::Custom(msg) => {

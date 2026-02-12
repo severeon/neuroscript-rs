@@ -57,6 +57,7 @@ fn test_optimize_matches_basic() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -126,6 +127,7 @@ fn test_optimize_matches_shadowing() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -201,6 +203,7 @@ fn test_optimize_matches_guards_prevent_pruning() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -286,6 +289,7 @@ fn test_optimize_matches_multiple_unreachable() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -354,6 +358,7 @@ fn test_optimize_matches_disabled() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -443,6 +448,7 @@ fn test_optimize_matches_nested() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };
@@ -514,6 +520,7 @@ fn test_count_matches() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![
                 Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
@@ -624,6 +631,7 @@ fn test_reorder_match_arms() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![],
+            context_unrolls: vec![],
             connections: vec![connection],
         },
     };

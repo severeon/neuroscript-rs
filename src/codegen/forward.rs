@@ -131,6 +131,11 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::Unroll(_) => {
+                return Err(CodegenError::UnsupportedFeature(
+                    "Unroll should be expanded before codegen".to_string(),
+                ));
+            }
         };
 
         // Determine source output count for implicit fork detection
@@ -637,6 +642,11 @@ fn process_destination(
             }
 
             Ok(result_var)
+        }
+        Endpoint::Unroll(_) => {
+            Err(CodegenError::UnsupportedFeature(
+                "Unroll should be expanded before codegen".to_string(),
+            ))
         }
     }
 }

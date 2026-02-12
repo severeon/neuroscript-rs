@@ -72,6 +72,7 @@ impl Validator {
                 if let NeuronBody::Graph {
                     context_bindings,
                     connections,
+                    ..
                 } = &neuron.body
                 {
                     // Validate bindings first
