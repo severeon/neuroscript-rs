@@ -14,8 +14,8 @@ NeuroScript's `match` expressions let you route tensors to different processing 
 
 ```neuroscript
 in -> match:
-  [pattern]: pipeline -> out
-  [pattern]: different_pipeline -> out
+    [pattern]: pipeline -> out
+    [pattern]: different_pipeline -> out
 ```
 
 Each arm has:
@@ -43,12 +43,12 @@ Captured dimensions can be used in:
   title="Adaptive Projection"
   description="Different processing paths based on input dimension size"
   initialCode={`neuron AdaptiveProjection():
-  in: [*, d]
-  out: [*, 512]
-  graph:
-    in -> match:
-      [*, d] where d > 512: Linear(d, 512) -> out
-      [*, d] where d <= 512: Linear(d, 256) -> Linear(256, 512) -> out`}
+    in: [*, d]
+    out: [*, 512]
+    graph:
+        in -> match:
+            [*, d] where d > 512: Linear(d, 512) -> out
+            [*, d] where d <= 512: Linear(d, 256) -> Linear(256, 512) -> out`}
 />
 
 This neuron:
@@ -63,14 +63,14 @@ Click "Show Analysis" to see the match arms and their patterns.
   title="Multi-Tier Compression"
   description="Four different compression strategies based on input size"
   initialCode={`neuron AdaptiveCompressor():
-  in: [*, d]
-  out: [*, 128]
-  graph:
-    in -> match:
-      [*, d] where d > 1024: Linear(d, 512) -> GELU() -> Linear(512, 128) -> out
-      [*, d] where d > 512: Linear(d, 256) -> GELU() -> Linear(256, 128) -> out
-      [*, d] where d > 128: Linear(d, 128) -> out
-      [*, d]: Identity() -> out`}
+    in: [*, d]
+    out: [*, 128]
+    graph:
+        in -> match:
+            [*, d] where d > 1024: Linear(d, 512) -> GELU() -> Linear(512, 128) -> out
+            [*, d] where d > 512: Linear(d, 256) -> GELU() -> Linear(256, 128) -> out
+            [*, d] where d > 128: Linear(d, 128) -> out
+            [*, d]: Identity() -> out`}
 />
 
 This creates four tiers:
@@ -104,13 +104,13 @@ Match on multiple dimensions for sequence models:
   title="Sequence-Aware Encoder"
   description="Different processing based on sequence length and dimension"
   initialCode={`neuron FlexibleEncoder():
-  in: [*, seq, d]
-  out: [*, seq, 512]
-  graph:
-    in -> match:
-      [*, seq, d] where d == 512: Identity() -> out
-      [*, seq, d] where d < 512: Linear(d, 512) -> out
-      [*, seq, d] where d > 512: Linear(d, 512) -> out`}
+    in: [*, seq, d]
+    out: [*, seq, 512]
+    graph:
+        in -> match:
+            [*, seq, d] where d == 512: Identity() -> out
+            [*, seq, d] where d < 512: Linear(d, 512) -> out
+            [*, seq, d] where d > 512: Linear(d, 512) -> out`}
 />
 
 ## Using Captured Dimensions in Pipelines
@@ -121,18 +121,18 @@ Captured dimensions can be used as arguments to neurons in the pipeline:
   title="Dynamic Layer Sizing"
   description="Captured dimension 'd' is used in Linear layer arguments"
   initialCode={`neuron DynamicProjection():
-  in: [*, d]
-  out: [*, 512]
-  graph:
-    in -> match:
-      [*, d] where d > 512:
-        Linear(d, 512)
-        out
-      [*, d]:
-        Linear(d, d * 2)
-        GELU()
-        Linear(d * 2, 512)
-        out`}
+    in: [*, d]
+    out: [*, 512]
+    graph:
+        in -> match:
+            [*, d] where d > 512:
+                Linear(d, 512)
+                out
+            [*, d]:
+                Linear(d, d * 2)
+                GELU()
+                Linear(d * 2, 512)
+                out`}
 />
 
 Notice how `d` appears in `Linear(d, 512)` and `Linear(d, d * 2)`. The actual values are determined at runtime based on the input shape.

@@ -30,24 +30,14 @@ Pass a tuple of connections to a variadic neuron:
 <InteractiveExample
   title="Two-Input Concat"
   description="Two branches concatenated along the last dimension"
-  initialCode={`neuron Concat(dim):
-  in *inputs: [*shape]
-  out: [*shape_out]
-  impl: core,structural/Concat
-
-neuron Linear(in_dim, out_dim):
-  in: [*, in_dim]
-  out: [*, out_dim]
-  impl: core,nn/Linear
-
-neuron TwoWayConcat(dim):
-  in: [*, dim]
-  out: [*, dim * 2]
-  graph:
-    in -> (a, b)
-    a -> Linear(dim, dim) -> pa
-    b -> Linear(dim, dim) -> pb
-    (pa, pb) -> Concat(1) -> out`}
+  initialCode={`neuron TwoWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 2]
+    graph:
+        in -> (a, b)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        (pa, pb) -> Concat(1) -> out`}
 />
 
 The tuple `(pa, pb)` feeds into `Concat`'s variadic `*inputs` port. Each element is checked against the shape pattern independently.
@@ -59,25 +49,15 @@ The same neuron works with any number of inputs — no overloads needed:
 <InteractiveExample
   title="Three-Input Concat"
   description="Three branches concatenated — same Concat neuron, more inputs"
-  initialCode={`neuron Concat(dim):
-  in *inputs: [*shape]
-  out: [*shape_out]
-  impl: core,structural/Concat
-
-neuron Linear(in_dim, out_dim):
-  in: [*, in_dim]
-  out: [*, out_dim]
-  impl: core,nn/Linear
-
-neuron ThreeWayConcat(dim):
-  in: [*, dim]
-  out: [*, dim * 3]
-  graph:
-    in -> (a, b, c)
-    a -> Linear(dim, dim) -> pa
-    b -> Linear(dim, dim) -> pb
-    c -> Linear(dim, dim) -> pc
-    (pa, pb, pc) -> Concat(1) -> out`}
+  initialCode={`neuron ThreeWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 3]
+    graph:
+        in -> (a, b, c)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        (pa, pb, pc) -> Concat(1) -> out`}
 />
 
 ## Composing Variadic Neurons
@@ -87,21 +67,11 @@ A composite neuron can itself declare a variadic port and pass it through:
 <InteractiveExample
   title="Variadic Composite"
   description="ConcatNorm accepts any number of inputs, concatenates, then normalizes"
-  initialCode={`neuron Concat(dim):
-  in *inputs: [*shape]
-  out: [*shape_out]
-  impl: core,structural/Concat
-
-neuron LayerNorm(dim):
-  in: [*, dim]
-  out: [*, dim]
-  impl: core,normalization/LayerNorm
-
-neuron ConcatNorm(dim):
-  in *inputs: [*shape]
-  out: [*, dim]
-  graph:
-    in -> Concat(1) -> LayerNorm(dim) -> out`}
+  initialCode={`neuron ConcatNorm(dim):
+    in *inputs: [*shape]
+    out: [*, dim]
+    graph:
+        in -> Concat(1) -> LayerNorm(dim) -> out`}
 />
 
 When a composite neuron has a variadic port, the incoming tuple is passed as-is to the first connection. Here, `in` carries the full tuple directly into `Concat`.
@@ -113,26 +83,16 @@ Variadic ports enable multi-branch architectures where the number of branches is
 <InteractiveExample
   title="Four-Way Concat"
   description="Four parallel paths merged via variadic Concat"
-  initialCode={`neuron Concat(dim):
-  in *inputs: [*shape]
-  out: [*shape_out]
-  impl: core,structural/Concat
-
-neuron Linear(in_dim, out_dim):
-  in: [*, in_dim]
-  out: [*, out_dim]
-  impl: core,nn/Linear
-
-neuron FourWayConcat(dim):
-  in: [*, dim]
-  out: [*, dim * 4]
-  graph:
-    in -> (a, b, c, d)
-    a -> Linear(dim, dim) -> pa
-    b -> Linear(dim, dim) -> pb
-    c -> Linear(dim, dim) -> pc
-    d -> Linear(dim, dim) -> pd
-    (pa, pb, pc, pd) -> Concat(1) -> out`}
+  initialCode={`neuron FourWayConcat(dim):
+    in: [*, dim]
+    out: [*, dim * 4]
+    graph:
+        in -> (a, b, c, d)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Linear(dim, dim) -> pc
+        d -> Linear(dim, dim) -> pd
+        (pa, pb, pc, pd) -> Concat(1) -> out`}
 />
 
 ## Rules and Constraints

@@ -26,12 +26,12 @@ This creates two references (`branch_a` and `branch_b`) that both point to the s
   title="Simple Fork"
   description="Fork creates two identical copies that can be processed separately"
   initialCode={`neuron SimpleFork(dim):
-  in: [*, dim]
-  out: [*, dim]
-  graph:
-    in -> Fork() -> (left, right)
-    left -> Linear(dim, dim) -> processed
-    (processed, right) -> Add() -> out`}
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (left, right)
+        left -> Linear(dim, dim) -> processed
+        (processed, right) -> Add() -> out`}
 />
 
 In this example:
@@ -48,17 +48,17 @@ The most common fork/join pattern is the **residual connection** (skip connectio
   title="Residual Block"
   description="The classic ResNet pattern: process main path, add skip connection"
   initialCode={`neuron ResidualBlock(dim):
-  in: [*, dim]
-  out: [*, dim]
-  graph:
-    in -> Fork() -> (main, skip)
-    main ->
-      LayerNorm(dim)
-      Linear(dim, dim * 4)
-      GELU()
-      Linear(dim * 4, dim)
-      processed
-    (processed, skip) -> Add() -> out`}
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork() -> (main, skip)
+        main ->
+            LayerNorm(dim)
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            processed
+        (processed, skip) -> Add() -> out`}
 />
 
 Key points:
@@ -75,15 +75,15 @@ Use `Fork3()` to create three branches:
   title="Three-Way Processing"
   description="Fork3 creates three branches for parallel processing"
   initialCode={`neuron ThreeWayBlock(dim):
-  in: [*, dim]
-  out: [*, dim]
-  graph:
-    in -> Fork3() -> (a, b, c)
-    a -> Linear(dim, dim) -> pa
-    b -> Linear(dim, dim) -> pb
-    c -> Identity() -> pc
-    (pa, pb) -> Add() -> ab
-    (ab, pc) -> Add() -> out`}
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> Fork3() -> (a, b, c)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        c -> Identity() -> pc
+        (pa, pb) -> Add() -> ab
+        (ab, pc) -> Add() -> out`}
 />
 
 ## Shape Constraints at Merge Points
@@ -109,13 +109,13 @@ If you want to combine branches with different dimensions, use `Concat()`:
   title="Concatenation"
   description="Concat joins tensors along the last dimension"
   initialCode={`neuron ConcatBranches(dim):
-  in: [*, dim]
-  out: [*, dim * 2]
-  graph:
-    in -> Fork() -> (a, b)
-    a -> Linear(dim, dim) -> pa
-    b -> Linear(dim, dim) -> pb
-    (pa, pb) -> Concat() -> out`}
+    in: [*, dim]
+    out: [*, dim * 2]
+    graph:
+        in -> Fork() -> (a, b)
+        a -> Linear(dim, dim) -> pa
+        b -> Linear(dim, dim) -> pb
+        (pa, pb) -> Concat() -> out`}
 />
 
 ## Try It Yourself

@@ -59,8 +59,7 @@ neuron Bias(dim):
     impl: core,operations/Bias
 
 neuron Concat(dim):
-    in a: [*shape_a]
-    in b: [*shape_b]
+    in *inputs: [*shape]
     out: [*shape_out]
     impl: core,structural/Concat
 

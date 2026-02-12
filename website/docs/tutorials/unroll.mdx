@@ -21,19 +21,14 @@ The most common form chains iterations sequentially — the output of iteration 
 <InteractiveExample
   title="Transformer Stack"
   description="N transformer blocks chained sequentially via unroll"
-  initialCode={`neuron TransformerBlock(d_model):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  impl: core,transformer/TransformerBlock
-
-neuron TransformerStack(d_model, num_layers):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  graph:
-    in ->
-      unroll(num_layers): ->
-        TransformerBlock(d_model)
-      out`}
+  initialCode={`neuron TransformerStack(d_model, num_heads, d_ff, num_layers):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    graph:
+        in ->
+            unroll(num_layers): ->
+                TransformerBlock(d_model, num_heads, d_ff)
+            out`}
 />
 
 The `->` after the colon is what makes this sequential. It means "thread the data through each iteration." The unrolled block must have compatible input/output shapes since each output becomes the next input.
@@ -45,22 +40,17 @@ When you need named bindings for each iteration, declare them inside an `unroll`
 <InteractiveExample
   title="Context-Scoped Unroll"
   description="Each iteration gets its own independent block instance"
-  initialCode={`neuron TransformerBlock(d_model):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  impl: core,transformer/TransformerBlock
-
-neuron NamedStack(d_model, num_layers=3):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  context:
-    unroll(num_layers):
-      block = TransformerBlock(d_model)
-  graph:
-    in ->
-      unroll(num_layers): ->
-        block
-      out`}
+  initialCode={`neuron NamedStack(d_model, num_heads, d_ff, num_layers=3):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    context:
+        unroll(num_layers):
+            block = TransformerBlock(d_model, num_heads, d_ff)
+    graph:
+        in ->
+            unroll(num_layers): ->
+                block
+            out`}
 />
 
 The compiler matches context-unroll bindings to graph-unroll references by the unroll parameter. Iteration 0 gets instance 0, iteration 1 gets instance 1, and so on. Each `block` is an independent module with its own weights.
@@ -72,22 +62,17 @@ To reuse the **same weights** across all iterations (like a Universal Transforme
 <InteractiveExample
   title="Weight Sharing"
   description="@static makes all iterations share one set of weights"
-  initialCode={`neuron TransformerBlock(d_model):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  impl: core,transformer/TransformerBlock
-
-neuron UniversalTransformer(d_model, num_steps=6):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  context:
-    unroll(num_steps):
-      @static block = TransformerBlock(d_model)
-  graph:
-    in ->
-      unroll(num_steps): ->
-        block
-      out`}
+  initialCode={`neuron UniversalTransformer(d_model, num_heads, d_ff, num_steps=6):
+    in: [batch, seq, d_model]
+    out: [batch, seq, d_model]
+    context:
+        unroll(num_steps):
+            @static block = TransformerBlock(d_model, num_heads, d_ff)
+    graph:
+        in ->
+            unroll(num_steps): ->
+                block
+            out`}
 />
 
 `@static` means one instance, reused across all references. The generated code creates a single `TransformerBlock` in `__init__` and calls it `num_steps` times in `forward`.
@@ -99,42 +84,22 @@ neuron UniversalTransformer(d_model, num_steps=6):
 <InteractiveExample
   title="GPT-2 Small"
   description="Full model: embedding → unrolled transformer blocks → head"
-  initialCode={`neuron Linear(in_dim, out_dim):
-  in: [*shape, in_dim]
-  out: [*shape, out_dim]
-  impl: core,nn/Linear
-
-neuron LayerNorm(dim):
-  in: [*shape, dim]
-  out: [*shape, dim]
-  impl: core,normalization/LayerNorm
-
-neuron Embedding(vocab_size, d_model):
-  in: [*shape]
-  out: [*shape, d_model]
-  impl: core,nn/Embedding
-
-neuron TransformerBlock(d_model):
-  in: [*, seq, d_model]
-  out: [*, seq, d_model]
-  impl: core,transformer/TransformerBlock
-
-neuron GPT2Small(vocab_size=50257, d_model=768, num_layers=12):
-  in: [*, seq]
-  out: [*, seq, vocab_size]
-  context:
-    embed = Embedding(vocab_size, d_model)
-    unroll(num_layers):
-      block = TransformerBlock(d_model)
-    ln_f = LayerNorm(d_model)
-    head = Linear(d_model, vocab_size)
-  graph:
-    in -> embed -> e
-    e ->
-      unroll(num_layers): ->
-        block
-      mid
-    mid -> ln_f -> head -> out`}
+  initialCode={`neuron GPT2Small(vocab_size=50257, d_model=768, num_heads=12, d_ff=3072, num_layers=12):
+    in: [*, seq]
+    out: [*, seq, vocab_size]
+    context:
+        embed = Embedding(vocab_size, d_model)
+        unroll(num_layers):
+            block = TransformerBlock(d_model, num_heads, d_ff)
+        ln_f = LayerNorm(d_model)
+        head = Linear(d_model, vocab_size)
+    graph:
+        in -> embed -> e
+        e ->
+            unroll(num_layers): ->
+                block
+            mid
+        mid -> ln_f -> head -> out`}
 />
 
 This replaces what would otherwise be 12 hand-written `TransformerBlock` calls.
@@ -144,12 +109,12 @@ This replaces what would otherwise be 12 hand-written `TransformerBlock` calls.
 Each unroll iteration can contain multiple bindings:
 
 ```neuroscript
-neuron MultiScaleEncoder(dim, num_scales):
+neuron MultiScaleEncoder(dim, num_heads, d_ff, num_scales):
     in: [*, seq, dim]
     out: [*, seq, dim]
     context:
         unroll(num_scales):
-            encoder = TransformerBlock(dim, 8, dim * 4)
+            encoder = TransformerBlock(dim, num_heads, d_ff)
             norm = LayerNorm(dim)
     graph:
         in ->
@@ -166,13 +131,13 @@ Each iteration gets its own independent `encoder` and `norm` pair.
 Unroll-scoped and regular bindings compose freely:
 
 ```neuroscript
-neuron HybridStack(dim, num_layers):
+neuron HybridStack(dim, num_heads, d_ff, num_layers):
     in: [*, seq, dim]
     out: [*, seq, dim]
     context:
         @static shared_norm = LayerNorm(dim)
         unroll(num_layers):
-            block = TransformerBlock(dim, 8, dim * 4)
+            block = TransformerBlock(dim, num_heads, d_ff)
     graph:
         in ->
             unroll(num_layers): ->

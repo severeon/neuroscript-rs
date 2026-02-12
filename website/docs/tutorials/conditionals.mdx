@@ -42,15 +42,15 @@ Use inline `if`/`else` when each branch is a short pipeline:
   title="Optional Pooling"
   description="A flag parameter controls whether pooling is applied"
   initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
-  in: [batch, in_ch, h, w]
-  out: [batch, out_ch, h, w]
-  context:
-    conv = Conv2d(in_ch, out_ch, 3, padding=1)
-    bn = BatchNorm(out_ch)
-    act = ReLU()
-  graph:
-    in -> conv -> bn -> act
-    act -> if has_pool: MaxPool(2, stride=2) -> out else: Identity() -> out`}
+    in: [batch, in_ch, h, w]
+    out: [batch, out_ch, h, w]
+    context:
+        conv = Conv2d(in_ch, out_ch, 3, padding=1)
+        bn = BatchNorm(out_ch)
+        act = ReLU()
+    graph:
+        in -> conv -> bn -> act
+        act -> if has_pool: MaxPool(2, stride=2) -> out else: Identity() -> out`}
 />
 
 Here `has_pool` is a parameter with a default value of `true`. The compiler statically resolves which branch to include.
@@ -63,21 +63,21 @@ When branches contain multi-step pipelines, use the indented block form:
   title="Multi-Line Conditional"
   description="Indented if/else with multi-step branches that feed into the next pipeline step"
   initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
-  in: [batch, in_ch, h, w]
-  out: [batch, out_ch, h, w]
-  context:
-    conv = Conv2d(in_ch, out_ch, 3, padding=1)
-    bn = BatchNorm(out_ch)
-    act = ReLU()
-    @lazy pool = MaxPool(2, stride=2)
-  graph:
-    in ->
-      conv
-      bn
-      act
-      if has_pool: pool
-      else: Identity()
-      out`}
+    in: [batch, in_ch, h, w]
+    out: [batch, out_ch, h, w]
+    context:
+        conv = Conv2d(in_ch, out_ch, 3, padding=1)
+        bn = BatchNorm(out_ch)
+        act = ReLU()
+        @lazy pool = MaxPool(2, stride=2)
+    graph:
+        in ->
+            conv
+            bn
+            act
+            if has_pool: pool
+            else: Identity()
+            out`}
 />
 
 Both branches flow into `out` — the conditional sits inline within the pipeline, and the next step after the `if`/`else` block receives whichever branch was selected.
@@ -109,19 +109,19 @@ When a conditional branch references a neuron that should only be instantiated i
   title="Lazy Conditional"
   description="@lazy ensures the pool module is only instantiated when has_pool is true"
   initialCode={`neuron ConvBlock(in_ch, out_ch, has_pool=true):
-  in: [batch, in_ch, h, w]
-  out: [batch, out_ch, h, w]
-  context:
-    conv = Conv2d(in_ch, out_ch, 3, padding=1)
-    bn = BatchNorm(out_ch)
-    act = ReLU()
-    @lazy pool = MaxPool(2, stride=2)
-  graph:
-    in -> conv -> bn -> act
-    act ->
-      if has_pool: pool
-      else: Identity()
-      out`}
+    in: [batch, in_ch, h, w]
+    out: [batch, out_ch, h, w]
+    context:
+        conv = Conv2d(in_ch, out_ch, 3, padding=1)
+        bn = BatchNorm(out_ch)
+        act = ReLU()
+        @lazy pool = MaxPool(2, stride=2)
+    graph:
+        in -> conv -> bn -> act
+        act ->
+            if has_pool: pool
+            else: Identity()
+            out`}
 />
 
 Without `@lazy`, the pool module would be instantiated in `__init__` even when `has_pool` is `false`. The `@lazy` annotation defers instantiation until the binding is actually used.

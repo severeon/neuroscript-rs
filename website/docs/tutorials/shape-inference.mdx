@@ -16,8 +16,8 @@ In NeuroScript, shapes use **dimension variables** like `dim`, `batch`, `seq` th
 
 ```neuroscript
 neuron MyNeuron(dim):
-  in: [*, dim]        # Input: any batch dimensions + dim
-  out: [*, dim * 4]   # Output: same batch dimensions + dim * 4
+    in: [*, dim]        # Input: any batch dimensions + dim
+    out: [*, dim * 4]   # Output: same batch dimensions + dim * 4
 ```
 
 When you instantiate this neuron, the compiler infers the actual value of `dim` from the context.
@@ -30,10 +30,10 @@ This neuron takes input of shape `[*, dim]` and produces output of shape `[*, di
   title="Linear Projection"
   description="The dimension variable 'dim' is used in both input shape and Linear arguments"
   initialCode={`neuron LinearProjection(dim):
-  in: [*, dim]
-  out: [*, dim * 4]
-  graph:
-    in -> Linear(dim, dim * 4) -> out`}
+    in: [*, dim]
+    out: [*, dim * 4]
+    graph:
+        in -> Linear(dim, dim * 4) -> out`}
 />
 
 Click "Show Analysis" to see the shape contracts. Notice how `dim` appears in:
@@ -49,14 +49,14 @@ A common pattern is to expand dimensions, apply transformations, then contract b
   title="Expand-Contract (FFN Pattern)"
   description="Dimensions expand (dim -> dim*4) then contract back (dim*4 -> dim)"
   initialCode={`neuron FFN(dim):
-  in: [*, dim]
-  out: [*, dim]
-  graph:
-    in ->
-      Linear(dim, dim * 4)
-      GELU()
-      Linear(dim * 4, dim)
-      out`}
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            Linear(dim, dim * 4)
+            GELU()
+            Linear(dim * 4, dim)
+            out`}
 />
 
 This is the feed-forward network (FFN) pattern used in Transformers. The intermediate dimension is 4x the input, allowing for richer representations.
@@ -69,13 +69,13 @@ You can use multiple dimension variables for more complex shapes:
   title="Multi-Head Attention Shape"
   description="Three dimension variables: batch (*), sequence (seq), and model dimension (dim)"
   initialCode={`neuron AttentionBlock(dim, heads):
-  in: [*, seq, dim]
-  out: [*, seq, dim]
-  graph:
-    in ->
-      LayerNorm(dim)
-      MultiHeadSelfAttention(dim, heads)
-      out`}
+    in: [*, seq, dim]
+    out: [*, seq, dim]
+    graph:
+        in ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, heads)
+            out`}
 />
 
 Here:
