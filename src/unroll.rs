@@ -32,7 +32,9 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
     let neuron_names: Vec<String> = program.neurons.keys().cloned().collect();
 
     for name in &neuron_names {
-        let neuron = program.neurons.get(name).unwrap();
+        // Safety: name was collected from program.neurons.keys() above
+        let neuron = program.neurons.get(name)
+            .expect("neuron disappeared during unroll expansion");
         let params = neuron.params.clone();
 
         if let NeuronBody::Graph {
@@ -123,7 +125,9 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
             }
 
             // Replace neuron body
-            let neuron = program.neurons.get_mut(name).unwrap();
+            // Safety: name was collected from program.neurons.keys() above
+            let neuron = program.neurons.get_mut(name)
+                .expect("neuron disappeared during unroll expansion");
             neuron.body = NeuronBody::Graph {
                 context_bindings: new_bindings,
                 context_unrolls: vec![],
@@ -481,7 +485,7 @@ mod tests {
             assert_eq!(context_bindings[1].name, "block_1");
             assert_eq!(context_bindings[2].name, "block_2");
         } else {
-            panic!("Expected Graph body");
+            panic!("Expected Graph body, got Primitive");
         }
     }
 
@@ -527,7 +531,7 @@ mod tests {
             assert_eq!(context_bindings.len(), 1);
             assert_eq!(context_bindings[0].name, "block");
         } else {
-            panic!("Expected Graph body");
+            panic!("Expected Graph body, got Primitive");
         }
     }
 
@@ -592,7 +596,7 @@ mod tests {
                 );
             }
         } else {
-            panic!("Expected Graph body");
+            panic!("Expected Graph body, got Primitive");
         }
     }
 
@@ -671,7 +675,7 @@ mod tests {
                 assert!(!has_unroll_endpoint(&conn.destination));
             }
         } else {
-            panic!("Expected Graph body");
+            panic!("Expected Graph body, got Primitive");
         }
     }
 
@@ -801,7 +805,7 @@ mod tests {
             assert_eq!(context_bindings[3].name, "ffn_1");
             assert_eq!(context_bindings[4].name, "ffn_2");
         } else {
-            panic!("Expected Graph body");
+            panic!("Expected Graph body, got Primitive");
         }
     }
 }
