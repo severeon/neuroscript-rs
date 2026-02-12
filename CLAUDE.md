@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Progress & Known Issues
+
+See [docs/PROGRESS.md](docs/PROGRESS.md) for session-by-session progress, known bugs, key decisions, and exploration findings that reduce future ramp-up time.
+
 ## Ground Rules
 
 * if implementing a feature: stash, checkout main, create a feature branch

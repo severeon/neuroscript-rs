@@ -31,7 +31,40 @@ impl Validator {
             }
         }
 
-        // 2. Check each neuron (read-only pass for structure)
+        // 2. Validate variadic port declarations
+        for neuron in program.neurons.values() {
+            // Variadic ports on outputs are not supported
+            for port in &neuron.outputs {
+                if port.variadic {
+                    errors.push(ValidationError::Custom(format!(
+                        "Variadic output ports are not supported: out *{} in neuron '{}'",
+                        port.name, neuron.name
+                    )));
+                }
+            }
+            // A neuron with a variadic input must have exactly one input port
+            let variadic_count = neuron.inputs.iter().filter(|p| p.variadic).count();
+            if variadic_count > 0 && neuron.inputs.len() != 1 {
+                errors.push(ValidationError::Custom(format!(
+                    "A neuron with a variadic input port must have exactly one input declaration, \
+                     but '{}' has {} inputs",
+                    neuron.name,
+                    neuron.inputs.len()
+                )));
+            }
+            // Variadic port must have an explicit name (not "default")
+            for port in &neuron.inputs {
+                if port.variadic && port.name == "default" {
+                    errors.push(ValidationError::Custom(format!(
+                        "Variadic input port in neuron '{}' needs an explicit name. \
+                         Write `in *inputs: [shape]` (or another name) instead of an unnamed variadic port.",
+                        neuron.name
+                    )));
+                }
+            }
+        }
+
+        // 3. Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
         {
             for neuron in program.neurons.values() {
