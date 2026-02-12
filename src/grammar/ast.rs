@@ -507,7 +507,13 @@ impl AstBuilder {
                     bindings.push(self.build_context_binding(inner)?);
                 }
                 Rule::unroll_context_block => {
-                    unrolls.push(self.build_unroll_context_block(inner)?);
+                    // The PEG grammar greedily matches all subsequent context_bindings
+                    // into the unroll block. Use indentation to separate bindings that
+                    // belong inside the unroll from those that follow it at the same level.
+                    let (unroll, overflow) =
+                        self.build_unroll_context_block_with_overflow(inner)?;
+                    unrolls.push(unroll);
+                    bindings.extend(overflow);
                 }
                 _ => {}
             }
@@ -516,12 +522,16 @@ impl AstBuilder {
         Ok((bindings, unrolls))
     }
 
-    /// Build an unroll context block: unroll(count):\n  bindings...
-    fn build_unroll_context_block(
+    /// Build an unroll context block, returning overflow bindings that belong
+    /// to the parent context section (at shallower indentation).
+    fn build_unroll_context_block_with_overflow(
         &mut self,
         pair: Pair<Rule>,
-    ) -> Result<ContextUnroll, ParseError> {
+    ) -> Result<(ContextUnroll, Vec<Binding>), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::unroll_context_block);
+
+        // Get the column of the unroll keyword to establish the baseline
+        let unroll_col = pair.as_span().start_pos().line_col().1;
 
         let mut inner = pair.into_inner();
         inner.next(); // Skip keyword_unroll
@@ -533,18 +543,40 @@ impl AstBuilder {
         inner.next();
         inner.next();
 
-        let mut bindings = vec![];
+        let mut unroll_bindings = vec![];
+        let mut overflow_bindings = vec![];
+        let mut first_binding_col: Option<usize> = None;
+
         for p in inner {
             match p.as_rule() {
                 Rule::context_binding => {
-                    bindings.push(self.build_context_binding(p)?);
+                    let col = p.as_span().start_pos().line_col().1;
+
+                    if first_binding_col.is_none() {
+                        // First binding establishes the expected inner indentation
+                        first_binding_col = Some(col);
+                    }
+
+                    if col > unroll_col {
+                        // More indented than unroll keyword → belongs inside
+                        unroll_bindings.push(self.build_context_binding(p)?);
+                    } else {
+                        // Same or less indentation → overflow to parent
+                        overflow_bindings.push(self.build_context_binding(p)?);
+                    }
                 }
                 Rule::NEWLINE => {}
                 _ => {}
             }
         }
 
-        Ok(ContextUnroll { count, bindings })
+        Ok((
+            ContextUnroll {
+                count,
+                bindings: unroll_bindings,
+            },
+            overflow_bindings,
+        ))
     }
 
     /// Build a graph-level unroll expression

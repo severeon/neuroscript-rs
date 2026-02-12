@@ -1,0 +1,42 @@
+# GPT-2 Small via unroll
+# End-to-end example showing how unroll composes a full GPT-2 model
+
+neuron Linear(in_dim, out_dim):
+    in: [*shape, in_dim]
+    out: [*shape, out_dim]
+    impl: core,nn/Linear
+
+neuron LayerNorm(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    impl: core,normalization/LayerNorm
+
+neuron Embedding(vocab_size, d_model):
+    in: [*shape]
+    out: [*shape, d_model]
+    impl: core,nn/Embedding
+
+neuron TransformerBlock(d_model):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    impl: core,transformer/TransformerBlock
+
+# GPT-2 Small: 12 transformer blocks
+neuron GPT2Small(vocab_size=50257, d_model=768, num_layers=12):
+    in: [*, seq]
+    out: [*, seq, vocab_size]
+    context:
+        embed = Embedding(vocab_size, d_model)
+        unroll(num_layers):
+            block = TransformerBlock(d_model)
+        ln_f = LayerNorm(d_model)
+        head = Linear(d_model, vocab_size)
+    graph:
+        in -> embed -> e
+
+        e ->
+            unroll(num_layers): ->
+                block
+            mid
+
+        mid -> ln_f -> head -> out
