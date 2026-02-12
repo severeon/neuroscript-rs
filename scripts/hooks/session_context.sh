@@ -3,6 +3,9 @@
 # Gives Claude immediate awareness of branch, build status, recent work,
 # and pointers to generated context files for deeper exploration.
 #
+# Also runs cargo check and neuroscript validate at session start to
+# populate .claude/context/ with fresh build/validation status.
+#
 # Input: JSON on stdin from Claude Code (SessionStart event)
 # Output: Project context as stdout (injected into Claude's context)
 
@@ -10,6 +13,8 @@ cd "$CLAUDE_PROJECT_DIR" 2>/dev/null || exit 0
 
 CONTEXT_DIR="$CLAUDE_PROJECT_DIR/.claude/context"
 GEN_SCRIPT="$CLAUDE_PROJECT_DIR/scripts/generate-context.sh"
+
+mkdir -p "$CONTEXT_DIR"
 
 # Regenerate context if artifacts are stale (older than last commit)
 if [ -f "$GEN_SCRIPT" ]; then
@@ -49,17 +54,105 @@ if [ "$CHANGES" -gt 0 ]; then
   echo "  Uncommitted changes: $CHANGES file(s)"
 fi
 
-# Build status (fast — no cargo check)
+# ----- Run cargo check and persist results -----
+TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
+BUILD_STATUS_FILE="$CONTEXT_DIR/build-status.md"
+
+CARGO_RESULT=$(cargo check --message-format=short 2>&1)
+CARGO_EXIT=$?
+
+if [ $CARGO_EXIT -ne 0 ]; then
+  CARGO_ERRORS=$(echo "$CARGO_RESULT" | head -40)
+  echo "  Build: FAIL (cargo check errors)"
+  {
+    echo "# Build Status"
+    echo ""
+    echo "Updated: $TIMESTAMP (session start)"
+    echo ""
+    echo "## cargo check: FAIL"
+    echo ""
+    echo '```'
+    echo "$CARGO_ERRORS"
+    echo '```'
+  } > "$BUILD_STATUS_FILE.tmp" && mv "$BUILD_STATUS_FILE.tmp" "$BUILD_STATUS_FILE"
+else
+  echo "  Build: OK (cargo check passes)"
+  {
+    echo "# Build Status"
+    echo ""
+    echo "Updated: $TIMESTAMP (session start)"
+    echo ""
+    echo "## cargo check: OK"
+    echo ""
+    echo "All Rust code compiles cleanly."
+  } > "$BUILD_STATUS_FILE.tmp" && mv "$BUILD_STATUS_FILE.tmp" "$BUILD_STATUS_FILE"
+fi
+
+# ----- Validate .ns files and persist results -----
 BINARY="./target/release/neuroscript"
+NS_STATUS_FILE="$CONTEXT_DIR/ns-validation-status.md"
+
 if [ -f "$BINARY" ]; then
-  STALE=$(find src/ -name '*.rs' -newer "$BINARY" -print -quit 2>/dev/null)
-  if [ -n "$STALE" ]; then
-    echo "  Build: STALE (source changed since last build)"
+  # Check if binary is stale
+  STALE_SRC=$(find src/ -name '*.rs' -newer "$BINARY" -print -quit 2>/dev/null)
+  if [ -n "$STALE_SRC" ]; then
+    echo "  Binary: STALE (source changed since last build)"
+  fi
+
+  # Validate all .ns files in examples/ and stdlib/
+  FAIL_COUNT=0
+  PASS_COUNT=0
+  FAIL_DETAILS=""
+
+  for ns_file in examples/*.ns stdlib/*.ns; do
+    [ -f "$ns_file" ] || continue
+    VRESULT=$("$BINARY" validate "$ns_file" 2>&1)
+    if [ $? -ne 0 ]; then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      FAIL_DETAILS="${FAIL_DETAILS}\n### $(basename "$ns_file")\n\n\`\`\`\n$(echo "$VRESULT" | head -10)\n\`\`\`\n"
+    else
+      PASS_COUNT=$((PASS_COUNT + 1))
+    fi
+  done
+
+  TOTAL=$((PASS_COUNT + FAIL_COUNT))
+  if [ $FAIL_COUNT -eq 0 ]; then
+    echo "  NS validation: OK ($TOTAL/$TOTAL files pass)"
+    {
+      echo "# NeuroScript Validation Status"
+      echo ""
+      echo "Updated: $TIMESTAMP (session start — full scan)"
+      echo ""
+      echo "## All files: OK"
+      echo ""
+      echo "$PASS_COUNT/$TOTAL .ns files validate successfully."
+    } > "$NS_STATUS_FILE.tmp" && mv "$NS_STATUS_FILE.tmp" "$NS_STATUS_FILE"
   else
-    echo "  Build: up to date"
+    echo "  NS validation: $FAIL_COUNT/$TOTAL files FAIL"
+    {
+      echo "# NeuroScript Validation Status"
+      echo ""
+      echo "Updated: $TIMESTAMP (session start — full scan)"
+      echo ""
+      echo "## $FAIL_COUNT/$TOTAL files FAIL"
+      echo ""
+      echo "$PASS_COUNT passed, $FAIL_COUNT failed."
+      echo ""
+      echo "## Failures"
+      echo -e "$FAIL_DETAILS"
+    } > "$NS_STATUS_FILE.tmp" && mv "$NS_STATUS_FILE.tmp" "$NS_STATUS_FILE"
   fi
 else
-  echo "  Build: no binary (needs cargo build --release)"
+  echo "  Binary: not found (needs cargo build --release)"
+  {
+    echo "# NeuroScript Validation Status"
+    echo ""
+    echo "Updated: $TIMESTAMP (session start)"
+    echo ""
+    echo "## Skipped"
+    echo ""
+    echo "neuroscript binary not found. Run \`cargo build --release\` first."
+  } > "$NS_STATUS_FILE.tmp" && mv "$NS_STATUS_FILE.tmp" "$NS_STATUS_FILE"
 fi
 
 # Recent commits (last 3)
@@ -71,6 +164,12 @@ done
 # Context bundle references
 echo ""
 echo "Context files (.claude/context/):"
+if [ -f "$CONTEXT_DIR/build-status.md" ]; then
+  echo "  - build-status.md — cargo check results (auto-updated on .rs edits)"
+fi
+if [ -f "$CONTEXT_DIR/ns-validation-status.md" ]; then
+  echo "  - ns-validation-status.md — .ns validation results (auto-updated on .ns edits)"
+fi
 if [ -f "$CONTEXT_DIR/ir-types-summary.md" ]; then
   echo "  - ir-types-summary.md — Core IR data types (enums, structs, type aliases)"
 fi
@@ -103,7 +202,6 @@ if [ -f "$MARKER" ]; then
 fi
 
 # Record session start time for the Stop hook
-mkdir -p "$CONTEXT_DIR"
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$CONTEXT_DIR/.session-start-time"
 
 exit 0
