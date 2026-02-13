@@ -4,6 +4,32 @@ export const EXAMPLES = [
   // BASICS
   // ============================================================================
   {
+    id: 'gpt2-block',
+    title: 'GPT-2 Small',
+    category: 'Advanced',
+    description: 'End-to-end example showing how unroll composes a full GPT-2 model',
+    code: `neuron GPT2Small(vocab_size=50257, d_model=768, num_heads=12, d_ff=3072, num_layers=12):
+    in: [*, seq]
+    out: [*, seq, vocab_size]
+    context:
+        embed = Embedding(vocab_size, d_model)
+        unroll(num_layers):
+            block = TransformerBlock(d_model, num_heads, d_ff)
+        ln_f = LayerNorm(d_model)
+        head = Linear(d_model, vocab_size)
+    graph:
+        in ->
+            embed
+            unroll(num_layers): ->
+                block
+            ln_f
+            head
+            out`,
+    targetNeuron: 'GPT2Small',
+    features: ['Unroll', 'Multi-line graph', 'Transformer architecture']
+  },
+  
+  {
     id: 'mlp',
     title: 'Simple MLP',
     category: 'Basics',

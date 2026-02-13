@@ -4,6 +4,79 @@ Tracks what was built, what's left, known bugs, and key decisions. Referenced fr
 
 ---
 
+## Session: 2026-02-13 — Syntax Highlighting, Codegen Improvements, Tutorial Expansion & Editor Consolidation
+
+### What Was Done
+
+**1. NeuroScript syntax highlighting (#23)**
+- Created TextMate grammar (`editors/vscode/syntaxes/neuroscript.tmLanguage.json`) for VS Code extension
+- Created Monarch tokenizer (`website/src/neuroscript-monarch.js`) for Monaco editor in the playground
+- Created Prism grammar (`website/src/theme/prism-include-languages.js`) for static code blocks in docs
+- Monaco editor integration with custom theme (`website/src/neuroscript-monaco-setup.js`)
+- Both source and output panels now use Monaco instead of plain textareas (with textarea fallback)
+
+**2. Codegen improvements (#24)**
+- `nn.ModuleList` support: unrolled layers now use `nn.ModuleList` instead of individual `self.layer_N` attributes
+- Semantic variable naming: codegen produces `attention_output`, `ffn_output` instead of `x_0`, `x_1`
+- Output shape comments: generated code includes `# shape: [batch, seq, dim]` comments on key lines
+- Unroll improvements: cleaner generated code for `unroll()` constructs
+
+**3. Tutorial expansion (#21, #22)**
+- New tutorials: `conditionals.mdx`, `unroll.mdx`, `variadic-ports.mdx`
+- Existing tutorials (`fork-join.mdx`, `match-guards.mdx`, `shape-inference.mdx`) migrated to use `NeuroEditor`
+- Sidebar updated to include new tutorial pages
+
+**4. Editor component consolidation (#22)**
+- Merged `InteractiveExample.js` (300 lines) + `NeuroPlayground.js` (397 lines) into `NeuroEditor.js`
+- `NeuroEditor` uses `mode` prop (`'tutorial'` | `'playground'`) with per-feature boolean overrides
+- Original files replaced with thin wrappers (1-line re-export and 6-line wrapper)
+- Added `layout` prop: `'vertical'` (stacked, default for tutorials) vs `'horizontal'` (side-by-side, default for playground)
+- Compile button shown by default in both modes
+- Monaco editor with NeuroScript highlighting in source panel, Python highlighting in output panel
+- Textarea fallback when Monaco CDN fails (`editorFailed` state)
+- Dark mode support via Docusaurus `useColorMode` hook
+
+### Files Changed
+
+| Layer | Files | Change |
+|-------|-------|--------|
+| Codegen | `src/codegen/forward.rs`, `instantiation.rs`, `generator.rs`, `utils.rs` | nn.ModuleList, semantic naming, shape comments |
+| Codegen Tests | `src/codegen/tests.rs`, 8 snapshot files | Updated for new codegen output |
+| IR | `src/interfaces.rs`, `src/ir.rs` | New fields for codegen metadata |
+| AST | `src/grammar/ast.rs` | Parse support for new constructs |
+| Unroll | `src/unroll.rs` | Cleaner unroll expansion |
+| Lib | `src/lib.rs` | Re-exports |
+| VS Code | `editors/vscode/` (3 files) | TextMate grammar + extension manifest |
+| Monaco | `website/src/neuroscript-monarch.js`, `neuroscript-monaco-setup.js` | Monarch tokenizer + theme registration |
+| Prism | `website/src/theme/prism-include-languages.js` | Static code block highlighting |
+| Editor | `website/src/components/NeuroEditor.js` | New unified component (625 lines) |
+| Editor | `website/src/components/InteractiveExample.js` | Replaced with 1-line re-export |
+| Editor | `website/src/components/NeuroPlayground.js` | Replaced with 6-line wrapper |
+| Tutorials | `website/docs/tutorials/` (6 files) | New + updated tutorials |
+| Playground | `website/src/components/PlaygroundExamples.js` | Example updates |
+| Config | `website/package.json`, `website/sidebars.js` | Monaco dependency, sidebar entries |
+
+### Lessons Learned
+
+1. **Monaco requires CDN access.** The `@monaco-editor/react` package loads Monaco from CDN at runtime. If the CDN is unreachable (offline, corporate firewall), the editor silently fails. The `editorFailed` state + textarea fallback pattern handles this gracefully.
+
+2. **Three highlighting systems needed.** Docusaurus uses Prism for static `.mdx` code blocks, Monaco for interactive editors, and VS Code needs TextMate. Each has a different grammar format — no shared grammar definition is possible, so all three must be maintained in sync.
+
+3. **Vertical layout works better for tutorials.** Side-by-side panels looked clean but caused horizontal scrolling on most tutorial code. Stacking source above output (vertical layout) gives each panel full column width.
+
+4. **`useColorMode` from `@docusaurus/theme-common` is the right hook for dark mode.** Earlier attempts to read CSS variables or use media queries were fragile. The Docusaurus hook provides a reactive `colorMode` value that updates on toggle.
+
+5. **Component consolidation with mode prop is cleaner than inheritance.** A single component with `mode='tutorial'|'playground'` and per-feature boolean overrides eliminated ~140 lines of duplication while keeping all call sites unchanged. Feature flags computed at the top from mode defaults + explicit props.
+
+### Next Steps
+
+- Uncommitted changes in `src/stdlib.rs` and `src/wasm.rs` should be reviewed and committed
+- VS Code extension could be published to the marketplace
+- Consider adding language server protocol (LSP) support for richer editor features
+- Playground examples (`PlaygroundExamples.js`) may need updating to demonstrate new codegen improvements
+
+---
+
 ## Session: 2026-02-11 — Variadic Input Ports (#18)
 
 ### What Was Done

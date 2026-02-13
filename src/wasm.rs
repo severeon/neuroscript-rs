@@ -1,8 +1,16 @@
 use crate::interfaces::{Dim, Endpoint, NeuronBody, Program, Shape};
-use crate::{generate_pytorch, parse, validate};
+use crate::{generate_pytorch, parse, stdlib, validate};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use wasm_bindgen::prelude::*;
+
+/// Load embedded stdlib and merge with user program.
+/// User neurons take precedence over stdlib neurons.
+fn load_and_merge(user_program: Program) -> Result<Program, String> {
+    let stdlib_program = stdlib::load_stdlib_embedded()
+        .map_err(|e| format!("Failed to load stdlib: {}", e))?;
+    Ok(stdlib::merge_programs(stdlib_program, user_program))
+}
 
 /// Analysis result for the WASM API
 #[derive(Serialize, Deserialize)]
@@ -55,7 +63,8 @@ pub struct MatchArmInfo {
 
 #[wasm_bindgen]
 pub fn compile(source: &str, neuron_name: Option<String>) -> Result<String, String> {
-    let mut program = parse(source).map_err(|e| format!("{}", e))?;
+    let user_program = parse(source).map_err(|e| format!("{}", e))?;
+    let mut program = load_and_merge(user_program)?;
 
     validate(&mut program).map_err(|errors| {
         errors
@@ -83,7 +92,8 @@ pub fn compile(source: &str, neuron_name: Option<String>) -> Result<String, Stri
 
 #[wasm_bindgen]
 pub fn validate_source(source: &str) -> Result<(), String> {
-    let mut program = parse(source).map_err(|e| format!("{}", e))?;
+    let user_program = parse(source).map_err(|e| format!("{}", e))?;
+    let mut program = load_and_merge(user_program)?;
     validate(&mut program).map_err(|errors| {
         errors
             .iter()
@@ -188,7 +198,8 @@ fn collect_calls(endpoint: &Endpoint, called: &mut HashSet<String>) {
 /// about neurons, shapes, and match expressions
 #[wasm_bindgen]
 pub fn analyze(source: &str) -> Result<String, String> {
-    let mut program = parse(source).map_err(|e| format!("{}", e))?;
+    let user_program = parse(source).map_err(|e| format!("{}", e))?;
+    let mut program = load_and_merge(user_program)?;
 
     validate(&mut program).map_err(|errors| {
         errors
