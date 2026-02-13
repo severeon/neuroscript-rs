@@ -17,13 +17,11 @@ class MLP(nn.Module):
         self.linear_2 = Linear(dim * 4, dim)
 
     def forward(self, x):
-        x0 = self.linear_0(x)
+        linear_0 = self.linear_0(x)
         # Linear() output shape: [*, out_dim]
-        x1 = self.g_e_l_u_1(x0)
-        # GELU() output shape: [*, out_dim]
-        x2 = self.linear_2(x1)
-        # Linear() output shape: [*, out_dim]
-        return x2
+        g_e_l_u_1 = self.g_e_l_u_1(linear_0)
+        linear_2 = self.linear_2(g_e_l_u_1)
+        return linear_2
 
 class Residual(nn.Module):
     def __init__(self, dim):
@@ -33,11 +31,9 @@ class Residual(nn.Module):
         self.m_l_p_0 = MLP(dim)
 
     def forward(self, x):
-        x0 = x
-        x1 = x
-        x2 = self.m_l_p_0(x0)
+        main = x
+        skip = x
+        m_l_p_0 = self.m_l_p_0(main)
         # MLP() output shape: [*, dim]
-        # Expected shape: [*, dim]
-        x3 = self.add_1((x2, x1))
-        # Add() output shape: [*, dim]
-        return x3
+        add_1 = self.add_1((m_l_p_0, skip))
+        return add_1

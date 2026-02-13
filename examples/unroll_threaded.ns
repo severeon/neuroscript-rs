@@ -1,27 +1,12 @@
 # Unroll: threaded (sequential chaining)
 # Demonstrates compile-time expansion of repeated layers
 
-neuron TransformerBlock(d_model):
-    in: [*, seq, d_model]
-    out: [*, seq, d_model]
-    impl: core,transformer/TransformerBlock
-
-neuron Linear(in_dim, out_dim):
-    in: [*shape, in_dim]
-    out: [*shape, out_dim]
-    impl: core,nn/Linear
-
-neuron LayerNorm(dim):
-    in: [*shape, dim]
-    out: [*shape, dim]
-    impl: core,normalization/LayerNorm
-
 # Stack of 6 transformer blocks via unroll
-neuron TransformerStack(d_model, num_layers=6):
+neuron TransformerStack(d_model, num_heads, d_ff, num_layers=6):
     in: [*, seq, d_model]
     out: [*, seq, d_model]
     graph:
         in ->
             unroll(num_layers): ->
-                TransformerBlock(d_model)
+                TransformerBlock(d_model, num_heads, d_ff)
             out

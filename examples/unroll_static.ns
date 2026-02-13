@@ -1,18 +1,13 @@
 # Unroll: @static weight sharing
 # A single module instance is called N times in sequence
 
-neuron TransformerBlock(d_model):
-    in: [*, seq, d_model]
-    out: [*, seq, d_model]
-    impl: core,transformer/TransformerBlock
-
 # Shared weights: same block called 3 times
-neuron SharedLayers(d_model, num_layers=3):
+neuron SharedLayers(d_model, num_heads, d_ff, num_layers=3):
     in: [*, seq, d_model]
     out: [*, seq, d_model]
     context:
         unroll(num_layers):
-            @static block = TransformerBlock(d_model)
+            @static block = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
             unroll(num_layers): ->

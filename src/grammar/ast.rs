@@ -583,6 +583,9 @@ impl AstBuilder {
     fn build_unroll_expr(&mut self, pair: Pair<Rule>) -> Result<UnrollExpr, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::unroll_expr);
 
+        // Get the column of the unroll keyword to establish the baseline
+        let unroll_col = pair.as_span().start_pos().line_col().1;
+
         let mut inner = pair.into_inner();
         inner.next(); // Skip keyword_unroll
         inner.next(); // Skip lparen
@@ -595,33 +598,58 @@ impl AstBuilder {
         inner.next();
 
         let pipeline_pair = inner.next().unwrap();
-        let pipeline = self.build_unroll_pipeline(pipeline_pair)?;
+        let (pipeline, tail) = self.build_unroll_pipeline(pipeline_pair, unroll_col)?;
         let id = self.next_id();
 
         Ok(UnrollExpr {
             count,
             pipeline,
+            tail,
             id,
         })
     }
 
-    /// Build a pipeline inside an unroll expression
-    fn build_unroll_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
+    /// Build a pipeline inside an unroll expression, splitting by indentation.
+    ///
+    /// The PEG grammar greedily matches all subsequent indented_pipeline_items
+    /// into the unroll pipeline. We use indentation to separate items that belong
+    /// inside the unroll body (more indented) from those that follow it at the
+    /// same level (the tail / continuation after the unroll).
+    fn build_unroll_pipeline(
+        &mut self,
+        pair: Pair<Rule>,
+        unroll_col: usize,
+    ) -> Result<(Vec<Endpoint>, Vec<Endpoint>), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::unroll_pipeline);
 
-        let mut endpoints = vec![];
+        let mut body = vec![];
+        let mut tail = vec![];
+        let mut in_tail = false;
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::endpoint => {
-                    endpoints.push(self.build_endpoint(inner)?);
+                    // Inline pipeline (single line) — all items are body
+                    body.push(self.build_endpoint(inner)?);
                 }
                 Rule::indented_pipeline => {
                     for item in inner.into_inner() {
                         if item.as_rule() == Rule::indented_pipeline_item {
+                            let item_col = item.as_span().start_pos().line_col().1;
+
+                            // Once we see an item at or before the unroll column,
+                            // everything from here on is tail (post-unroll continuation)
+                            if !in_tail && item_col <= unroll_col {
+                                in_tail = true;
+                            }
+
                             for endpoint_pair in item.into_inner() {
                                 if endpoint_pair.as_rule() == Rule::endpoint {
-                                    endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                    if in_tail {
+                                        tail.push(self.build_endpoint(endpoint_pair)?);
+                                    } else {
+                                        body.push(self.build_endpoint(endpoint_pair)?);
+                                    }
                                 }
                             }
                         }
@@ -631,7 +659,7 @@ impl AstBuilder {
             }
         }
 
-        Ok(endpoints)
+        Ok((body, tail))
     }
 
     /// Build a context binding with optional annotation
@@ -694,6 +722,7 @@ impl AstBuilder {
             kwargs,
             scope: crate::interfaces::Scope::Instance { lazy: false },
             frozen,
+            unroll_group: None,
         })
     }
 

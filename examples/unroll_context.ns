@@ -1,18 +1,13 @@
 # Unroll: context-scoped bindings with graph-unroll reference
 # Each unrolled binding gets a unique instance per iteration
 
-neuron TransformerBlock(d_model):
-    in: [*, seq, d_model]
-    out: [*, seq, d_model]
-    impl: core,transformer/TransformerBlock
-
 # Stack with named bindings per layer
-neuron NamedStack(d_model, num_layers=3):
+neuron NamedStack(d_model, num_heads, d_ff, num_layers=3):
     in: [*, seq, d_model]
     out: [*, seq, d_model]
     context:
         unroll(num_layers):
-            block = TransformerBlock(d_model)
+            block = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
             unroll(num_layers): ->

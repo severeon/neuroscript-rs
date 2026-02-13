@@ -19,8 +19,46 @@ pub(super) fn generate_module_instantiations(
 ) -> Result<(), CodegenError> {
     let mut instantiated_count = 0;
 
-    // 1. Process unified context: bindings
+    // Partition bindings into standalone and unroll groups
+    // Collect unroll groups: base_name -> (call_name, args, kwargs, count, members)
+    let mut unroll_groups: HashMap<String, (String, Vec<Value>, Vec<Kwarg>, Value, Vec<(String, usize)>)> =
+        HashMap::new();
+    let mut standalone_bindings: Vec<&Binding> = Vec::new();
+
     for binding in context_bindings {
+        // Track binding_to_call_name for all bindings
+        gen.binding_to_call_name
+            .insert(binding.name.clone(), binding.call_name.clone());
+
+        if let Some(ref group_info) = binding.unroll_group {
+            // Track unroll group info
+            gen.binding_to_unroll_group
+                .insert(binding.name.clone(), group_info.clone());
+
+            let entry = unroll_groups
+                .entry(group_info.base_name.clone())
+                .or_insert_with(|| {
+                    (
+                        binding.call_name.clone(),
+                        binding.args.clone(),
+                        binding.kwargs.clone(),
+                        group_info.count.clone(),
+                        Vec::new(),
+                    )
+                });
+            entry.4.push((binding.name.clone(), group_info.index));
+        } else {
+            standalone_bindings.push(binding);
+        }
+    }
+
+    // Sort each unroll group's members by index
+    for (_base, group) in unroll_groups.iter_mut() {
+        group.4.sort_by_key(|(_, idx)| *idx);
+    }
+
+    // 1. Process standalone bindings (non-unrolled)
+    for binding in &standalone_bindings {
         let module_name = binding.name.clone();
         let name = &binding.call_name;
         let args = &binding.args;
@@ -38,10 +76,6 @@ pub(super) fn generate_module_instantiations(
 
         match &binding.scope {
             Scope::Static => {
-                // Static bindings are shared across all instances
-                // We'll use a class-level variable for this
-                // (Note: generator needs to Know class name, but currently it's not passed here)
-                // For now, let's use a simpler approach: self.__class__.name
                 let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
 
                 writeln!(
@@ -64,7 +98,6 @@ pub(super) fn generate_module_instantiations(
                 instantiated_count += 1;
             }
             Scope::Instance { lazy: true } => {
-                // Lazy instance binding
                 writeln!(
                     output,
                     "        self._{} = None  # Lazy instantiation (@lazy)",
@@ -81,7 +114,6 @@ pub(super) fn generate_module_instantiations(
                 instantiated_count += 1;
             }
             Scope::Instance { lazy: false } => {
-                // Eager instance binding
                 let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
 
                 writeln!(
@@ -96,10 +128,63 @@ pub(super) fn generate_module_instantiations(
                 instantiated_count += 1;
             }
             Scope::Global => {
-                // This shouldn't happen due to validation, but handle it anyway
                 gen.var_names.insert(module_name.clone(), name.clone());
             }
         }
+    }
+
+    // 2. Process unroll groups as nn.ModuleList
+    // Sort groups by their first member's position in the original binding list
+    // to maintain declaration order
+    let mut sorted_groups: Vec<_> = unroll_groups.into_iter().collect();
+    sorted_groups.sort_by_key(|(_, group)| group.4.first().map(|(_, idx)| *idx).unwrap_or(0));
+
+    for (base_name, (call_name, args, kwargs, count, members)) in &sorted_groups {
+        let is_primitive = if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
+            neuron.is_primitive()
+        } else {
+            true
+        };
+
+        if is_primitive {
+            gen.used_primitives.insert(call_name.clone());
+        }
+
+        let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
+        let list_name = format!("{}s", base_name);
+
+        // Determine the range expression
+        let range_expr = match count {
+            Value::Name(param_name) => param_name.clone(),
+            Value::Int(n) => n.to_string(),
+            _ => members.len().to_string(),
+        };
+
+        writeln!(
+            output,
+            "        self.{} = nn.ModuleList([",
+            list_name
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "            {}({}{}) for _ in range({})",
+            call_name, args_str, kwargs_str, range_expr
+        )
+        .unwrap();
+        writeln!(output, "        ])").unwrap();
+
+        // Register the ModuleList var name
+        gen.var_names
+            .insert(list_name.clone(), format!("self.{}", list_name));
+
+        // Also register each individual member so forward() can look them up
+        for (member_name, _) in members {
+            gen.var_names
+                .insert(member_name.clone(), format!("self.{}", member_name));
+        }
+
+        instantiated_count += 1;
     }
 
     // 3. Collect and instantiate anonymous calls from connections

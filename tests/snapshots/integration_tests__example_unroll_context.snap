@@ -4,18 +4,10 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron NamedStack(d_model, num_layers = 3):
+neuron NamedStack(d_model, num_heads, d_ff, num_layers = 3):
   inputs:
     default: [*, seq, d_model]
   outputs:
     default: [*, seq, d_model]
   graph:
     in -> unroll(num_layers): -> block -> out
-
-neuron TransformerBlock(d_model):
-  inputs:
-    default: [*, seq, d_model]
-  outputs:
-    default: [*, seq, d_model]
-  impl:
-    Source: core,transformer/TransformerBlock

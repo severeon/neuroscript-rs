@@ -169,6 +169,9 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             for ep in &u.pipeline {
                 collect_calls_from_endpoint_impl(ep, calls);
             }
+            for ep in &u.tail {
+                collect_calls_from_endpoint_impl(ep, calls);
+            }
         }
     }
 }

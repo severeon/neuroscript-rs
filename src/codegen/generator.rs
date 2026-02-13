@@ -34,6 +34,9 @@ impl<'a> CodeGenerator<'a> {
             binding_context: std::collections::HashMap::new(),
             lazy_bindings: std::collections::HashMap::new(),
             inference_ctx,
+            binding_to_call_name: std::collections::HashMap::new(),
+            binding_to_unroll_group: std::collections::HashMap::new(),
+            last_emitted_shape: None,
         }
     }
 
@@ -255,6 +258,9 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
         Endpoint::Unroll(u) => {
             // Recurse into unroll pipeline (should be expanded before codegen)
             for ep in &u.pipeline {
+                collect_calls_from_endpoint(ep, result);
+            }
+            for ep in &u.tail {
                 collect_calls_from_endpoint(ep, result);
             }
         }

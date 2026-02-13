@@ -66,7 +66,9 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                         for binding in &unroll.bindings {
                             if matches!(binding.scope, Scope::Static) {
                                 // @static: single shared instance, no suffix
-                                new_bindings.push(binding.clone());
+                                let mut b = binding.clone();
+                                b.unroll_group = None; // shared, not listed in group
+                                new_bindings.push(b);
                                 unroll_binding_map.push((
                                     binding.name.clone(),
                                     vec![binding.name.clone()],
@@ -83,6 +85,11 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                                         kwargs: binding.kwargs.clone(),
                                         scope: binding.scope.clone(),
                                         frozen: binding.frozen,
+                                        unroll_group: Some(UnrollGroupInfo {
+                                            base_name: binding.name.clone(),
+                                            count: unroll.count.clone(),
+                                            index: i,
+                                        }),
                                     });
                                 }
                                 unroll_binding_map
@@ -223,6 +230,9 @@ fn max_endpoint_id_inner(endpoint: &Endpoint, depth: usize) -> usize {
             for ep in &u.pipeline {
                 max = max.max(max_endpoint_id_inner(ep, depth + 1));
             }
+            for ep in &u.tail {
+                max = max.max(max_endpoint_id_inner(ep, depth + 1));
+            }
             max
         }
         _ => 0,
@@ -269,8 +279,10 @@ fn expand_connection_unroll(
         return None;
     }
 
-    // Check for nested unrolls in the pipeline
-    if unroll.pipeline.iter().any(|ep| has_unroll_endpoint(ep)) {
+    // Check for nested unrolls in the pipeline and tail
+    let has_nested = unroll.pipeline.iter().chain(unroll.tail.iter())
+        .any(|ep| has_unroll_endpoint(ep));
+    if has_nested {
         errors.push(ValidationError::InvalidUnrollCount {
             neuron: neuron_name.to_string(),
             reason: "Nested unroll constructs are not supported".to_string(),
@@ -280,17 +292,18 @@ fn expand_connection_unroll(
 
     let mut result = Vec::new();
 
-    // Separate the pipeline into "body" (repeated each iteration) and
-    // "tail" (only emitted on the final iteration). A trailing Ref("out")
-    // or Ref("in") in the pipeline is the tail — it's a terminus, not
-    // something that should be chained through intermediate iterations.
-    let (body_pipeline, tail_endpoint) = split_pipeline_tail(&unroll.pipeline);
+    // Separate the body pipeline into repeated items and a terminal tail.
+    // A trailing Ref("out") or Ref("in") in the body is a terminus that
+    // should only appear on the final iteration (not chained through intermediates).
+    let (body_pipeline, body_tail_endpoint) = split_pipeline_tail(&unroll.pipeline);
 
-    if body_pipeline.is_empty() && tail_endpoint.is_none() {
+    if body_pipeline.is_empty() && body_tail_endpoint.is_none() && unroll.tail.is_empty() {
         return Some(vec![]);
     }
 
     let mut prev_source = conn.source.clone();
+    // Track the output of the last iteration for chaining the post-unroll tail
+    let mut last_output = conn.source.clone();
 
     for i in 0..count {
         let expanded_body: Vec<Endpoint> = body_pipeline
@@ -318,14 +331,38 @@ fn expand_connection_unroll(
                 destination: Endpoint::Ref(PortRef::new(&temp_name)),
             });
             prev_source = Endpoint::Ref(PortRef::new(&temp_name));
-        } else if let Some(tail) = &tail_endpoint {
-            // Final iteration: connect to the tail endpoint (e.g., `out`)
+        } else if let Some(tail) = &body_tail_endpoint {
+            // Final iteration: connect to the body's terminal endpoint (e.g., `out`)
             let rewritten_tail =
                 rewrite_endpoint_for_iteration(tail, i, unroll_binding_map, next_id);
             result.push(Connection {
                 source: current_source,
-                destination: rewritten_tail,
+                destination: rewritten_tail.clone(),
             });
+            last_output = rewritten_tail;
+        } else {
+            // No body tail — the last body item is the output
+            last_output = current_source;
+        }
+    }
+
+    // Chain the post-unroll tail (items that follow the unroll at the same indentation).
+    // These are emitted once, after the last iteration's output.
+    if !unroll.tail.is_empty() {
+        let mut tail_source = last_output;
+
+        for ep in &unroll.tail {
+            let rewritten = rewrite_endpoint_for_iteration(
+                ep,
+                count.saturating_sub(1),
+                unroll_binding_map,
+                next_id,
+            );
+            result.push(Connection {
+                source: tail_source,
+                destination: rewritten.clone(),
+            });
+            tail_source = rewritten;
         }
     }
 
@@ -460,6 +497,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
+                            unroll_group: None,
                         }],
                     }],
                     connections: vec![],
@@ -484,6 +522,11 @@ mod tests {
             assert_eq!(context_bindings[0].name, "block_0");
             assert_eq!(context_bindings[1].name, "block_1");
             assert_eq!(context_bindings[2].name, "block_2");
+            // Verify unroll_group metadata is set
+            assert!(context_bindings[0].unroll_group.is_some());
+            assert_eq!(context_bindings[0].unroll_group.as_ref().unwrap().base_name, "block");
+            assert_eq!(context_bindings[0].unroll_group.as_ref().unwrap().index, 0);
+            assert_eq!(context_bindings[2].unroll_group.as_ref().unwrap().index, 2);
         } else {
             panic!("Expected Graph body, got Primitive");
         }
@@ -510,6 +553,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Static,
                             frozen: false,
+                            unroll_group: None,
                         }],
                     }],
                     connections: vec![],
@@ -561,6 +605,8 @@ mod tests {
                                     id: 0,
                                     frozen: false,
                                 },
+                            ],
+                            tail: vec![
                                 Endpoint::Ref(PortRef::new("out")),
                             ],
                             id: 100,
@@ -653,6 +699,8 @@ mod tests {
                                     id: 0,
                                     frozen: false,
                                 },
+                            ],
+                            tail: vec![
                                 Endpoint::Ref(PortRef::new("out")),
                             ],
                             id: 200,
@@ -727,8 +775,11 @@ mod tests {
                                         id: 0,
                                         frozen: false,
                                     }],
+                                    tail: vec![],
                                     id: 50,
                                 }),
+                            ],
+                            tail: vec![
                                 Endpoint::Ref(PortRef::new("out")),
                             ],
                             id: 100,
@@ -768,6 +819,7 @@ mod tests {
                                 kwargs: vec![],
                                 scope: Scope::Instance { lazy: false },
                                 frozen: false,
+                                unroll_group: None,
                             }],
                         },
                         ContextUnroll {
@@ -779,6 +831,7 @@ mod tests {
                                 kwargs: vec![],
                                 scope: Scope::Instance { lazy: false },
                                 frozen: false,
+                                unroll_group: None,
                             }],
                         },
                     ],
@@ -833,6 +886,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
+                            unroll_group: None,
                         },
                         // layer2 comes after the unroll in the source, but the AST
                         // builder moves overflow bindings back to context_bindings
@@ -846,6 +900,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
+                            unroll_group: None,
                         },
                     ],
                     context_unrolls: vec![ContextUnroll {
@@ -857,6 +912,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
+                            unroll_group: None,
                         }],
                     }],
                     connections: vec![],
@@ -912,6 +968,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: true },
                             frozen: false,
+                            unroll_group: None,
                         }],
                     }],
                     connections: vec![],
@@ -980,6 +1037,7 @@ mod tests {
                                         id: 0,
                                         frozen: false,
                                     }],
+                                    tail: vec![],
                                     id: 50,
                                 })],
                             }],
@@ -1038,6 +1096,7 @@ mod tests {
                             kwargs: vec![],
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
+                            unroll_group: None,
                         }],
                     }],
                     connections: vec![],

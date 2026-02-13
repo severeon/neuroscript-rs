@@ -669,20 +669,23 @@ fn test_codegen_if_else() {
 fn test_codegen_unroll_threaded() {
     let source = include_str!("../../examples/unroll_threaded.ns");
     let mut program = parse(source).expect("Parse should succeed");
+    if let Ok(stdlib) = crate::stdlib::load_stdlib() {
+        program.neurons.extend(stdlib.neurons);
+    }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "TransformerStack").expect("Codegen should succeed");
 
     // Should have 6 separate TransformerBlock instances in __init__
     for i in 0..6 {
         assert!(
-            code.contains(&format!("self.transformer_block_{} = TransformerBlock(d_model)", i)),
+            code.contains(&format!("self.transformer_block_{} = TransformerBlock(d_model, num_heads, d_ff)", i)),
             "Should instantiate transformer_block_{}", i
         );
     }
 
-    // Should have 6 sequential calls in forward()
+    // Should have 6 sequential calls in forward() with semantic variable names
     assert!(code.contains("self.transformer_block_0(x)"), "First call should use input x");
-    assert!(code.contains("self.transformer_block_5(x4)"), "Last call should chain from previous");
+    assert!(code.contains("self.transformer_block_5(transformer_block_4)"), "Last call should chain from previous");
 
     // Should NOT have 7th instance
     assert!(!code.contains("transformer_block_6"), "Should not have 7th instance");
@@ -692,33 +695,46 @@ fn test_codegen_unroll_threaded() {
 fn test_codegen_unroll_context() {
     let source = include_str!("../../examples/unroll_context.ns");
     let mut program = parse(source).expect("Parse should succeed");
+    if let Ok(stdlib) = crate::stdlib::load_stdlib() {
+        program.neurons.extend(stdlib.neurons);
+    }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "NamedStack").expect("Codegen should succeed");
 
-    // Should have 3 named block instances
-    assert!(code.contains("self.block_0 = TransformerBlock(d_model)"));
-    assert!(code.contains("self.block_1 = TransformerBlock(d_model)"));
-    assert!(code.contains("self.block_2 = TransformerBlock(d_model)"));
+    // Should use nn.ModuleList for unrolled blocks
+    assert!(
+        code.contains("self.blocks = nn.ModuleList(["),
+        "Should use nn.ModuleList for blocks"
+    );
+    assert!(
+        code.contains("TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)"),
+        "Should use range(num_layers) in comprehension"
+    );
 
-    // Should NOT have block_3
-    assert!(!code.contains("block_3"), "Should only have 3 blocks");
-
-    // Forward should chain them
-    assert!(code.contains("self.block_0("));
-    assert!(code.contains("self.block_1("));
-    assert!(code.contains("self.block_2("));
+    // Forward should use a for loop
+    assert!(
+        code.contains("for block in self.blocks:"),
+        "Should iterate over blocks"
+    );
+    assert!(
+        code.contains("x = block(x)"),
+        "Should apply each block in-place"
+    );
 }
 
 #[test]
 fn test_codegen_unroll_static() {
     let source = include_str!("../../examples/unroll_static.ns");
     let mut program = parse(source).expect("Parse should succeed");
+    if let Ok(stdlib) = crate::stdlib::load_stdlib() {
+        program.neurons.extend(stdlib.neurons);
+    }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "SharedLayers").expect("Codegen should succeed");
 
     // Should have exactly ONE class-level module
     assert!(
-        code.contains("self.__class__.block = TransformerBlock(d_model)"),
+        code.contains("self.__class__.block = TransformerBlock(d_model, num_heads, d_ff)"),
         "Should instantiate shared block at class level"
     );
 
@@ -735,20 +751,27 @@ fn test_codegen_unroll_static() {
 fn test_codegen_unroll_gpt2() {
     let source = include_str!("../../examples/unroll_gpt2.ns");
     let mut program = parse(source).expect("Parse should succeed");
+
+    // Load stdlib neurons since the example file references TransformerBlock etc.
+    if let Ok(stdlib) = crate::stdlib::load_stdlib() {
+        program.neurons.extend(stdlib.neurons);
+    }
+
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "GPT2Small").expect("Codegen should succeed");
 
     // Should have class definition
     assert!(code.contains("class GPT2Small(nn.Module)"));
 
-    // Should have 12 transformer blocks
-    for i in 0..12 {
-        assert!(
-            code.contains(&format!("self.block_{}", i)),
-            "Should have block_{}", i
-        );
-    }
-    assert!(!code.contains("block_12"), "Should only have 12 blocks");
+    // Should use nn.ModuleList for unrolled blocks
+    assert!(
+        code.contains("self.blocks = nn.ModuleList(["),
+        "Should use nn.ModuleList for blocks"
+    );
+    assert!(
+        code.contains("TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)"),
+        "Should use range(num_layers) in comprehension"
+    );
 
     // Non-unrolled bindings should each appear exactly once in __init__
     assert_eq!(
@@ -764,8 +787,10 @@ fn test_codegen_unroll_gpt2() {
         "head should appear once"
     );
 
-    // Forward should use embed, blocks, ln_f, head in order
+    // Forward should use semantic variable names and for loop
     assert!(code.contains("self.embed(x)"), "Should start with embed");
-    assert!(code.contains("self.ln_f("), "Should include ln_f");
-    assert!(code.contains("self.head("), "Should include head");
+    assert!(code.contains("for block in self.blocks:"), "Should iterate over blocks");
+    assert!(code.contains("embed = block(embed)"), "Should apply block to embed");
+    assert!(code.contains("self.ln_f(embed)"), "Should include ln_f after blocks");
+    assert!(code.contains("self.head(ln_f)"), "Should include head after ln_f");
 }

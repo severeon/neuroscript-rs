@@ -247,6 +247,15 @@ impl std::fmt::Display for UnrollExpr {
             }
             write!(f, "{}", e)?;
         }
+        if !self.tail.is_empty() {
+            write!(f, " -> ")?;
+            for (i, e) in self.tail.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+        }
         Ok(())
     }
 }

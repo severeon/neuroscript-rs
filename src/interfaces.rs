@@ -122,6 +122,17 @@ pub struct CodeGenerator<'a> {
     /// Shape inference context (resolved dimensions and node output shapes)
     /// Used for emitting shape assertions and documentation
     pub inference_ctx: InferenceContext,
+
+    /// Mapping from binding name to the neuron it calls (e.g., "block_0" -> "TransformerBlock")
+    /// Used to look up output shapes for bound module calls
+    pub binding_to_call_name: HashMap<String, String>,
+
+    /// Mapping from binding name to its unroll group info
+    /// Used to generate nn.ModuleList and for loops
+    pub binding_to_unroll_group: HashMap<String, UnrollGroupInfo>,
+
+    /// Last shape comment emitted, used to suppress duplicates
+    pub last_emitted_shape: Option<String>,
 }
 
 /// An input or output port of a neuron
@@ -228,8 +239,10 @@ pub struct IfExpr {
 pub struct UnrollExpr {
     /// Number of iterations (must resolve to positive integer)
     pub count: Value,
-    /// Pipeline endpoints to repeat
+    /// Pipeline endpoints to repeat each iteration (the unroll body)
     pub pipeline: Vec<Endpoint>,
+    /// Pipeline endpoints to chain after the last iteration (post-unroll continuation)
+    pub tail: Vec<Endpoint>,
     /// Unique identifier for this unroll
     pub id: usize,
 }
@@ -261,6 +274,17 @@ pub(crate) type CallArgs = (Vec<Value>, Vec<Kwarg>);
 pub(crate) type CallExpr = (String, Vec<Value>, Vec<Kwarg>);
 type LazyBinding = (String, Vec<Value>, Vec<Kwarg>);
 
+/// Metadata for bindings that were created by unroll expansion
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnrollGroupInfo {
+    /// Base name before suffixing (e.g., "block")
+    pub base_name: String,
+    /// The unroll count expression (e.g., Value::Name("num_layers") or Value::Int(12))
+    pub count: Value,
+    /// Index within the unroll group (0, 1, 2, ...)
+    pub index: usize,
+}
+
 /// A binding in a let: or set: block, or context: block
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
@@ -270,6 +294,8 @@ pub struct Binding {
     pub kwargs: Vec<Kwarg>,
     pub scope: Scope,
     pub frozen: bool,
+    /// If this binding was created by unroll expansion, metadata about its group
+    pub unroll_group: Option<UnrollGroupInfo>,
 }
 
 /// A module-level global definition: @global name = Value

@@ -6,27 +6,99 @@
 
 use super::utils::*;
 use crate::interfaces::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
-/// Emit a shape comment and optional assertion for a variable
+/// Generate a unique, sanitized variable name from a hint.
+/// Tracks used names to avoid collisions.
+fn make_var_name(used: &mut HashSet<String>, hint: &str) -> String {
+    // Sanitize: replace non-alphanumeric with underscore, ensure starts with letter
+    let sanitized: String = hint
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    let sanitized = if sanitized.is_empty()
+        || sanitized.starts_with(|c: char| c.is_ascii_digit())
+    {
+        format!("v_{}", sanitized)
+    } else {
+        sanitized
+    };
+
+    if !used.contains(&sanitized) {
+        used.insert(sanitized.clone());
+        return sanitized;
+    }
+
+    // Append counter to deduplicate
+    let mut counter = 2;
+    loop {
+        let candidate = format!("{}_{}", sanitized, counter);
+        if !used.contains(&candidate) {
+            used.insert(candidate.clone());
+            return candidate;
+        }
+        counter += 1;
+    }
+}
+
+/// Emit a shape comment for a bound module call, using the called neuron's output shape.
+/// Only emits if the shape is different from the last emitted shape.
+fn emit_bound_module_shape_comment(
+    gen: &mut CodeGenerator,
+    output: &mut String,
+    binding_name: &str,
+    indent: &str,
+) {
+    // Look up the neuron being called via binding_to_call_name
+    if let Some(call_name) = gen.binding_to_call_name.get(binding_name).cloned() {
+        if let Some(neuron_def) = gen.program.neurons.get(&call_name) {
+            if !neuron_def.outputs.is_empty() {
+                let shape = &neuron_def.outputs[0].shape;
+                let shape_comment = gen.format_shape_for_comment(shape);
+
+                // Only emit if shape changed
+                if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
+                    writeln!(
+                        output,
+                        "{}# {}() output shape: {}",
+                        indent, call_name, shape_comment
+                    )
+                    .unwrap();
+                    gen.last_emitted_shape = Some(shape_comment);
+                }
+            }
+        }
+    }
+}
+
+/// Emit a shape comment and optional assertion for a variable at a Ref destination.
+/// Suppresses comments for _unroll temp refs and when shape hasn't changed.
 fn emit_shape_comment_and_assertion(
-    gen: &CodeGenerator,
+    gen: &mut CodeGenerator,
     output: &mut String,
     var_name: &str,
     node_name: &str,
     indent: &str,
 ) {
+    // Skip shape comments for unroll temp refs (they carry wrong shapes)
+    if node_name.starts_with("_unroll") {
+        return;
+    }
+
     // Try to get the inferred shape for this node
     if let Some(shapes) = gen.inference_ctx.node_outputs.get(node_name) {
         if !shapes.is_empty() {
-            let shape = &shapes[0]; // Use first shape for now
-
-            // Emit comment showing expected shape
+            let shape = &shapes[0];
             let shape_comment = gen.format_shape_for_comment(shape);
-            writeln!(output, "{}# Expected shape: {}", indent, shape_comment).unwrap();
 
-            // Emit assertion if shape is concrete enough
+            // Only emit comment if shape changed
+            if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
+                writeln!(output, "{}# Expected shape: {}", indent, shape_comment).unwrap();
+                gen.last_emitted_shape = Some(shape_comment.clone());
+            }
+
+            // Assertions still always emitted (runtime checking, not documentation)
             if gen.should_assert_shape(shape) {
                 if let Some(expected_shape) = gen.format_shape_for_assertion(shape) {
                     writeln!(
@@ -66,7 +138,17 @@ pub(super) fn generate_forward_body(
         }
     }
 
-    let mut temp_var_counter = 0;
+    // Track used variable names for semantic naming
+    let mut used_var_names: HashSet<String> = HashSet::new();
+    // Reserve input variable names
+    if inputs.len() == 1 && inputs[0] == "default" {
+        used_var_names.insert("x".to_string());
+    } else {
+        for input in inputs {
+            used_var_names.insert((*input).to_string());
+        }
+    }
+
     let indent = "        ";
 
     // Build a map from Call endpoints to their result variable names
@@ -83,8 +165,14 @@ pub(super) fn generate_forward_body(
     // for subsequent calls (e.g., @static bindings called multiple times).
     let mut binding_call_results: HashMap<String, String> = HashMap::new();
 
+    // Track which unroll groups have already been emitted as for loops
+    let mut emitted_unroll_groups: HashSet<String> = HashSet::new();
+
     // Track the last result variable (for implicit output)
     let mut last_result = None;
+
+    // Reset last_emitted_shape for this forward method
+    gen.last_emitted_shape = None;
 
     // Process each connection
     for conn in connections {
@@ -174,11 +262,12 @@ pub(super) fn generate_forward_body(
             &conn.destination,
             source_var,
             indent,
-            &mut temp_var_counter,
+            &mut used_var_names,
             &mut call_to_result,
             &mut match_to_result,
             &mut if_to_result,
             &mut binding_call_results,
+            &mut emitted_unroll_groups,
             source_output_count,
         )?;
 
@@ -199,13 +288,13 @@ pub(super) fn generate_forward_body(
     }
 
     // Return the output variable
-    // Priority: explicit "out" port > last result > last temp variable
+    // Priority: explicit "out" port > last result > fallback
     let output_var = gen
         .var_names
         .get("out")
         .cloned()
         .or(last_result)
-        .unwrap_or_else(|| format!("x{}", temp_var_counter - 1));
+        .unwrap_or_else(|| "x".to_string());
     writeln!(output, "        return {}", output_var).unwrap();
 
     Ok(())
@@ -222,11 +311,12 @@ fn process_destination(
     endpoint: &Endpoint,
     source_var: String,
     indent: &str,
-    temp_var_counter: &mut usize,
+    used_var_names: &mut HashSet<String>,
     call_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
     binding_call_results: &mut HashMap<String, String>,
+    emitted_unroll_groups: &mut HashSet<String>,
     source_output_count: usize,
 ) -> Result<String, CodegenError> {
     match endpoint {
@@ -235,6 +325,45 @@ fn process_destination(
             // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
             if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
                 if module_ref.starts_with("self.") {
+                    // Check if this is part of an unroll group
+                    if let Some(group_info) = gen.binding_to_unroll_group.get(&port_ref.node).cloned() {
+                        let base_name = &group_info.base_name;
+                        let list_name = format!("{}s", base_name);
+
+                        if !emitted_unroll_groups.contains(base_name) {
+                            // First encounter of this group: emit a for loop
+                            emitted_unroll_groups.insert(base_name.clone());
+
+                            // Use the source var as the loop variable (mutated in-place)
+                            writeln!(
+                                output,
+                                "{}for {} in self.{}:",
+                                indent, base_name, list_name
+                            )
+                            .unwrap();
+                            writeln!(
+                                output,
+                                "{}    {} = {}({})",
+                                indent, source_var, base_name, source_var
+                            )
+                            .unwrap();
+
+                            // Emit shape comment once after the loop
+                            emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
+
+                            // The result is the source var (mutated in-place through the loop)
+                            binding_call_results
+                                .insert(port_ref.node.clone(), source_var.clone());
+                            return Ok(source_var);
+                        } else {
+                            // Subsequent member of already-emitted group: no-op
+                            // Just update binding_call_results to point to source_var
+                            binding_call_results
+                                .insert(port_ref.node.clone(), source_var.clone());
+                            return Ok(source_var);
+                        }
+                    }
+
                     // Check if this is a lazy binding (starts with "self._")
                     if module_ref.starts_with("self._")
                         && gen.lazy_bindings.contains_key(&port_ref.node)
@@ -273,15 +402,17 @@ fn process_destination(
                         .unwrap();
                     }
 
-                    // This is a bound module - generate a call
-                    let result_var = format!("x{}", *temp_var_counter);
-                    *temp_var_counter += 1;
+                    // This is a bound module - generate a call with semantic name
+                    let result_var = make_var_name(used_var_names, &port_ref.node);
                     writeln!(
                         output,
                         "{}{} = {}({})",
                         indent, result_var, module_ref, source_var
                     )
                     .unwrap();
+
+                    // Emit shape comment using the called neuron's output shape
+                    emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
 
                     // Store the call result separately so the module reference is preserved
                     // in var_names for subsequent calls (e.g., @static called N times).
@@ -303,12 +434,11 @@ fn process_destination(
             Ok(source_var)
         }
         Endpoint::Tuple(refs) => {
-            // Tuple unpacking
+            // Tuple unpacking with semantic names
             let var_names: Vec<String> = refs
                 .iter()
                 .map(|r| {
-                    let v = format!("x{}", *temp_var_counter);
-                    *temp_var_counter += 1;
+                    let v = make_var_name(used_var_names, &r.node);
                     gen.var_names.insert(r.node.clone(), v.clone());
                     v
                 })
@@ -345,8 +475,8 @@ fn process_destination(
                 CodegenError::InvalidConnection(format!("Module for call to {} not found", name))
             })?;
 
-            let result_var = format!("x{}", *temp_var_counter);
-            *temp_var_counter += 1;
+            // Semantic name from module attribute name
+            let result_var = make_var_name(used_var_names, &module_name);
 
             // Check if this call has captured dimensions (needs lazy instantiation)
             let has_captured = args
@@ -420,12 +550,17 @@ fn process_destination(
                 if !shapes.is_empty() {
                     let shape = &shapes[0];
                     let shape_comment = gen.format_shape_for_comment(shape);
-                    writeln!(
-                        output,
-                        "{}# {}() output shape: {}",
-                        indent, name, shape_comment
-                    )
-                    .unwrap();
+
+                    // Only emit if shape changed
+                    if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
+                        writeln!(
+                            output,
+                            "{}# {}() output shape: {}",
+                            indent, name, shape_comment
+                        )
+                        .unwrap();
+                        gen.last_emitted_shape = Some(shape_comment.clone());
+                    }
 
                     if gen.should_assert_shape(shape) {
                         if let Some(expected_shape) = gen.format_shape_for_assertion(shape) {
@@ -442,8 +577,7 @@ fn process_destination(
             Ok(result_var)
         }
         Endpoint::Match(match_expr) => {
-            let result_var = format!("x{}", *temp_var_counter);
-            *temp_var_counter += 1;
+            let result_var = make_var_name(used_var_names, "match_out");
 
             // Initialize result_var to None for safety (though not strictly needed if all paths return)
             writeln!(output, "{}{} = None", indent, result_var).unwrap();
@@ -516,15 +650,12 @@ fn process_destination(
                         ep,
                         current_var,
                         &pipeline_indent,
-                        temp_var_counter,
+                        used_var_names,
                         call_to_result,
                         match_to_result,
                         if_to_result,
                         binding_call_results,
-                        // Pipeline steps are chained sequentially: each Call/Ref
-                        // endpoint produces a single tensor that feeds the next step.
-                        // Multi-output (tuple) sources only occur at connection level,
-                        // not within match/if pipeline arms.
+                        emitted_unroll_groups,
                         1,
                     )?;
 
@@ -560,8 +691,7 @@ fn process_destination(
             Ok(result_var)
         }
         Endpoint::If(if_expr) => {
-            let result_var = format!("x{}", *temp_var_counter);
-            *temp_var_counter += 1;
+            let result_var = make_var_name(used_var_names, "cond_out");
 
             // Initialize result variable to None
             writeln!(output, "{}{} = None", indent, result_var).unwrap();
@@ -586,15 +716,12 @@ fn process_destination(
                         ep,
                         current_var,
                         &branch_indent,
-                        temp_var_counter,
+                        used_var_names,
                         call_to_result,
                         match_to_result,
                         if_to_result,
                         binding_call_results,
-                        // Pipeline steps are chained sequentially: each Call/Ref
-                        // endpoint produces a single tensor that feeds the next step.
-                        // Multi-output (tuple) sources only occur at connection level,
-                        // not within match/if pipeline arms.
+                        emitted_unroll_groups,
                         1,
                     )?;
                     // Cache call/match/if results inside branch
@@ -628,15 +755,12 @@ fn process_destination(
                         ep,
                         current_var,
                         &branch_indent,
-                        temp_var_counter,
+                        used_var_names,
                         call_to_result,
                         match_to_result,
                         if_to_result,
                         binding_call_results,
-                        // Pipeline steps are chained sequentially: each Call/Ref
-                        // endpoint produces a single tensor that feeds the next step.
-                        // Multi-output (tuple) sources only occur at connection level,
-                        // not within match/if pipeline arms.
+                        emitted_unroll_groups,
                         1,
                     )?;
                     if let Endpoint::Call { .. } = ep {

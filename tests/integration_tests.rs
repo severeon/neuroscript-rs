@@ -323,6 +323,12 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
             let pipeline_str: Vec<String> =
                 unroll_expr.pipeline.iter().map(format_endpoint).collect();
             result.push_str(&pipeline_str.join(" -> "));
+            if !unroll_expr.tail.is_empty() {
+                result.push_str(" -> ");
+                let tail_str: Vec<String> =
+                    unroll_expr.tail.iter().map(format_endpoint).collect();
+                result.push_str(&tail_str.join(" -> "));
+            }
             result
         }
     }

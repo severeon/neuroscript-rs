@@ -4,15 +4,7 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron Embedding(vocab_size, d_model):
-  inputs:
-    default: [*shape]
-  outputs:
-    default: [*shape, d_model]
-  impl:
-    Source: core,nn/Embedding
-
-neuron GPT2Small(vocab_size = 50257, d_model = 768, num_layers = 12):
+neuron GPT2Small(vocab_size = 50257, d_model = 768, num_heads = 12, d_ff = 3072, num_layers = 12):
   inputs:
     default: [*, seq]
   outputs:
@@ -23,32 +15,4 @@ neuron GPT2Small(vocab_size = 50257, d_model = 768, num_layers = 12):
     head = Linear(...)
   graph:
     in -> embed
-    embed -> e
-    e -> unroll(num_layers): -> block -> mid
-    mid -> ln_f
-    ln_f -> head
-    head -> out
-
-neuron LayerNorm(dim):
-  inputs:
-    default: [*shape, dim]
-  outputs:
-    default: [*shape, dim]
-  impl:
-    Source: core,normalization/LayerNorm
-
-neuron Linear(in_dim, out_dim):
-  inputs:
-    default: [*shape, in_dim]
-  outputs:
-    default: [*shape, out_dim]
-  impl:
-    Source: core,nn/Linear
-
-neuron TransformerBlock(d_model):
-  inputs:
-    default: [*, seq, d_model]
-  outputs:
-    default: [*, seq, d_model]
-  impl:
-    Source: core,transformer/TransformerBlock
+    embed -> unroll(num_layers): -> block -> ln_f -> head -> out

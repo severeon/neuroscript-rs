@@ -4,34 +4,10 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron LayerNorm(dim):
-  inputs:
-    default: [*shape, dim]
-  outputs:
-    default: [*shape, dim]
-  impl:
-    Source: core,normalization/LayerNorm
-
-neuron Linear(in_dim, out_dim):
-  inputs:
-    default: [*shape, in_dim]
-  outputs:
-    default: [*shape, out_dim]
-  impl:
-    Source: core,nn/Linear
-
-neuron TransformerBlock(d_model):
-  inputs:
-    default: [*, seq, d_model]
-  outputs:
-    default: [*, seq, d_model]
-  impl:
-    Source: core,transformer/TransformerBlock
-
-neuron TransformerStack(d_model, num_layers = 6):
+neuron TransformerStack(d_model, num_heads, d_ff, num_layers = 6):
   inputs:
     default: [*, seq, d_model]
   outputs:
     default: [*, seq, d_model]
   graph:
-    in -> unroll(num_layers): -> TransformerBlock#0(d_model) -> out
+    in -> unroll(num_layers): -> TransformerBlock#0(d_model, num_heads, d_ff) -> out
