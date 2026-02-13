@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import Editor from '@monaco-editor/react';
 import { useColorMode } from '@docusaurus/theme-common';
 import init, { compile, analyze, list_neurons } from '@site/static/wasm/neuroscript.js';
 import { STDLIB_BUNDLE } from './StdlibBundle';
-import { registerNeuroScript } from '../neuroscript-monaco-setup';
+
+// Lazy-load Monaco — if CDN fails, editors fall back to plain textareas
+let Editor;
+let registerNeuroScript;
+try {
+  Editor = require('@monaco-editor/react').default;
+  registerNeuroScript = require('../neuroscript-monaco-setup').registerNeuroScript;
+} catch (_) {
+  // Will be caught at render time via editorFailed state
+}
 
 const MONO_FONT = '"Fira Code", "Cascadia Code", "SF Mono", Monaco, "Inconsolata", "Roboto Mono", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace';
 
@@ -75,6 +83,7 @@ export default function NeuroEditor({
   const [copied, setCopied]                   = useState(false);
   const [compiling, setCompiling]             = useState(false);
   const [isMobile, setIsMobile]               = useState(false);
+  const [editorFailed, setEditorFailed]       = useState(false);
 
   const compileTimerRef = useRef(null);
 
@@ -187,8 +196,13 @@ export default function NeuroEditor({
   };
 
   const handleEditorBeforeMount = (monaco) => {
-    registerNeuroScript(monaco);
+    if (registerNeuroScript) registerNeuroScript(monaco);
   };
+
+  // If Monaco module failed to load, fall back immediately
+  useEffect(() => {
+    if (!Editor) setEditorFailed(true);
+  }, []);
 
   const currentExample = feat.exampleSelector
     ? EXAMPLES.find(ex => ex.id === selectedExample)
@@ -345,20 +359,42 @@ export default function NeuroEditor({
             overflow: 'hidden',
             ...(isVertical ? {} : { flex: 1 }),
           }}>
-            <Editor
-              height={sourceEditorHeight}
-              language="neuroscript"
-              theme={monacoTheme}
-              value={input}
-              onChange={handleEditorChange}
-              beforeMount={handleEditorBeforeMount}
-              loading={<div style={{ padding: '1rem', fontFamily: MONO_FONT, fontSize: '12px', color: 'var(--ifm-color-emphasis-500)' }}>Loading editor...</div>}
-              options={{
-                ...sharedEditorOptions,
-                readOnly: isPlayground && !ready,
-                lineNumbers: isPlayground ? 'on' : 'off',
-              }}
-            />
+            {editorFailed ? (
+              <textarea
+                value={input}
+                onChange={(e) => { setInput(e.target.value); debouncedCompile(e.target.value); }}
+                spellCheck={false}
+                style={{
+                  width: '100%',
+                  height: sourceEditorHeight,
+                  fontFamily: MONO_FONT,
+                  fontSize: isPlayground ? '13px' : '12px',
+                  lineHeight: isPlayground ? '1.6' : '1.5',
+                  padding: '8px',
+                  border: 'none',
+                  resize: 'vertical',
+                  backgroundColor: isDark ? '#1e1e1e' : '#ffffff',
+                  color: isDark ? '#d4d4d4' : '#24292e',
+                  boxSizing: 'border-box',
+                }}
+              />
+            ) : (
+              <Editor
+                height={sourceEditorHeight}
+                language="neuroscript"
+                theme={monacoTheme}
+                value={input}
+                onChange={handleEditorChange}
+                beforeMount={handleEditorBeforeMount}
+                onMount={() => {}}
+                loading={<div style={{ padding: '1rem', fontFamily: MONO_FONT, fontSize: '12px', color: 'var(--ifm-color-emphasis-500)' }}>Loading editor...</div>}
+                options={{
+                  ...sharedEditorOptions,
+                  readOnly: isPlayground && !ready,
+                  lineNumbers: isPlayground ? 'on' : 'off',
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -423,21 +459,35 @@ export default function NeuroEditor({
                 ? { maxHeight: '400px' }
                 : { flex: 1 }),
             }}>
-              <Editor
-                height={isVertical
-                  ? `${Math.max((output.split('\n').length + 1) * (isPlayground ? 21 : 18), isPlayground ? 400 : 72)}px`
-                  : editorHeight}
-                language="python"
-                theme={isDark ? 'vs-dark' : 'vs'}
-                value={output || (isPlayground ? '# Compiled PyTorch code will appear here...' : '')}
-                loading={<div style={{ padding: '1rem', fontFamily: MONO_FONT, fontSize: '12px', color: 'var(--ifm-color-emphasis-500)' }}>Loading editor...</div>}
-                options={{
-                  ...sharedEditorOptions,
-                  readOnly: true,
-                  lineNumbers: isPlayground ? 'on' : 'off',
-                  domReadOnly: true,
-                }}
-              />
+              {editorFailed ? (
+                <pre style={{
+                  margin: 0,
+                  padding: '8px',
+                  fontFamily: MONO_FONT,
+                  fontSize: isPlayground ? '13px' : '12px',
+                  lineHeight: isPlayground ? '1.6' : '1.5',
+                  height: isVertical ? 'auto' : editorHeight,
+                  overflow: 'auto',
+                  backgroundColor: isDark ? '#1e1e1e' : '#ffffff',
+                  color: isDark ? '#d4d4d4' : '#24292e',
+                }}>{output || (isPlayground ? '# Compiled PyTorch code will appear here...' : '')}</pre>
+              ) : (
+                <Editor
+                  height={isVertical
+                    ? `${Math.max((output.split('\n').length + 1) * (isPlayground ? 21 : 18), isPlayground ? 400 : 72)}px`
+                    : editorHeight}
+                  language="python"
+                  theme={isDark ? 'vs-dark' : 'vs'}
+                  value={output || (isPlayground ? '# Compiled PyTorch code will appear here...' : '')}
+                  loading={<div style={{ padding: '1rem', fontFamily: MONO_FONT, fontSize: '12px', color: 'var(--ifm-color-emphasis-500)' }}>Loading editor...</div>}
+                  options={{
+                    ...sharedEditorOptions,
+                    readOnly: true,
+                    lineNumbers: isPlayground ? 'on' : 'off',
+                    domReadOnly: true,
+                  }}
+                />
+              )}
             </div>
           )}
 

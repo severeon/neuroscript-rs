@@ -2,6 +2,10 @@
  * Register NeuroScript language, Monarch tokenizer, and themes with Monaco.
  *
  * Call `registerNeuroScript(monaco)` once in the Editor's `beforeMount` callback.
+ *
+ * Note: monaco-editor is loaded from CDN (jsDelivr) by @monaco-editor/loader,
+ * which is a dependency of @monaco-editor/react. No local monaco-editor package
+ * is needed in package.json — this is the intended setup per the library docs.
  */
 import {
   neuroscriptLanguage,
@@ -41,7 +45,7 @@ export function registerNeuroScript(monaco) {
       { open: '`', close: '`' },
     ],
     indentationRules: {
-      increaseIndentPattern: /^\s*(neuron|graph|context|impl|in|out|match|if|elif|else|unroll).*:\s*$/,
+      increaseIndentPattern: /^\s*(neuron|graph|context|match|if|elif|else|unroll)\b.*:\s*$/,
       decreaseIndentPattern: /^\s*$/,
     },
     wordPattern: /[a-zA-Z_][a-zA-Z0-9_]*/,

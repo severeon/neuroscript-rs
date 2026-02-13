@@ -52,7 +52,8 @@ export default function prismIncludeLanguages(PrismObject) {
     },
 
     'impl-ref': {
-      pattern: /(?<=impl\s*:\s*)[a-z_][a-zA-Z0-9_]*\s*,\s*[a-zA-Z0-9_/*]+(?:\/[a-zA-Z0-9_/*]+)*/,
+      pattern: /(impl\s*:\s*)[a-z_][a-zA-Z0-9_]*\s*,\s*[a-zA-Z0-9_/*]+(?:\/[a-zA-Z0-9_/*]+)*/,
+      lookbehind: true,
       alias: 'string',
     },
 
@@ -86,7 +87,8 @@ export default function prismIncludeLanguages(PrismObject) {
       /==|!=|<=|>=|[<>]/,
       /[+\-*/]/,
       {
-        pattern: /(?<![=!<>])=(?!=)/,
+        pattern: /([^=!<>])=(?!=)/,
+        lookbehind: true,
         alias: 'assignment',
       },
     ],
