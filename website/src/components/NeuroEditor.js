@@ -194,12 +194,12 @@ export default function NeuroEditor({
       : { marginBottom: '2rem' }
     }>
       {/* Tutorial header */}
-      {title && <h3 style={{ marginBottom: '0.5rem' }}>{title}</h3>}
+      {title && <h3 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>{title}</h3>}
       {description && <p style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)' }}>{description}</p>}
 
       {/* Playground toolbar */}
       {(feat.exampleSelector || feat.compileButton) && (
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           {feat.exampleSelector && (
             <div style={{ flex: '1', minWidth: '250px' }}>
               <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>
@@ -231,11 +231,11 @@ export default function NeuroEditor({
           )}
 
           {feat.compileButton && (
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{ marginLeft: 'auto' }}>
               <button
                 onClick={handleManualCompile}
                 disabled={!ready || compiling}
-                className="button button--primary"
+                className="button button--outline button--primary"
                 style={{ fontSize: '14px' }}
               >
                 {compiling ? '\u23F3 Compiling...' : '\u25B6\uFE0F Compile'}
@@ -296,7 +296,7 @@ export default function NeuroEditor({
             marginBottom: '0.25rem',
           }}>
             {isPlayground
-              ? <h3 style={{ margin: 0 }}>Source (NeuroScript)</h3>
+              ? <h3 style={{ margin: 0, marginTop: '1rem' }}>Source (NeuroScript)</h3>
               : <strong style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-600)' }}>NeuroScript</strong>}
             {compiling && isPlayground && (
               <span style={{ fontSize: '12px', color: 'var(--ifm-color-primary)' }}>
@@ -337,7 +337,7 @@ export default function NeuroEditor({
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          ...(isVertical ? {} : { flex: 1 }),
+          ...(isVertical ? { marginTop: '0.5rem' } : { flex: 1 }),
         }}>
           <div style={{
             display: 'flex',
@@ -346,28 +346,17 @@ export default function NeuroEditor({
             marginBottom: '0.25rem',
           }}>
             {isPlayground
-              ? <h3 style={{ margin: 0 }}>Output (PyTorch)</h3>
+              ? <h3 style={{ margin: 0, marginTop: '1rem' }}>Output (PyTorch)</h3>
               : <strong style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-600)' }}>PyTorch Output</strong>}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {feat.copyButton && output && (
-                <button
-                  onClick={handleCopy}
-                  className="button button--sm button--outline button--primary"
-                  style={{ fontSize: '12px' }}
-                >
-                  {copied ? '\u2713 Copied!' : '\uD83D\uDCCB Copy'}
-                </button>
-              )}
-              {feat.analysis && analysisData && !isPlayground && (
-                <button
-                  onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
-                  className={`button button--sm ${showAnalysisPanel ? 'button--primary' : 'button--outline button--primary'}`}
-                  style={{ fontSize: '12px' }}
-                >
-                  {showAnalysisPanel ? 'Hide Analysis' : 'Show Analysis'}
-                </button>
-              )}
-            </div>
+            {feat.copyButton && output && (
+              <button
+                onClick={handleCopy}
+                className="button button--sm button--outline button--primary"
+                style={{ fontSize: '12px' }}
+              >
+                {copied ? '\u2713 Copied!' : '\uD83D\uDCCB Copy'}
+              </button>
+            )}
           </div>
 
           {error ? (
@@ -415,6 +404,18 @@ export default function NeuroEditor({
               {output || (isPlayground ? 'Compiled PyTorch code will appear here...' : '')}
             </div>
           )}
+
+          {feat.analysis && analysisData && !isPlayground && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button
+                onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
+                className={`button button--sm ${showAnalysisPanel ? 'button--primary' : 'button--outline button--primary'}`}
+                style={{ fontSize: '12px' }}
+              >
+                {showAnalysisPanel ? 'Hide Analysis' : 'Show Analysis'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -427,7 +428,7 @@ export default function NeuroEditor({
           borderRadius: '8px',
           border: '1px solid var(--ifm-color-emphasis-300)',
         }}>
-          <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Shape Analysis</h4>
+          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Shape Analysis</h4>
 
           {analysisData.neurons && analysisData.neurons.filter(n => !n.is_primitive).map((neuron, idx) => (
             <div key={idx} style={{ marginBottom: '1rem' }}>
