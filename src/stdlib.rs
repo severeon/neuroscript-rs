@@ -332,7 +332,7 @@ mod tests {
         assert!(!program.neurons.is_empty(), "Embedded stdlib should contain neurons");
 
         // Verify key neurons from both composite and primitive files exist
-        let expected_composites = ["FFN", "Residual", "MultiHeadAttention", "TransformerBlock"];
+        let expected_composites = ["FFN", "Residual", "TransformerBlock", "CrossAttention"];
         for name in expected_composites {
             assert!(
                 program.neurons.contains_key(name),
@@ -378,16 +378,16 @@ mod tests {
             inputs: vec![Port {
                 name: "default".to_string(),
                 shape: Shape { dims: vec![Dim::Wildcard] },
-                is_variadic: false,
+                variadic: false,
             }],
             outputs: vec![Port {
                 name: "default".to_string(),
                 shape: Shape { dims: vec![Dim::Wildcard] },
-                is_variadic: false,
+                variadic: false,
             }],
             body: NeuronBody::Primitive(ImplRef::Source {
                 source: impl_source.to_string(),
-                path: vec!["Test".to_string()],
+                path: "Test".to_string(),
             }),
             max_cycle_depth: None,
             doc: None,

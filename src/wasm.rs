@@ -6,15 +6,15 @@ use std::sync::OnceLock;
 use wasm_bindgen::prelude::*;
 
 /// Cached parsed stdlib, initialized once per WASM module lifetime.
-static STDLIB_CACHE: OnceLock<Program> = OnceLock::new();
+static STDLIB_CACHE: OnceLock<Result<Program, String>> = OnceLock::new();
 
 /// Get the cached stdlib program, parsing embedded sources on first call.
 fn get_stdlib() -> Result<&'static Program, String> {
-    STDLIB_CACHE
-        .get_or_try_init(|| {
-            stdlib::load_stdlib_embedded()
-                .map_err(|e| format!("Failed to load stdlib: {}", e))
-        })
+    let cached = STDLIB_CACHE.get_or_init(|| {
+        stdlib::load_stdlib_embedded()
+            .map_err(|e| format!("Failed to load stdlib: {}", e))
+    });
+    cached.as_ref().map_err(|e| e.clone())
 }
 
 /// Load cached stdlib and merge with user program.
