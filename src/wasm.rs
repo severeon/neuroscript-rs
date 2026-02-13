@@ -2,14 +2,26 @@ use crate::interfaces::{Dim, Endpoint, NeuronBody, Program, Shape};
 use crate::{generate_pytorch, parse, stdlib, validate};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 use wasm_bindgen::prelude::*;
 
-/// Load embedded stdlib and merge with user program.
+/// Cached parsed stdlib, initialized once per WASM module lifetime.
+static STDLIB_CACHE: OnceLock<Program> = OnceLock::new();
+
+/// Get the cached stdlib program, parsing embedded sources on first call.
+fn get_stdlib() -> Result<&'static Program, String> {
+    STDLIB_CACHE
+        .get_or_try_init(|| {
+            stdlib::load_stdlib_embedded()
+                .map_err(|e| format!("Failed to load stdlib: {}", e))
+        })
+}
+
+/// Load cached stdlib and merge with user program.
 /// User neurons take precedence over stdlib neurons.
 fn load_and_merge(user_program: Program) -> Result<Program, String> {
-    let stdlib_program = stdlib::load_stdlib_embedded()
-        .map_err(|e| format!("Failed to load stdlib: {}", e))?;
-    Ok(stdlib::merge_programs(stdlib_program, user_program))
+    let stdlib_program = get_stdlib()?;
+    Ok(stdlib::merge_programs(stdlib_program.clone(), user_program))
 }
 
 /// Analysis result for the WASM API

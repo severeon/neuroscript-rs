@@ -323,7 +323,104 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_programs() {
+    fn test_load_stdlib_embedded() {
+        let result = load_stdlib_embedded();
+        assert!(result.is_ok(), "Should load embedded stdlib without errors: {:?}", result.err());
+        let program = result.unwrap();
+
+        // Should contain neurons from all stdlib files
+        assert!(!program.neurons.is_empty(), "Embedded stdlib should contain neurons");
+
+        // Verify key neurons from both composite and primitive files exist
+        let expected_composites = ["FFN", "Residual", "MultiHeadAttention", "TransformerBlock"];
+        for name in expected_composites {
+            assert!(
+                program.neurons.contains_key(name),
+                "Missing expected composite neuron: {}",
+                name
+            );
+        }
+
+        let expected_primitives = ["Linear", "LayerNorm", "Dropout", "ReLU", "Concat", "Softmax"];
+        for name in expected_primitives {
+            assert!(
+                program.neurons.contains_key(name),
+                "Missing expected primitive neuron: {}",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_embedded_matches_filesystem() {
+        // Both loading methods should produce the same set of neurons
+        let fs_program = load_stdlib().expect("filesystem stdlib should load");
+        let embedded_program = load_stdlib_embedded().expect("embedded stdlib should load");
+
+        let mut fs_names: Vec<_> = fs_program.neurons.keys().cloned().collect();
+        let mut embedded_names: Vec<_> = embedded_program.neurons.keys().cloned().collect();
+        fs_names.sort();
+        embedded_names.sort();
+
+        assert_eq!(
+            fs_names, embedded_names,
+            "Embedded and filesystem stdlib should contain the same neurons"
+        );
+    }
+
+    #[test]
+    fn test_merge_programs_user_overrides_stdlib() {
+        use crate::interfaces::{NeuronDef, NeuronBody, ImplRef, Port, Shape, Dim};
+
+        let make_neuron = |impl_source: &str| NeuronDef {
+            name: "TestNeuron".to_string(),
+            params: vec![],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape { dims: vec![Dim::Wildcard] },
+                is_variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape { dims: vec![Dim::Wildcard] },
+                is_variadic: false,
+            }],
+            body: NeuronBody::Primitive(ImplRef::Source {
+                source: impl_source.to_string(),
+                path: vec!["Test".to_string()],
+            }),
+            max_cycle_depth: None,
+            doc: None,
+        };
+
+        let mut stdlib = Program {
+            uses: vec![],
+            globals: vec![],
+            neurons: HashMap::new(),
+        };
+        stdlib.neurons.insert("TestNeuron".to_string(), make_neuron("stdlib_source"));
+
+        let mut user = Program {
+            uses: vec![],
+            globals: vec![],
+            neurons: HashMap::new(),
+        };
+        user.neurons.insert("TestNeuron".to_string(), make_neuron("user_source"));
+
+        let merged = merge_programs(stdlib, user);
+        assert_eq!(merged.neurons.len(), 1);
+
+        // User neuron should override stdlib neuron
+        let neuron = merged.neurons.get("TestNeuron").unwrap();
+        if let NeuronBody::Primitive(ImplRef::Source { source, .. }) = &neuron.body {
+            assert_eq!(source, "user_source", "User neuron should override stdlib");
+        } else {
+            panic!("Expected Primitive(Source) body");
+        }
+    }
+
+    #[test]
+    fn test_merge_programs_empty() {
         let stdlib = Program {
             uses: vec![],
             globals: vec![],
@@ -336,8 +433,6 @@ mod tests {
             neurons: HashMap::new(),
         };
 
-        // Create mock neuron (we can't easily construct real neurons in tests)
-        // Just verify the merge logic works at a basic level
         let merged = merge_programs(stdlib, user);
         assert_eq!(merged.neurons.len(), 0);
     }
