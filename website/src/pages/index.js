@@ -80,6 +80,7 @@ function GPT2Demo() {
                 showAnalysis={false}
                 showCompileButton={false}
                 height="500px"
+                responsive
               />
             );
           }}
