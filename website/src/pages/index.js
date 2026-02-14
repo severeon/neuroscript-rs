@@ -48,7 +48,7 @@ function HomepageHeader() {
 
 function GPT2Demo() {
   return (
-    <section style={{padding: '2.5rem 0 3rem'}}>
+    <section style={{padding: '2.5rem 0 3rem'}} aria-label="Interactive GPT-2 demo">
       <div className="container">
         <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
           <h2 style={{fontSize: '1.75rem', marginBottom: '0.5rem'}}>
@@ -65,7 +65,11 @@ function GPT2Demo() {
           </p>
         </div>
 
-        <BrowserOnly fallback={<div style={{minHeight: '500px'}} />}>
+        <BrowserOnly fallback={
+          <div style={{minHeight: '500px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <p style={{color: 'var(--ifm-color-emphasis-600)'}}>Loading interactive demo...</p>
+          </div>
+        }>
           {() => {
             const NeuroEditor = require('@site/src/components/NeuroEditor').default;
             return (

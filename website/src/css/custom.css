@@ -119,6 +119,7 @@ code[class*="language-neuroscript"] {
 }
 
 @media (max-width: 768px) {
+  /* !important needed: NeuroEditor sets inline flexDirection via style prop */
   .front-page-demo {
     flex-direction: column !important;
   }
