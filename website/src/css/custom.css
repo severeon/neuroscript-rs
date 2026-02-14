@@ -106,3 +106,26 @@ code[class*="language-neuroscript"] {
   background-color: #e65100 !important;
   color: #ffcc80 !important;
 }
+
+/* Front page GPT-2 demo */
+.front-page-demo {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.front-page-code pre {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  /* !important needed: NeuroEditor sets inline flexDirection via style prop */
+  .front-page-demo {
+    flex-direction: column !important;
+  }
+  .front-page-demo > div:nth-child(2) {
+    /* Arrow rotates to point down on mobile */
+    transform: rotate(90deg);
+    padding: 0.25rem 0 !important;
+  }
+}
