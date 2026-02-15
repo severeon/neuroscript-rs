@@ -37,6 +37,40 @@ pub(super) fn validate_bindings(
             });
         }
 
+        // Validate arguments to Neuron-typed parameters at call sites.
+        // When calling a user-defined neuron, check that any arg at a `: Neuron` parameter
+        // position is a valid neuron name (not an arbitrary value).
+        if !is_neuron_param {
+            if let Some(callee) = program.neurons.get(&binding.call_name) {
+                for (idx, param) in callee.params.iter().enumerate() {
+                    if param.type_annotation.as_ref() == Some(&ParamType::Neuron) {
+                        if let Some(arg) = binding.args.get(idx) {
+                            match arg {
+                                Value::Name(name) => {
+                                    if !neuron_exists_fn(name, program, registry)
+                                        && !neuron_param_names.contains(name.as_str())
+                                    {
+                                        errors.push(ValidationError::Custom(format!(
+                                            "Argument '{}' for Neuron-typed parameter '{}' of \
+                                             '{}' in neuron '{}' is not a known neuron",
+                                            name, param.name, binding.call_name, neuron.name
+                                        )));
+                                    }
+                                }
+                                _ => {
+                                    errors.push(ValidationError::Custom(format!(
+                                        "Parameter '{}' of '{}' expects a neuron type, but got \
+                                         a non-name value in neuron '{}'",
+                                        param.name, binding.call_name, neuron.name
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Check for duplicate binding names inside the same neuron
         if defined_bindings.contains(&binding.name) {
             errors.push(ValidationError::DuplicateBinding {
