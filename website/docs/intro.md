@@ -57,7 +57,7 @@ neuron DynamicBranch(dim):
         light_branch = Linear(dim, dim)
     
     graph:
-        in -> match:
+        in -> match: ->
             [*, 1, dim]: heavy_branch -> out
             [*, _, dim]: light_branch -> out
 ```

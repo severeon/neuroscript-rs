@@ -13,15 +13,14 @@ export const EXAMPLES = [
     out: [*, seq, vocab_size]
     context:
         embed = Embedding(vocab_size, d_model)
-        unroll(num_layers):
+        blocks = unroll(num_layers):
             block = TransformerBlock(d_model, num_heads, d_ff)
         ln_f = LayerNorm(d_model)
         head = Linear(d_model, vocab_size)
     graph:
         in ->
             embed
-            unroll(num_layers): ->
-                block
+            blocks
             ln_f
             head
             out`,
@@ -172,7 +171,7 @@ neuron AdaptiveProjection:
     in: [*, dim]
     out: [*, 512]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 512: Linear(d, 512) -> out
             [*, d] where d < 512: Linear(d, 512) -> out
             [*, d]: Identity() -> out`,
@@ -190,7 +189,7 @@ neuron DimensionRouter(out_dim):
     in: [batch, in_dim]
     out: [batch, out_dim]
     graph:
-        in -> match:
+        in -> match: ->
             [batch, d] where d > 1024:
                 Linear(d, 512) ->
                 Linear(512, out_dim)

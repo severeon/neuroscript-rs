@@ -154,7 +154,7 @@ in ->
     out
 
 # match: shape-based (runtime)
-in -> match:
+in -> match: ->
     [*, d] where d > 512: Linear(d, 512) -> out
     [*, d]: Linear(d, 256) -> Linear(256, 512) -> out
 ```

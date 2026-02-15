@@ -1,0 +1,115 @@
+---
+sidebar_position: 7
+title: Higher-Order Neurons
+description: Pass neuron types as parameters for generic, reusable architectures
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Higher-Order Neurons
+
+NeuroScript supports **higher-order neurons** — neurons that accept other neuron types as parameters. This lets you build generic architectures that work with any block type, similar to higher-order functions in programming.
+
+## The `: Neuron` Type Annotation
+
+Mark a parameter as a neuron type by adding `: Neuron`:
+
+```neuroscript
+neuron Stack(block: Neuron, d_model, count=6):
+```
+
+The `block` parameter doesn't hold a value — it holds a **neuron constructor**. When someone instantiates `Stack`, they pass a neuron name (like `TransformerBlock`), and `block` can be used anywhere a neuron name would appear.
+
+## Basic Higher-Order Neuron
+
+<InteractiveExample
+  title="Generic Stack"
+  description="A reusable stack that works with any block type"
+  initialCode={`neuron Stack(block: Neuron, d_model, num_heads, d_ff, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model, num_heads, d_ff)
+    graph:
+        in ->
+            blocks
+            out`}
+/>
+
+This neuron:
+- Takes `block: Neuron` as its first parameter
+- Uses `block(d_model, num_heads, d_ff)` in context bindings just like any neuron call
+- Can be instantiated with different block types: `Stack(TransformerBlock, 512, 8, 2048)`
+
+## Contract Dispatch with `match(param):`
+
+Sometimes you need different wiring strategies depending on what block is passed. The `match(param):` syntax inspects a neuron parameter's port shapes at compile time:
+
+<InteractiveExample
+  title="Shape-Aware Stack"
+  description="Selects wiring strategy based on the block's port signatures"
+  initialCode={`neuron SmartStack(block: Neuron, d_model, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model)
+    graph:
+        in ->
+            match(block):
+                in [*, seq, d_model] -> out [*, seq, d_model]:
+                    blocks
+                    out
+                in [*, d_model] -> out [*, d_model]:
+                    blocks
+                    out`}
+/>
+
+Each arm specifies an **input/output port contract**:
+- `in [*, seq, d_model] -> out [*, seq, d_model]` matches blocks that process sequences
+- `in [*, d_model] -> out [*, d_model]` matches blocks that process individual vectors
+
+The compiler resolves this at compile time: when `SmartStack` is instantiated with a concrete block, it checks the block's declared ports against each arm and selects the first match.
+
+## How It Works
+
+1. **Parameter declaration**: `block: Neuron` tells the compiler this parameter receives a neuron type
+2. **Usage in context**: `block(args...)` instantiates the neuron, just like calling any other neuron
+3. **Contract dispatch** (optional): `match(block):` lets you inspect the block's port shapes
+4. **Resolution**: When the higher-order neuron is instantiated with a concrete block, the compiler resolves all `match(block):` expressions at compile time
+
+## Combining with Unroll
+
+Higher-order neurons compose naturally with named unrolls:
+
+```neuroscript
+neuron RepeatBlock(block: Neuron, d_model, count=4):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        layers = unroll(count):
+            layer = block(d_model)
+    graph:
+        in ->
+            layers
+            out
+```
+
+The `block` parameter is called inside the unroll to create `count` independent instances, each with its own weights. The `layers` aggregate then threads data through all of them sequentially.
+
+## Key Rules
+
+- Parameters with `: Neuron` annotation hold neuron constructors, not tensor values
+- A neuron-typed parameter can be used anywhere a neuron name appears (in context bindings, in graph calls)
+- `match(param):` arms use port contract patterns (`in [shape] -> out [shape]`), not tensor shape patterns
+- Contract dispatch is resolved at **compile time** — the block's ports must match at least one arm
+- All standard neuron features (unroll, @static, pipeline chaining) work with neuron-typed parameters
+
+## Try It Yourself
+
+Experiment with higher-order neurons:
+- Change the block parameter to different neuron types
+- Add contract dispatch to handle blocks with different port shapes
+- Combine with `@static` unroll for weight-shared stacks
+- Click "Show Analysis" to see how the compiler resolves the contracts

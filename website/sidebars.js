@@ -27,6 +27,7 @@ const sidebars = {
         'tutorials/conditionals',
         'tutorials/unroll',
         'tutorials/variadic-ports',
+        'tutorials/higher-order-neurons',
       ],
     },
     {

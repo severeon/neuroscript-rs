@@ -11,15 +11,14 @@ neuron GPT2Small(vocab=50257, d_model=768, heads=12, d_ff=3072, layers=12):
     out: [*, seq, vocab]
     context:
         embed = Embedding(vocab, d_model)
-        unroll(layers):
+        blocks = unroll(layers):
             block = TransformerBlock(d_model, heads, d_ff)
         ln_f = LayerNorm(d_model)
         head = Linear(d_model, vocab)
     graph:
         in ->
             embed
-            unroll(layers): ->
-                block
+            blocks
             ln_f
             head
             out`;
