@@ -104,6 +104,9 @@ pip install neuroscript-runtime
 # Compile a NeuroScript file to PyTorch
 neuroscript compile my_model.ns -o model.py
 
+# Generate a self-contained file (no neuroscript_runtime dependency)
+neuroscript compile my_model.ns --bundle -o model.py
+
 # Validate shapes without generating code
 neuroscript validate my_model.ns
 ```

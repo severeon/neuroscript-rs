@@ -241,3 +241,5 @@ neuroscript compile src/model.ns --no-deps
 # Validate with dependency neurons in scope
 neuroscript validate src/model.ns
 ```
+
+For the full list of compiler options (including `--bundle`, `--no-optimize`, and others), see the [Compiler Reference](/docs/compiler).
