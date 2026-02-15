@@ -6,7 +6,7 @@ neuron DimensionRouterMultiLine(out_dim):
   in: [batch, in_dim]
   out: [batch, out_dim]
   graph:
-    in -> match:
+    in -> match: ->
       [batch, d] where d > 1024:
         Linear(d, 512) ->
         Linear(512, out_dim)
@@ -21,7 +21,7 @@ neuron DimensionRouterInline(out_dim):
   in: [batch, in_dim]
   out: [batch, out_dim]
   graph:
-    in -> match:
+    in -> match: ->
       [batch, d] where d > 1024: Linear(d, 512) -> Linear(512, out_dim)
       [batch, d] where d > 256: Linear(d, out_dim)
       [batch, d]: Linear(d, out_dim)

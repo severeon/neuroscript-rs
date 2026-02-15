@@ -268,69 +268,36 @@ fn test_parse_variadic_input_port() {
 // ============================================================================
 
 #[test]
-fn test_parse_unroll_expr_inline() {
-    // Inline unroll expression: unroll(3): -> Block()
-    let input = "unroll(3): -> Block(dim)\n";
-    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+fn test_parse_named_unroll_context_block() {
+    // Named context-level unroll block
+    let input = "blocks = unroll(3):\n    block = TransformerBlock(d_model)\n";
+    let result = NeuroScriptParser::parse(Rule::named_unroll_context_block, input);
     if let Err(e) = &result {
         eprintln!("Error: {}", e);
     }
-    assert!(result.is_ok(), "Failed to parse inline unroll expression");
+    assert!(result.is_ok(), "Failed to parse named unroll context block");
 }
 
 #[test]
-fn test_parse_unroll_expr_with_param() {
-    // Unroll with parameter reference
-    let input = "unroll(num_layers): -> Block(dim)\n";
-    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+fn test_parse_named_unroll_context_with_annotation() {
+    // Named context-level unroll with @static annotation
+    let input = "layers = unroll(num_layers):\n    @static block = TransformerBlock(d_model)\n";
+    let result = NeuroScriptParser::parse(Rule::named_unroll_context_block, input);
     if let Err(e) = &result {
         eprintln!("Error: {}", e);
     }
-    assert!(result.is_ok(), "Failed to parse unroll with parameter reference");
+    assert!(result.is_ok(), "Failed to parse named unroll context block with @static");
 }
 
 #[test]
-fn test_parse_unroll_expr_indented() {
-    // Indented unroll expression with pipeline on next line
-    let input = "unroll(num_layers): ->\n    TransformerBlock(d_model)\n";
-    let result = NeuroScriptParser::parse(Rule::unroll_expr, input);
+fn test_parse_named_unroll_context_with_param() {
+    // Named context-level unroll with parameter reference
+    let input = "blocks = unroll(num_layers):\n    block = Block(dim)\n";
+    let result = NeuroScriptParser::parse(Rule::named_unroll_context_block, input);
     if let Err(e) = &result {
         eprintln!("Error: {}", e);
     }
-    assert!(result.is_ok(), "Failed to parse indented unroll expression");
-}
-
-#[test]
-fn test_parse_unroll_as_endpoint() {
-    // unroll can appear as an endpoint in a connection
-    let input = "unroll(3): -> Block()\n";
-    let result = NeuroScriptParser::parse(Rule::endpoint, input);
-    if let Err(e) = &result {
-        eprintln!("Error: {}", e);
-    }
-    assert!(result.is_ok(), "Failed to parse unroll as endpoint");
-}
-
-#[test]
-fn test_parse_unroll_context_block() {
-    // Context-level unroll block
-    let input = "unroll(3):\n    block = TransformerBlock(d_model)\n";
-    let result = NeuroScriptParser::parse(Rule::unroll_context_block, input);
-    if let Err(e) = &result {
-        eprintln!("Error: {}", e);
-    }
-    assert!(result.is_ok(), "Failed to parse unroll context block");
-}
-
-#[test]
-fn test_parse_unroll_context_with_annotation() {
-    // Context-level unroll with @static annotation
-    let input = "unroll(num_layers):\n    @static block = TransformerBlock(d_model)\n";
-    let result = NeuroScriptParser::parse(Rule::unroll_context_block, input);
-    if let Err(e) = &result {
-        eprintln!("Error: {}", e);
-    }
-    assert!(result.is_ok(), "Failed to parse unroll context block with @static");
+    assert!(result.is_ok(), "Failed to parse named unroll context block with param");
 }
 
 #[test]

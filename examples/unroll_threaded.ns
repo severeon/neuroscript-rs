@@ -1,12 +1,14 @@
-# Unroll: threaded (sequential chaining)
+# Unroll: sequential chaining via named context unroll
 # Demonstrates compile-time expansion of repeated layers
 
-# Stack of 6 transformer blocks via unroll
+# Stack of 6 transformer blocks via named unroll
 neuron TransformerStack(d_model, num_heads, d_ff, num_layers=6):
     in: [*, seq, d_model]
     out: [*, seq, d_model]
+    context:
+        blocks = unroll(num_layers):
+            block = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
-            unroll(num_layers): ->
-                TransformerBlock(d_model, num_heads, d_ff)
+            blocks
             out

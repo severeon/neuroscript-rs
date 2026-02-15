@@ -4,7 +4,7 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron SharedLayers(d_model, num_heads, d_ff, num_layers = 3):
+neuron Stack(block, d_model, num_heads, d_ff, count = 6):
   inputs:
     default: [*, seq, d_model]
   outputs:

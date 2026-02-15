@@ -10,4 +10,5 @@ neuron TransformerStack(d_model, num_heads, d_ff, num_layers = 6):
   outputs:
     default: [*, seq, d_model]
   graph:
-    in -> unroll(num_layers): -> TransformerBlock#0(d_model, num_heads, d_ff) -> out
+    in -> blocks
+    blocks -> out

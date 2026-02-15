@@ -15,4 +15,7 @@ neuron GPT2Small(vocab_size = 50257, d_model = 768, num_heads = 12, d_ff = 3072,
     head = Linear(...)
   graph:
     in -> embed
-    embed -> unroll(num_layers): -> block -> ln_f -> head -> out
+    embed -> blocks
+    blocks -> ln_f
+    ln_f -> head
+    head -> out

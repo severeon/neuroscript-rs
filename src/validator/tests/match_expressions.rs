@@ -15,15 +15,16 @@ fn test_match_exhaustiveness_with_catchall() {
             vec![connection(
                 ref_endpoint("in"),
                 Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(512)])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, named_dim("d")]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, named_dim("d")])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
@@ -52,15 +53,16 @@ fn test_match_exhaustiveness_without_catchall() {
             vec![connection(
                 ref_endpoint("in"),
                 Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(512)])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(256)])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
@@ -91,21 +93,22 @@ fn test_match_pattern_shadowing() {
             vec![connection(
                 ref_endpoint("in"),
                 Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, named_dim("d")]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, named_dim("d")])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(512)])),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: shape_two_wildcard(),
+                            pattern: MatchPattern::Shape(shape_two_wildcard()),
                             guard: None,
                             pipeline: vec![ref_endpoint("out")],
                             is_reachable: true,

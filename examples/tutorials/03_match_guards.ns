@@ -7,7 +7,7 @@ neuron ShapeRouter:
     in: [*shape]
     out: [*shape]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d <= 256: Identity() -> out
             [*, d] where d > 256: Linear(d, 256) -> out
 
@@ -16,7 +16,7 @@ neuron AdaptiveProjection:
     in: [*, dim]
     out: [*, 512]
     graph:
-        in -> match:
+        in -> match: ->
             # Bind dimension variable 'd' from input shape
             [*, d] where d < 512: Linear(d, 512) -> out
             [*, d] where d == 512: Identity() -> out
@@ -28,7 +28,7 @@ neuron DimensionScaling:
     out: [*, d * 4]
     graph:
         # Captured dimension 'd' used in Linear call
-        in -> match:
+        in -> match: ->
             [*, d]: Linear(d, d * 4) -> out
 
 # Example 4: Multiple patterns with different processing
@@ -36,7 +36,7 @@ neuron MultiScaleProcessor:
     in: [batch, seq, dim]
     out: [batch, seq, 512]
     graph:
-        in -> match:
+        in -> match: ->
             # Small models: expand significantly
             [*, *, d] where d < 128:
                 Linear(d, 256) -> GELU() -> Linear(256, 512) -> out
@@ -54,7 +54,7 @@ neuron ConditionalResidual(target_dim):
     in: [*, dim]
     out: [*, target_dim]
     graph:
-        in -> match:
+        in -> match: ->
             # Dimension matches: use residual
             [*, d] where d == target_dim:
                 (main, skip)
@@ -70,7 +70,7 @@ neuron FilteredFFN:
     in: [batch, seq, dim]
     out: [batch, seq, dim]
     graph:
-        in -> match:
+        in -> match: ->
             # Only apply FFN if dimensions are in valid range
             [*, s, d] where s > 1 && d >= 64 && d <= 2048:
                 Linear(d, d * 4)
@@ -87,7 +87,7 @@ neuron SequenceAwareProcessor:
     in: [batch, seq, dim]
     out: [batch, seq, 512]
     graph:
-        in -> match:
+        in -> match: ->
             # Short sequences: use larger intermediate dimension
             [*, s, d] where s < 128:
                 Linear(d, d * 8) -> GELU() -> Linear(d * 8, 512) -> out

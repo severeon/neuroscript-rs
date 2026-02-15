@@ -30,8 +30,9 @@ fn test_missing_neuron_in_match() {
             vec![connection(
                 ref_endpoint("in"),
                 Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![MatchArm {
-                        pattern: wildcard(),
+                        pattern: MatchPattern::Shape(wildcard()),
                         guard: None,
                         pipeline: vec![call_endpoint("MissingInMatch")],
                         is_reachable: true,

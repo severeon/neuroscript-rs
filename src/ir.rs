@@ -181,7 +181,6 @@ impl std::fmt::Display for Endpoint {
             }
             Endpoint::Match(m) => write!(f, "{}", m),
             Endpoint::If(expr) => write!(f, "{}", expr),
-            Endpoint::Unroll(u) => write!(f, "{}", u),
         }
     }
 }
@@ -217,9 +216,58 @@ impl std::fmt::Display for IfExpr {
     }
 }
 
+impl std::fmt::Display for MatchPattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MatchPattern::Shape(s) => write!(f, "{}", s),
+            MatchPattern::NeuronContract(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl std::fmt::Display for NeuronPortContract {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Display as: in [shape] -> out [shape]
+        for (i, (name, shape)) in self.input_ports.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            if name == "default" {
+                write!(f, "in {}", shape)?;
+            } else {
+                write!(f, "in {} {}", name, shape)?;
+            }
+        }
+        write!(f, " -> ")?;
+        for (i, (name, shape)) in self.output_ports.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            if name == "default" {
+                write!(f, "out {}", shape)?;
+            } else {
+                write!(f, "out {} {}", name, shape)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for MatchSubject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MatchSubject::Implicit => write!(f, ""),
+            MatchSubject::Named(name) => write!(f, "({})", name),
+        }
+    }
+}
+
 impl std::fmt::Display for MatchExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "match:")?;
+        match &self.subject {
+            MatchSubject::Implicit => writeln!(f, "match: ->")?,
+            MatchSubject::Named(name) => writeln!(f, "match({}):", name)?,
+        }
         for arm in &self.arms {
             write!(f, "    {} ", arm.pattern)?;
             if let Some(g) = &arm.guard {
@@ -238,31 +286,9 @@ impl std::fmt::Display for MatchExpr {
     }
 }
 
-impl std::fmt::Display for UnrollExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "unroll({}): -> ", self.count)?;
-        for (i, e) in self.pipeline.iter().enumerate() {
-            if i > 0 {
-                write!(f, " -> ")?;
-            }
-            write!(f, "{}", e)?;
-        }
-        if !self.tail.is_empty() {
-            write!(f, " -> ")?;
-            for (i, e) in self.tail.iter().enumerate() {
-                if i > 0 {
-                    write!(f, " -> ")?;
-                }
-                write!(f, "{}", e)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl std::fmt::Display for ContextUnroll {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "unroll({}):", self.count)?;
+        writeln!(f, "{} = unroll({}):", self.aggregate_name, self.count)?;
         for b in &self.bindings {
             writeln!(f, "      {}", b)?;
         }
@@ -320,6 +346,9 @@ impl std::fmt::Display for NeuronDef {
                 write!(f, ", ")?;
             }
             write!(f, "{}", p.name)?;
+            if let Some(ParamType::Neuron) = &p.type_annotation {
+                write!(f, ": Neuron")?;
+            }
             if let Some(d) = &p.default {
                 write!(f, "={}", d)?;
             }

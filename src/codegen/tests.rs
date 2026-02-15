@@ -27,9 +27,10 @@ fn test_codegen_match() {
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(512)])),
                             guard: None,
                             pipeline: vec![
                                 Endpoint::Call {
@@ -44,7 +45,7 @@ fn test_codegen_match() {
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(256)])),
                             guard: None,
                             pipeline: vec![
                                 Endpoint::Call {
@@ -102,9 +103,10 @@ fn test_codegen_match_with_captured_dims() {
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())])),
                             guard: Some(Value::BinOp {
                                 op: BinOp::Gt,
                                 left: Box::new(Value::Name("d".to_string())),
@@ -123,7 +125,7 @@ fn test_codegen_match_with_captured_dims() {
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())])),
                             guard: None,
                             pipeline: vec![
                                 Endpoint::Call {
@@ -208,8 +210,9 @@ fn test_codegen_match_guards_with_bindings() {
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![MatchArm {
-                        pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                        pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())])),
                         guard: Some(Value::BinOp {
                             op: BinOp::Le,
                             left: Box::new(Value::Name("dim".to_string())),
@@ -275,12 +278,13 @@ fn test_codegen_optimized_match_fewer_branches() {
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
                     destination: Endpoint::Match(MatchExpr {
+                        subject: MatchSubject::Implicit,
                         arms: vec![
                             MatchArm {
-                                pattern: Shape::new(vec![
+                                pattern: MatchPattern::Shape(Shape::new(vec![
                                     Dim::Wildcard,
                                     Dim::Named("d".to_string()),
-                                ]),
+                                ])),
                                 guard: None,
                                 pipeline: vec![
                                     Endpoint::Call {
@@ -295,7 +299,7 @@ fn test_codegen_optimized_match_fewer_branches() {
                                 is_reachable: true,
                             },
                             MatchArm {
-                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]),
+                                pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(512)])),
                                 guard: None,
                                 pipeline: vec![
                                     Endpoint::Call {
@@ -310,7 +314,7 @@ fn test_codegen_optimized_match_fewer_branches() {
                                 is_reachable: true, // All start reachable
                             },
                             MatchArm {
-                                pattern: Shape::new(vec![Dim::Wildcard, Dim::Literal(256)]),
+                                pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Literal(256)])),
                                 guard: None,
                                 pipeline: vec![
                                     Endpoint::Call {
@@ -452,9 +456,10 @@ fn test_codegen_optimized_match_with_guards() {
             connections: vec![Connection {
                 source: Endpoint::Ref(PortRef::new("in")),
                 destination: Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
                     arms: vec![
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())])),
                             guard: Some(Value::BinOp {
                                 op: BinOp::Gt,
                                 left: Box::new(Value::Name("d".to_string())),
@@ -473,7 +478,7 @@ fn test_codegen_optimized_match_with_guards() {
                             is_reachable: true,
                         },
                         MatchArm {
-                            pattern: Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())]),
+                            pattern: MatchPattern::Shape(Shape::new(vec![Dim::Wildcard, Dim::Named("d".to_string())])),
                             guard: None, // Catch-all for same pattern
                             pipeline: vec![
                                 Endpoint::Call {
@@ -524,7 +529,7 @@ neuron OptimizeDemo:
     in: [*, d]
     out: [*, 512]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 512: Linear(d, 512) -> out
             [*, d]: Linear(d, 256) -> Linear(256, 512) -> out
             [*, 512]: Identity() -> out
@@ -576,6 +581,7 @@ fn test_codegen_if_else() {
         params: vec![Param {
             name: "d".to_string(),
             default: Some(Value::Int(64)),
+            type_annotation: None,
         }],
         inputs: vec![Port {
             name: "default".to_string(),
@@ -675,20 +681,25 @@ fn test_codegen_unroll_threaded() {
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "TransformerStack").expect("Codegen should succeed");
 
-    // Should have 6 separate TransformerBlock instances in __init__
-    for i in 0..6 {
-        assert!(
-            code.contains(&format!("self.transformer_block_{} = TransformerBlock(d_model, num_heads, d_ff)", i)),
-            "Should instantiate transformer_block_{}", i
-        );
-    }
+    // Should use nn.ModuleList for unrolled blocks
+    assert!(
+        code.contains("self.blocks = nn.ModuleList(["),
+        "Should use nn.ModuleList for blocks"
+    );
+    assert!(
+        code.contains("TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)"),
+        "Should use range(num_layers) in comprehension"
+    );
 
-    // Should have 6 sequential calls in forward() with semantic variable names
-    assert!(code.contains("self.transformer_block_0(x)"), "First call should use input x");
-    assert!(code.contains("self.transformer_block_5(transformer_block_4)"), "Last call should chain from previous");
-
-    // Should NOT have 7th instance
-    assert!(!code.contains("transformer_block_6"), "Should not have 7th instance");
+    // Forward should use a for loop
+    assert!(
+        code.contains("for block in self.blocks:"),
+        "Should iterate over blocks"
+    );
+    assert!(
+        code.contains("x = block(x)"),
+        "Should apply each block in-place"
+    );
 }
 
 #[test]
@@ -732,19 +743,30 @@ fn test_codegen_unroll_static() {
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "SharedLayers").expect("Codegen should succeed");
 
-    // Should have exactly ONE class-level module
+    // Should have exactly ONE class-level module (conditional instantiation)
+    assert!(
+        code.contains("if not hasattr(self.__class__, 'block'):"),
+        "Should check for existing class-level block"
+    );
     assert!(
         code.contains("self.__class__.block = TransformerBlock(d_model, num_heads, d_ff)"),
         "Should instantiate shared block at class level"
     );
 
-    // Should have 3 sequential calls to the SAME module
-    let call_count = code.matches("self.__class__.block(").count();
-    assert_eq!(call_count, 3, "Should call shared block 3 times, got {}", call_count);
+    // Should have a for loop calling the shared instance N times
+    assert!(
+        code.contains("for _ in range(self.num_layers):"),
+        "Should iterate num_layers times"
+    );
+    assert!(
+        code.contains("x = self.__class__.block(x)"),
+        "Should call shared class-level block in loop"
+    );
 
-    // Should NOT have suffixed instances
+    // Should NOT have suffixed instances or nn.ModuleList
     assert!(!code.contains("block_0"), "Static block should not be suffixed");
     assert!(!code.contains("block_1"), "Static block should not be suffixed");
+    assert!(!code.contains("nn.ModuleList"), "Static unroll should not use ModuleList");
 }
 
 #[test]

@@ -14,7 +14,7 @@ neuron <AdaptiveName>(<target_dim>):
   in: [*, <target_dim>]
   out: [*, <target_dim>]
   graph:
-    in -> match:
+    in -> match: ->
       [*, d] where d > 512:
         Linear(d, <target_dim>)
         out
@@ -32,7 +32,7 @@ neuron <AdaptiveName>(<target_dim>):
 #   in: [batch, seq, dim]
 #   out: [batch, seq, dim]
 #   graph:
-#     in -> match:
+#     in -> match: ->
 #       [b, s, d] where d <= 512:
 #         LayerNorm(d) -> out
 #       [b, s, d] where d > 512 and d <= 2048:

@@ -100,7 +100,7 @@ neuron ConditionalProcessor:
     in: [*, dim]
     out: [*, dim]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 512: Linear(d, 512) -> out
             [*, d]: Identity() -> out
 

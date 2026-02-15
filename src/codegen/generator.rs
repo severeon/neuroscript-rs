@@ -36,6 +36,7 @@ impl<'a> CodeGenerator<'a> {
             inference_ctx,
             binding_to_call_name: std::collections::HashMap::new(),
             binding_to_unroll_group: std::collections::HashMap::new(),
+            aggregate_to_group: std::collections::HashMap::new(),
             last_emitted_shape: None,
         }
     }
@@ -255,15 +256,7 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
         Endpoint::Ref(_) => {
             // Port references don't call neurons
         }
-        Endpoint::Unroll(u) => {
-            // Recurse into unroll pipeline (should be expanded before codegen)
-            for ep in &u.pipeline {
-                collect_calls_from_endpoint(ep, result);
-            }
-            for ep in &u.tail {
-                collect_calls_from_endpoint(ep, result);
-            }
-        }
+        // Endpoint::Unroll removed — expanded before codegen
     }
 }
 

@@ -279,7 +279,10 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         Endpoint::Match(match_expr) => {
             let mut result = String::from("match:\n");
             for arm in &match_expr.arms {
-                result.push_str(&format!("      {}", format_shape(&arm.pattern)));
+                result.push_str(&format!("      {}", match &arm.pattern {
+                    MatchPattern::Shape(shape) => format_shape(shape),
+                    MatchPattern::NeuronContract(contract) => format!("{:?}", contract),
+                }));
                 if let Some(guard) = &arm.guard {
                     result.push_str(&format!(" where {}", format_value(guard)));
                 }
@@ -316,20 +319,6 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
                 result.push('\n');
             }
             result.trim_end().to_string()
-        }
-        Endpoint::Unroll(unroll_expr) => {
-            let mut result = format!("unroll({}):", format_value(&unroll_expr.count));
-            result.push_str(" -> ");
-            let pipeline_str: Vec<String> =
-                unroll_expr.pipeline.iter().map(format_endpoint).collect();
-            result.push_str(&pipeline_str.join(" -> "));
-            if !unroll_expr.tail.is_empty() {
-                result.push_str(" -> ");
-                let tail_str: Vec<String> =
-                    unroll_expr.tail.iter().map(format_endpoint).collect();
-                result.push_str(&tail_str.join(" -> "));
-            }
-            result
         }
     }
 }

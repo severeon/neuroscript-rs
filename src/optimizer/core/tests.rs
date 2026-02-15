@@ -11,27 +11,28 @@ fn test_optimize_matches_basic() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(1)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(1)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // This one should be pruned
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(2)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
@@ -92,19 +93,20 @@ fn test_optimize_matches_shadowing() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Shadowed by first arm
@@ -143,7 +145,7 @@ fn test_optimize_matches_shadowing() {
         if let Endpoint::Match(match_expr) = &connections[0].destination {
             assert_eq!(match_expr.arms.len(), 1, "Should have 1 arm after pruning");
             assert_eq!(
-                match_expr.arms[0].pattern.dims,
+                match_expr.arms[0].pattern.as_shape().unwrap().dims,
                 vec![Dim::Wildcard, Dim::Named("d".to_string())]
             );
         } else {
@@ -164,11 +166,12 @@ fn test_optimize_matches_guards_prevent_pruning() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: Some(Value::BinOp {
                     op: BinOp::Gt,
                     left: Box::new(Value::Name("d".to_string())),
@@ -178,9 +181,9 @@ fn test_optimize_matches_guards_prevent_pruning() {
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None, // No guard - catch-all for same pattern
                 pipeline: vec![],
                 is_reachable: true, // Should remain reachable (guard makes it distinct)
@@ -238,35 +241,36 @@ fn test_optimize_matches_multiple_unreachable() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Shadowed
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(256)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Shadowed
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Shadowed
@@ -304,7 +308,7 @@ fn test_optimize_matches_multiple_unreachable() {
     if let NeuronBody::Graph { connections, .. } = &neuron.body {
         if let Endpoint::Match(match_expr) = &connections[0].destination {
             assert_eq!(match_expr.arms.len(), 1);
-            assert_eq!(match_expr.arms[0].pattern.dims, vec![Dim::Wildcard]);
+            assert_eq!(match_expr.arms[0].pattern.as_shape().unwrap().dims, vec![Dim::Wildcard]);
         } else {
             panic!("Expected Match endpoint");
         }
@@ -323,19 +327,20 @@ fn test_optimize_matches_disabled() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Would be pruned if enabled
@@ -391,19 +396,20 @@ fn test_optimize_matches_nested() {
     };
 
     let inner_match = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Unreachable inner arm
@@ -413,19 +419,20 @@ fn test_optimize_matches_nested() {
     };
 
     let outer_match = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard],
-                },
+                }),
                 guard: None,
                 pipeline: vec![Endpoint::Match(inner_match)],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(256)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: false, // Unreachable outer arm
@@ -488,10 +495,11 @@ fn test_count_matches() {
 
     // Neuron with 2 match expressions
     let match1 = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![MatchArm {
-            pattern: Shape {
+            pattern: MatchPattern::Shape(Shape {
                 dims: vec![Dim::Wildcard],
-            },
+            }),
             guard: None,
             pipeline: vec![],
             is_reachable: true,
@@ -500,10 +508,11 @@ fn test_count_matches() {
     };
 
     let match2 = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![MatchArm {
-            pattern: Shape {
+            pattern: MatchPattern::Shape(Shape {
                 dims: vec![Dim::Literal(512)],
-            },
+            }),
             guard: None,
             pipeline: vec![],
             is_reachable: true,
@@ -546,9 +555,9 @@ fn test_pattern_specificity() {
 
     // Literal pattern: [512, 256] - very specific
     let literal_arm = MatchArm {
-        pattern: Shape {
+        pattern: MatchPattern::Shape(Shape {
             dims: vec![Dim::Literal(512), Dim::Literal(256)],
-        },
+        }),
         guard: None,
         pipeline: vec![],
         is_reachable: true,
@@ -558,9 +567,9 @@ fn test_pattern_specificity() {
 
     // Named pattern: [*, d] - less specific
     let named_arm = MatchArm {
-        pattern: Shape {
+        pattern: MatchPattern::Shape(Shape {
             dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-        },
+        }),
         guard: None,
         pipeline: vec![],
         is_reachable: true,
@@ -570,9 +579,9 @@ fn test_pattern_specificity() {
 
     // Wildcard pattern: [*] - least specific
     let wildcard_arm = MatchArm {
-        pattern: Shape {
+        pattern: MatchPattern::Shape(Shape {
             dims: vec![Dim::Wildcard],
-        },
+        }),
         guard: None,
         pipeline: vec![],
         is_reachable: true,
@@ -594,21 +603,22 @@ fn test_reorder_match_arms() {
     };
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             // General pattern first (wrong order)
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             // Specific pattern second (should be first)
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Literal(2), Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
@@ -647,17 +657,17 @@ fn test_reorder_match_arms() {
         if let Endpoint::Match(match_expr) = &connections[0].destination {
             // First arm should now be the specific pattern
             assert!(matches!(
-                match_expr.arms[0].pattern.dims[0],
+                match_expr.arms[0].pattern.as_shape().unwrap().dims[0],
                 Dim::Literal(2)
             ));
             assert!(matches!(
-                match_expr.arms[0].pattern.dims[1],
+                match_expr.arms[0].pattern.as_shape().unwrap().dims[1],
                 Dim::Literal(512)
             ));
 
             // Second arm should be the general pattern
-            assert!(matches!(match_expr.arms[1].pattern.dims[0], Dim::Wildcard));
-            assert!(matches!(match_expr.arms[1].pattern.dims[1], Dim::Named(_)));
+            assert!(matches!(match_expr.arms[1].pattern.as_shape().unwrap().dims[0], Dim::Wildcard));
+            assert!(matches!(match_expr.arms[1].pattern.as_shape().unwrap().dims[1], Dim::Named(_)));
         } else {
             panic!("Expected Match endpoint");
         }
@@ -674,27 +684,28 @@ fn test_static_resolve_concrete_shape() {
     ctx.resolved_dims.insert("dim".to_string(), 512);
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Literal(256)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Literal(512)],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
@@ -723,11 +734,12 @@ fn test_static_resolve_with_guard() {
     ctx.resolved_dims.insert("d".to_string(), 1024);
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: Some(Value::BinOp {
                     op: BinOp::Gt,
                     left: Box::new(Value::Name("d".to_string())),
@@ -737,9 +749,9 @@ fn test_static_resolve_with_guard() {
                 is_reachable: true,
             },
             MatchArm {
-                pattern: Shape {
+                pattern: MatchPattern::Shape(Shape {
                     dims: vec![Dim::Wildcard, Dim::Named("d".to_string())],
-                },
+                }),
                 guard: None,
                 pipeline: vec![],
                 is_reachable: true,
@@ -767,10 +779,11 @@ fn test_static_resolve_runtime_needed() {
     let ctx = InferenceContext::default();
 
     let match_expr = MatchExpr {
+        subject: MatchSubject::Implicit,
         arms: vec![MatchArm {
-            pattern: Shape {
+            pattern: MatchPattern::Shape(Shape {
                 dims: vec![Dim::Wildcard, Dim::Literal(512)],
-            },
+            }),
             guard: None,
             pipeline: vec![],
             is_reachable: true,

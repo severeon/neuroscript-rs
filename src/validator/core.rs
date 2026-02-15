@@ -96,10 +96,11 @@ impl Validator {
 
         // Check match expressions (mutable pass for reachability)
         for (neuron_name, neuron) in &mut program.neurons {
+            let params = neuron.params.clone();
             if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
                 for connection in connections {
                     if let Endpoint::Match(match_expr) = &mut connection.destination {
-                        errors.extend(Self::validate_match_expression(match_expr, neuron_name));
+                        errors.extend(Self::validate_match_expression(match_expr, neuron_name, &params));
                     }
                 }
             }
@@ -121,6 +122,14 @@ impl Validator {
     ) -> Vec<ValidationError> {
         let mut errors = Vec::new();
 
+        // Collect neuron-typed parameter names for higher-order neuron support
+        let neuron_param_names: std::collections::HashSet<&str> = neuron
+            .params
+            .iter()
+            .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
+            .map(|p| p.name.as_str())
+            .collect();
+
         // Build symbol table for this neuron's graph
         let symbol_table = symbol_table::build_symbol_table(
             neuron,
@@ -133,18 +142,20 @@ impl Validator {
 
         // Validate each connection
         for connection in connections {
-            // Check that neurons exist
+            // Check that neurons exist (skip neuron-typed params)
             errors.extend(Self::check_neurons_exist(
                 &connection.source,
                 &neuron.name,
                 program,
                 registry,
+                &neuron_param_names,
             ));
             errors.extend(Self::check_neurons_exist(
                 &connection.destination,
                 &neuron.name,
                 program,
                 registry,
+                &neuron_param_names,
             ));
 
             let res_ctx = symbol_table::ResolutionContext {
@@ -203,10 +214,14 @@ impl Validator {
         context_neuron: &str,
         program: &Program,
         registry: &StdlibRegistry,
+        neuron_param_names: &std::collections::HashSet<&str>,
     ) -> Vec<ValidationError> {
         match endpoint {
             Endpoint::Call { name, .. } => {
-                if !Self::neuron_exists(name, program, registry) {
+                // Skip check if the name is a neuron-typed parameter (higher-order neuron)
+                if neuron_param_names.contains(name.as_str()) {
+                    vec![]
+                } else if !Self::neuron_exists(name, program, registry) {
                     vec![ValidationError::MissingNeuron {
                         name: name.clone(),
                         context: context_neuron.to_string(),
@@ -220,7 +235,7 @@ impl Validator {
                 .iter()
                 .flat_map(|arm| {
                     arm.pipeline.iter().flat_map(|ep| {
-                        Self::check_neurons_exist(ep, context_neuron, program, registry)
+                        Self::check_neurons_exist(ep, context_neuron, program, registry, neuron_param_names)
                     })
                 })
                 .collect(),
@@ -233,6 +248,7 @@ impl Validator {
                             context_neuron,
                             program,
                             registry,
+                            neuron_param_names,
                         ));
                     }
                 }
@@ -243,6 +259,7 @@ impl Validator {
                             context_neuron,
                             program,
                             registry,
+                            neuron_param_names,
                         ));
                     }
                 }
@@ -257,18 +274,54 @@ impl Validator {
     fn validate_match_expression(
         match_expr: &mut MatchExpr,
         context_neuron: &str,
+        neuron_params: &[Param],
     ) -> Vec<ValidationError> {
         let mut errors = Vec::new();
+
+        // For Named subject (neuron contract dispatch), validate parameter and skip shape checks
+        if let MatchSubject::Named(param_name) = &match_expr.subject {
+            // Check that the parameter exists
+            let param = neuron_params.iter().find(|p| &p.name == param_name);
+            match param {
+                Some(p) => {
+                    // Check that the parameter has Neuron type annotation
+                    if p.type_annotation.as_ref() != Some(&ParamType::Neuron) {
+                        errors.push(ValidationError::Custom(format!(
+                            "match({}) in '{}': parameter '{}' must have type annotation ': Neuron'",
+                            param_name, context_neuron, param_name
+                        )));
+                    }
+                }
+                None => {
+                    errors.push(ValidationError::Custom(format!(
+                        "match({}) in '{}': parameter '{}' not found",
+                        param_name, context_neuron, param_name
+                    )));
+                }
+            }
+            // Validate that all arms use NeuronContract patterns
+            for (i, arm) in match_expr.arms.iter().enumerate() {
+                if matches!(arm.pattern, MatchPattern::Shape(_)) {
+                    errors.push(ValidationError::Custom(format!(
+                        "match({}) in '{}': arm {} uses shape pattern but neuron contract pattern expected",
+                        param_name, context_neuron, i + 1
+                    )));
+                }
+            }
+            return errors;
+        }
 
         // Check exhaustiveness: last pattern should be a catch-all
         if !match_expr.arms.is_empty() {
             let last_pattern = &match_expr.arms.last().unwrap().pattern;
-            if !Self::is_catch_all_pattern(last_pattern) {
-                errors.push(ValidationError::NonExhaustiveMatch {
-                    context: context_neuron.to_string(),
-                    suggestion: "Add a catch-all pattern as the last arm, e.g., [*shape] or [*, d]"
-                        .to_string(),
-                });
+            if let Some(shape) = last_pattern.as_shape() {
+                if !Self::is_catch_all_pattern(shape) {
+                    errors.push(ValidationError::NonExhaustiveMatch {
+                        context: context_neuron.to_string(),
+                        suggestion: "Add a catch-all pattern as the last arm, e.g., [*shape] or [*, d]"
+                            .to_string(),
+                    });
+                }
             }
         }
 
@@ -277,19 +330,20 @@ impl Validator {
             for j in (i + 1)..match_expr.arms.len() {
                 // Check if arm i subsumes arm j (making j unreachable)
                 // A pattern with a guard does NOT subsume any pattern (guard can fail)
-                // We need to access arms carefully to avoid multiple mutable borrows
                 let subsumes = {
                     let arm_i = &match_expr.arms[i];
                     let arm_j = &match_expr.arms[j];
-                    arm_i.guard.is_none() && Self::pattern_subsumes(&arm_i.pattern, &arm_j.pattern)
+                    match (arm_i.pattern.as_shape(), arm_j.pattern.as_shape()) {
+                        (Some(shape_i), Some(shape_j)) => {
+                            arm_i.guard.is_none() && Self::pattern_subsumes(shape_i, shape_j)
+                        }
+                        _ => false,
+                    }
                 };
 
                 if subsumes {
                     // Mark as unreachable
                     match_expr.arms[j].is_reachable = false;
-
-                    // We don't error on shadowing anymore, just mark it
-                    // errors.push(ValidationError::UnreachableMatchArm { ... });
                 }
             }
         }

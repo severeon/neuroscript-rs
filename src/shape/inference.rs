@@ -540,9 +540,6 @@ impl ShapeInferenceEngine {
             Endpoint::If(if_expr) => {
                 self.validate_if_destination(if_expr, &source_shapes, ctx, program)?;
             }
-            Endpoint::Unroll(_) => {
-                // Unroll should be expanded before shape inference
-            }
         }
 
         Ok(())
@@ -688,22 +685,25 @@ impl ShapeInferenceEngine {
             // Combine all source shapes into a single pattern match?
             // Match expressions often take a single input.
             if source_shapes.is_empty() {
+                let empty_shape = Shape::new(vec![]);
                 return Err(ShapeError::Mismatch {
-                    expected: arm.pattern.clone(),
-                    got: Shape::new(vec![]),
+                    expected: arm.pattern.as_shape().cloned().unwrap_or_else(|| empty_shape.clone()),
+                    got: empty_shape,
                     context: "Match source produces no output".to_string(),
                 });
             }
 
-            // Unify with ARM pattern
-            self.unify_pattern_with_shape(&arm.pattern, &source_shapes[0], &mut arm_ctx)
-                .map_err(|msg| ShapeError::ConstraintViolation {
-                    message: format!("Pattern mismatch in match arm: {}", msg),
-                    context: format!(
-                        "Pattern: {}\nSource shape: {}",
-                        arm.pattern, source_shapes[0]
-                    ),
-                })?;
+            // Unify with ARM pattern (only for Shape patterns)
+            if let Some(shape_pattern) = arm.pattern.as_shape() {
+                self.unify_pattern_with_shape(shape_pattern, &source_shapes[0], &mut arm_ctx)
+                    .map_err(|msg| ShapeError::ConstraintViolation {
+                        message: format!("Pattern mismatch in match arm: {}", msg),
+                        context: format!(
+                            "Pattern: {}\nSource shape: {}",
+                            shape_pattern, source_shapes[0]
+                        ),
+                    })?;
+            }
 
             // Track current output shapes as we walk the arm pipeline
             let mut current_shapes = source_shapes.to_vec();
@@ -1003,7 +1003,7 @@ impl ShapeInferenceEngine {
             ),
             Endpoint::Match(_) => "match".to_string(),
             Endpoint::If(_) => "if".to_string(),
-            Endpoint::Unroll(_) => "unroll".to_string(),
+            // Endpoint::Unroll removed
         }
     }
 
@@ -1151,9 +1151,7 @@ fn resolve_match_endpoint(
         Endpoint::If(_) => Err(ShapeError::UnsupportedFeature(
             "Nested if expressions not yet supported in match pipeline".to_string(),
         )),
-        Endpoint::Unroll(_) => Err(ShapeError::UnsupportedFeature(
-            "Unroll should be expanded before shape inference".to_string(),
-        )),
+        // Endpoint::Unroll removed — expanded before shape inference
     }
 }
 
@@ -1230,7 +1228,7 @@ fn resolve_endpoint_shape(
                 Ok(vec![])
             }
         }
-        Endpoint::Unroll(_) => Ok(vec![]),
+        // Endpoint::Unroll removed
     }
 }
 

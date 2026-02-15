@@ -2,7 +2,7 @@ use crate::interfaces::*;
 use std::collections::HashMap;
 
 /// Check if two shapes are compatible
-pub(super) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
+pub(crate) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
     // Find variadic dimensions in both shapes
     let source_variadic_pos = source
         .dims

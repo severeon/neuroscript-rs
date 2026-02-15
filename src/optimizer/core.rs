@@ -77,16 +77,19 @@ fn pattern_specificity(arm: &MatchArm) -> (usize, bool) {
     let mut score = 0;
 
     // Count literal dimensions (most specific)
-    for dim in &arm.pattern.dims {
-        match dim {
-            Dim::Literal(_) => score += 100,
-            Dim::Named(_) => score += 10, // Named captures less specific than literals
-            Dim::Expr(_) => score += 50,  // Expressions moderately specific
-            Dim::Global(_) => score += 80, // Globals quite specific
-            Dim::Wildcard => score += 1,  // Wildcards least specific
-            Dim::Variadic(_) => score += 0, // Variadics are catch-all
+    if let Some(shape) = arm.pattern.as_shape() {
+        for dim in &shape.dims {
+            match dim {
+                Dim::Literal(_) => score += 100,
+                Dim::Named(_) => score += 10, // Named captures less specific than literals
+                Dim::Expr(_) => score += 50,  // Expressions moderately specific
+                Dim::Global(_) => score += 80, // Globals quite specific
+                Dim::Wildcard => score += 1,  // Wildcards least specific
+                Dim::Variadic(_) => score += 0, // Variadics are catch-all
+            }
         }
     }
+    // NeuronContract patterns don't participate in specificity ordering
 
     // Guards add specificity
     let has_guard = arm.guard.is_some();
@@ -189,7 +192,11 @@ pub fn try_static_resolve(
         }
 
         // Check if pattern matches the concrete shape
-        if pattern_matches_shape(&arm.pattern, input_shape, ctx) {
+        let arm_shape = match &arm.pattern {
+            MatchPattern::Shape(s) => s,
+            MatchPattern::NeuronContract(_) => continue,
+        };
+        if pattern_matches_shape(arm_shape, input_shape, ctx) {
             // If there's a guard, we need to evaluate it
             if let Some(guard) = &arm.guard {
                 if try_evaluate_guard(guard, ctx) == Some(true) {

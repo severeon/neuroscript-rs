@@ -284,7 +284,7 @@ binding = {
 
 // context: always indented, supports both regular bindings and unroll blocks
 context_section = {
-    keyword_context ~ colon ~ NEWLINE ~ (NEWLINE* ~ (unroll_context_block | context_binding))+
+    keyword_context ~ colon ~ NEWLINE ~ (NEWLINE* ~ (named_unroll_context_block | context_binding))+
 }
 
 context_binding = {
@@ -332,11 +332,11 @@ indented_pipeline_item = {
   | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ NEWLINE*)
 }
 
-// Endpoint: in, out, foo, Foo(args), (a, b), match: ..., if ..., unroll(n): -> ...
+// Endpoint: in, out, foo, Foo(args), (a, b), match: -> ..., match(param): ..., if ...
 endpoint = {
-    match_expr
+    match_eval_expr
+  | match_expr
   | if_expr
-  | unroll_expr
   | tuple_endpoint
   | ref_endpoint
   | call_endpoint
@@ -362,9 +362,43 @@ tuple_endpoint = {
 // Match Expressions
 // ============================================================================
 
-// Match expression
+// Match expression: data-threading form requires `->` after `:`
 match_expr = {
-    keyword_match ~ colon ~ NEWLINE ~ (NEWLINE* ~ match_arm)+
+    keyword_match ~ colon ~ arrow ~ NEWLINE ~ (NEWLINE* ~ match_arm)+
+}
+
+// Match evaluation expression: dispatch on a named parameter
+// match(block):
+//     in [*shape] -> out [*shape]: pipeline
+match_eval_expr = {
+    keyword_match ~ lparen ~ value ~ rparen ~ colon ~ NEWLINE ~ (NEWLINE* ~ neuron_match_arm)+
+}
+
+// Port contract for neuron parameter dispatch
+neuron_port_contract = {
+    keyword_in ~ ident? ~ shape ~ arrow ~ keyword_out ~ ident? ~ shape
+}
+
+// Match arm for neuron contract dispatch
+neuron_match_arm = {
+    neuron_port_contract ~ (keyword_where ~ value)? ~ colon ~ neuron_match_pipeline
+}
+
+// Pipeline in neuron match arm: must not consume the next arm's port contract
+neuron_match_pipeline = {
+    // Inline: endpoints separated by arrows on one line
+    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
+    // Indented: newline, then indented pipeline items (stops before next port contract)
+  | (NEWLINE ~ neuron_match_indented_pipeline)
+}
+
+neuron_match_indented_pipeline = {
+    neuron_match_indented_item+
+}
+
+neuron_match_indented_item = {
+    // Don't consume lines that start a new neuron_port_contract (next match arm)
+    !neuron_port_contract ~ indented_pipeline_item
 }
 
 // Match arm: [pattern] where guard: pipeline
@@ -401,21 +435,9 @@ branch_pipeline = {
 // Unroll Expressions
 // ============================================================================
 
-// Graph-level unroll: unroll(count): -> pipeline
-// The -> after the colon indicates threaded (sequential chaining) mode
-unroll_expr = {
-    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ arrow ~ unroll_pipeline
-}
-
-// Pipeline inside an unroll (same structure as match_pipeline)
-unroll_pipeline = {
-    (NEWLINE ~ indented_pipeline)
-  | (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
-}
-
-// Context-level unroll: unroll(count):\n  bindings...
-unroll_context_block = {
-    keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ NEWLINE ~ (NEWLINE* ~ context_binding)+
+// Context-level named unroll: name = unroll(count):\n  bindings...
+named_unroll_context_block = {
+    ident ~ assign ~ keyword_unroll ~ lparen ~ value ~ rparen ~ colon ~ NEWLINE ~ (NEWLINE* ~ context_binding)+
 }
 
 // ============================================================================

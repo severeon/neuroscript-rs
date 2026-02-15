@@ -131,6 +131,10 @@ pub struct CodeGenerator<'a> {
     /// Used to generate nn.ModuleList and for loops
     pub binding_to_unroll_group: HashMap<String, UnrollGroupInfo>,
 
+    /// Mapping from aggregate name to (base_name, count, is_static) for direct aggregate references in graph
+    /// is_static=true means weight-sharing: one class-level instance called N times
+    pub aggregate_to_group: HashMap<String, (String, Value, bool)>,
+
     /// Last shape comment emitted, used to suppress duplicates
     pub last_emitted_shape: Option<String>,
 }
@@ -190,8 +194,6 @@ pub enum Endpoint {
     Match(MatchExpr),
     /// Conditional expression
     If(IfExpr),
-    /// Compile-time unroll expression (expanded before validation)
-    Unroll(UnrollExpr),
 }
 
 /// A connection: source -> destination
@@ -201,10 +203,45 @@ pub struct Connection {
     pub destination: Endpoint,
 }
 
+/// A port shape contract for a neuron parameter, used in match(block) dispatch
+#[derive(Debug, Clone, PartialEq)]
+pub struct NeuronPortContract {
+    pub input_ports: Vec<(String, Shape)>,   // (port_name, shape_pattern)
+    pub output_ports: Vec<(String, Shape)>,
+}
+
+/// Pattern in a match arm: either a shape pattern or a neuron port contract
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchPattern {
+    /// Shape pattern for data-threading match: `[*, dim]`
+    Shape(Shape),
+    /// Neuron contract pattern for parameter dispatch: `in [*shape] -> out [*shape]`
+    NeuronContract(NeuronPortContract),
+}
+
+impl MatchPattern {
+    /// Get the shape if this is a Shape pattern
+    pub fn as_shape(&self) -> Option<&Shape> {
+        match self {
+            MatchPattern::Shape(s) => Some(s),
+            MatchPattern::NeuronContract(_) => None,
+        }
+    }
+}
+
+/// What the match expression dispatches on
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchSubject {
+    /// Threading: data flows through (traditional match on tensor shapes)
+    Implicit,
+    /// Evaluation: match on a named parameter (e.g., `match(block)`)
+    Named(String),
+}
+
 /// One arm of a match expression
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchArm {
-    pub pattern: Shape,
+    pub pattern: MatchPattern,
     pub guard: Option<Value>, // where clause
     pub pipeline: Vec<Endpoint>,
     /// Whether this arm is reachable (not shadowed by earlier arms)
@@ -212,9 +249,10 @@ pub struct MatchArm {
     pub is_reachable: bool,
 }
 
-/// Pattern matching on shapes
+/// Pattern matching on shapes or neuron contracts
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr {
+    pub subject: MatchSubject,
     pub arms: Vec<MatchArm>,
     pub id: usize,
 }
@@ -234,22 +272,11 @@ pub struct IfExpr {
     pub id: usize,
 }
 
-/// Compile-time unroll expression for graph-level sequential chaining
-#[derive(Debug, Clone, PartialEq)]
-pub struct UnrollExpr {
-    /// Number of iterations (must resolve to positive integer)
-    pub count: Value,
-    /// Pipeline endpoints to repeat each iteration (the unroll body)
-    pub pipeline: Vec<Endpoint>,
-    /// Pipeline endpoints to chain after the last iteration (post-unroll continuation)
-    pub tail: Vec<Endpoint>,
-    /// Unique identifier for this unroll
-    pub id: usize,
-}
-
 /// Compile-time unroll block within a context section
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContextUnroll {
+    /// Aggregate name for the unroll group (e.g., "layers")
+    pub aggregate_name: String,
     /// Number of iterations (must resolve to positive integer)
     pub count: Value,
     /// Bindings to replicate
@@ -283,6 +310,8 @@ pub struct UnrollGroupInfo {
     pub count: Value,
     /// Index within the unroll group (0, 1, 2, ...)
     pub index: usize,
+    /// Aggregate name for nn.ModuleList (e.g., "layers")
+    pub aggregate_name: String,
 }
 
 /// A binding in a let: or set: block, or context: block
@@ -318,11 +347,21 @@ pub enum NeuronBody {
     },
 }
 
+/// Type annotation for a neuron parameter
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParamType {
+    /// Default: a numeric/value parameter
+    Value,
+    /// A neuron type parameter (higher-order neuron)
+    Neuron,
+}
+
 /// A parameter in a neuron definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
     pub default: Option<Value>,
+    pub type_annotation: Option<ParamType>,
 }
 
 /// Documentation extracted from triple-slash comments

@@ -17,6 +17,7 @@
 //! ```
 
 pub mod codegen;
+pub mod contract_resolver;
 pub mod doc_parser;
 pub mod grammar;
 pub mod interfaces;
@@ -58,14 +59,19 @@ pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Then run shape inference validation
     let mut shape_engine = shape::ShapeInferenceEngine::new();
     match shape_engine.infer(program) {
-        Ok(()) => Ok(()),
+        Ok(()) => {}
         Err(shape_errors) => {
             // Convert shape errors to validation errors
             let validation_errors = shape_errors
                 .into_iter()
                 .map(|e| ValidationError::Custom(format!("Shape error: {}", e)))
                 .collect();
-            Err(validation_errors)
+            return Err(validation_errors);
         }
     }
+
+    // Resolve neuron contract match expressions (match(param): ...)
+    contract_resolver::resolve_neuron_contracts(program)?;
+
+    Ok(())
 }

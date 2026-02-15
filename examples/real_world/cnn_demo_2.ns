@@ -23,7 +23,7 @@ neuron ConvBlock(in_channels, out_channels, has_pool=true):
             bn
             act
             
-        act -> match:
+        act -> match: ->
             [*s] where has_pool == true: pool
             [*s]: Identity()
         -> out

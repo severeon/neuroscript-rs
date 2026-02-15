@@ -37,7 +37,7 @@ neuron Processor:
   in: [*, dim]
   out: [*, dim]
   graph:
-    in -> match:
+    in -> match: ->
       [*, d] where d > 512: Linear(d, 512) -> out
       [*, d]: Linear(d, d) -> out
 
