@@ -3,7 +3,7 @@
 use clap::{Parser, Subcommand};
 use miette::{IntoDiagnostic, NamedSource, WrapErr};
 use neuroscript::package::{self, DependencyContext};
-use neuroscript::{generate_pytorch, parse, stdlib, validate, NeuronBody, StdlibRegistry};
+use neuroscript::{parse, stdlib, validate, NeuronBody, StdlibRegistry};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -150,6 +150,10 @@ enum Commands {
         /// Skip loading fetched dependencies
         #[arg(long)]
         no_deps: bool,
+
+        /// Bundle primitive definitions inline (no neuroscript_runtime dependency)
+        #[arg(long)]
+        bundle: bool,
     },
 
     /// List all neurons in a file, stdlib, or fetched packages
@@ -251,6 +255,7 @@ fn main() -> miette::Result<()> {
             verbose,
             no_stdlib,
             no_deps,
+            bundle,
         } => cmd_compile(
             file,
             neuron,
@@ -260,6 +265,7 @@ fn main() -> miette::Result<()> {
             verbose,
             no_stdlib,
             no_deps,
+            bundle,
         ),
         Commands::List {
             file,
@@ -625,6 +631,7 @@ fn cmd_compile(
     verbose: bool,
     no_stdlib: bool,
     no_deps: bool,
+    bundle: bool,
 ) -> miette::Result<()> {
     let source = read_source(&file)?;
     let user_program = parse(&source).map_err(|e| {
@@ -736,7 +743,8 @@ fn cmd_compile(
     }
 
     // Codegen
-    match generate_pytorch(&program, &neuron_name) {
+    let options = neuroscript::CodegenOptions { bundle };
+    match neuroscript::generate_pytorch_with_options(&program, &neuron_name, &options) {
         Ok(python_code) => {
             if let Some(output_path) = output {
                 fs::write(&output_path, python_code)

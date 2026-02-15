@@ -8,6 +8,60 @@ use crate::interfaces::*;
 use std::collections::HashSet;
 use std::fmt::Write;
 
+/// Embedded Python primitive source files for bundle mode.
+mod embedded_primitives {
+    pub const ACTIVATIONS: &str =
+        include_str!("../../neuroscript_runtime/primitives/activations.py");
+    pub const ATTENTION: &str = include_str!("../../neuroscript_runtime/primitives/attention.py");
+    pub const CONVOLUTIONS: &str =
+        include_str!("../../neuroscript_runtime/primitives/convolutions.py");
+    pub const EMBEDDINGS: &str =
+        include_str!("../../neuroscript_runtime/primitives/embeddings.py");
+    pub const LINEAR: &str = include_str!("../../neuroscript_runtime/primitives/linear.py");
+    pub const LOGGING: &str = include_str!("../../neuroscript_runtime/primitives/logging.py");
+    pub const NORMALIZATION: &str =
+        include_str!("../../neuroscript_runtime/primitives/normalization.py");
+    pub const OPERATIONS: &str =
+        include_str!("../../neuroscript_runtime/primitives/operations.py");
+    pub const POOLING: &str = include_str!("../../neuroscript_runtime/primitives/pooling.py");
+    pub const REGULARIZATION: &str =
+        include_str!("../../neuroscript_runtime/primitives/regularization.py");
+    pub const STRUCTURAL: &str =
+        include_str!("../../neuroscript_runtime/primitives/structural.py");
+}
+
+/// Look up the embedded Python source for a module path like "neuroscript_runtime.primitives.linear".
+fn embedded_source_for_module(module_path: &str) -> Option<&'static str> {
+    let suffix = module_path.strip_prefix("neuroscript_runtime.primitives.")?;
+    match suffix {
+        "activations" => Some(embedded_primitives::ACTIVATIONS),
+        "attention" => Some(embedded_primitives::ATTENTION),
+        "convolutions" => Some(embedded_primitives::CONVOLUTIONS),
+        "embeddings" => Some(embedded_primitives::EMBEDDINGS),
+        "linear" => Some(embedded_primitives::LINEAR),
+        "logging" => Some(embedded_primitives::LOGGING),
+        "normalization" => Some(embedded_primitives::NORMALIZATION),
+        "operations" => Some(embedded_primitives::OPERATIONS),
+        "pooling" => Some(embedded_primitives::POOLING),
+        "regularization" => Some(embedded_primitives::REGULARIZATION),
+        "structural" => Some(embedded_primitives::STRUCTURAL),
+        _ => None,
+    }
+}
+
+/// Options for code generation.
+#[derive(Debug, Clone)]
+pub struct CodegenOptions {
+    /// When true, inline primitive class definitions instead of importing from neuroscript_runtime.
+    pub bundle: bool,
+}
+
+impl Default for CodegenOptions {
+    fn default() -> Self {
+        Self { bundle: false }
+    }
+}
+
 impl std::fmt::Display for CodegenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -269,6 +323,18 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
 
 /// Generate PyTorch code for a specific neuron (PUBLIC API)
 pub fn generate_pytorch(program: &Program, neuron_name: &str) -> Result<String, CodegenError> {
+    generate_pytorch_with_options(program, neuron_name, &CodegenOptions::default())
+}
+
+/// Generate PyTorch code for a specific neuron with options.
+///
+/// When `options.bundle` is true, primitive class definitions are inlined
+/// into the output so the generated file is self-contained (only requires `torch`).
+pub fn generate_pytorch_with_options(
+    program: &Program,
+    neuron_name: &str,
+    options: &CodegenOptions,
+) -> Result<String, CodegenError> {
     // Verify the requested neuron exists
     let _neuron = program
         .neurons
@@ -316,18 +382,57 @@ pub fn generate_pytorch(program: &Program, neuron_name: &str) -> Result<String, 
         all_primitives.extend(generator.used_primitives);
     }
 
-    // Generate imports based on all used primitives
     let registry = StdlibRegistry::new();
-    let mut imports_output = String::new();
-    writeln!(imports_output, "import torch").unwrap();
-    writeln!(imports_output, "import torch.nn as nn").unwrap();
-
     let primitives: Vec<String> = all_primitives.iter().cloned().collect();
-    let imports = registry.generate_imports(&primitives);
-    for import in imports {
-        writeln!(imports_output, "{}", import).unwrap();
+
+    let mut imports_output = String::new();
+
+    if options.bundle {
+        // Bundle mode: emit unified imports and inline primitive class definitions
+        writeln!(imports_output, "import math").unwrap();
+        writeln!(imports_output, "from typing import Optional, Tuple").unwrap();
+        writeln!(imports_output, "import torch").unwrap();
+        writeln!(imports_output, "import torch.nn as nn").unwrap();
+        writeln!(imports_output, "import torch.nn.functional as F").unwrap();
+        writeln!(imports_output).unwrap();
+
+        // Inline only the needed primitive modules
+        let modules = registry.modules_for_primitives(&primitives);
+        for module_path in &modules {
+            if let Some(source) = embedded_source_for_module(module_path) {
+                writeln!(imports_output, "# --- inlined from {} ---", module_path).unwrap();
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    // Skip import/from lines — already covered by unified block above
+                    if trimmed.starts_with("import ")
+                        || trimmed.starts_with("from ")
+                        || trimmed.starts_with("\"\"\"")
+                            && source.lines().next().map_or(false, |l| {
+                                l.trim().starts_with("\"\"\"")
+                            })
+                    {
+                        // Skip module-level docstrings (triple-quoted at start)
+                        // and all import statements
+                        if trimmed.starts_with("import ") || trimmed.starts_with("from ") {
+                            continue;
+                        }
+                    }
+                    writeln!(imports_output, "{}", line).unwrap();
+                }
+                writeln!(imports_output).unwrap();
+            }
+        }
+    } else {
+        // Normal mode: generate import statements
+        writeln!(imports_output, "import torch").unwrap();
+        writeln!(imports_output, "import torch.nn as nn").unwrap();
+
+        let imports = registry.generate_imports(&primitives);
+        for import in imports {
+            writeln!(imports_output, "{}", import).unwrap();
+        }
+        writeln!(imports_output).unwrap();
     }
-    writeln!(imports_output).unwrap();
 
     // Combine imports, globals and all neuron code
     Ok(format!("{}{}{}", imports_output, globals_output, all_code))

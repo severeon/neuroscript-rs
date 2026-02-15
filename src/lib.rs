@@ -33,7 +33,7 @@ pub mod validator;
 pub mod wasm;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
-pub use codegen::generate_pytorch;
+pub use codegen::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
 pub use interfaces::*;
 // Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
