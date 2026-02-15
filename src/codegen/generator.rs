@@ -8,45 +8,92 @@ use crate::interfaces::*;
 use std::collections::HashSet;
 use std::fmt::Write;
 
-/// Embedded Python primitive source files for bundle mode.
-mod embedded_primitives {
-    pub const ACTIVATIONS: &str =
-        include_str!("../../neuroscript_runtime/primitives/activations.py");
-    pub const ATTENTION: &str = include_str!("../../neuroscript_runtime/primitives/attention.py");
-    pub const CONVOLUTIONS: &str =
-        include_str!("../../neuroscript_runtime/primitives/convolutions.py");
-    pub const EMBEDDINGS: &str =
-        include_str!("../../neuroscript_runtime/primitives/embeddings.py");
-    pub const LINEAR: &str = include_str!("../../neuroscript_runtime/primitives/linear.py");
-    pub const LOGGING: &str = include_str!("../../neuroscript_runtime/primitives/logging.py");
-    pub const NORMALIZATION: &str =
-        include_str!("../../neuroscript_runtime/primitives/normalization.py");
-    pub const OPERATIONS: &str =
-        include_str!("../../neuroscript_runtime/primitives/operations.py");
-    pub const POOLING: &str = include_str!("../../neuroscript_runtime/primitives/pooling.py");
-    pub const REGULARIZATION: &str =
-        include_str!("../../neuroscript_runtime/primitives/regularization.py");
-    pub const STRUCTURAL: &str =
-        include_str!("../../neuroscript_runtime/primitives/structural.py");
+/// Declare embedded primitive modules: generates constants and a lookup function.
+///
+/// Every primitive Python file under `neuroscript_runtime/primitives/` is compiled
+/// into the binary via `include_str!`.  Adding a new primitive file requires only
+/// a single new entry in the `embedded_primitives!` invocation below.
+macro_rules! embedded_primitives {
+    ( $( $name:ident, $suffix:literal => $file:literal ),+ $(,)? ) => {
+        mod embedded_sources {
+            $(
+                pub const $name: &str =
+                    include_str!(concat!("../../neuroscript_runtime/primitives/", $file));
+            )+
+        }
+
+        /// Look up the embedded Python source for a module path
+        /// like `"neuroscript_runtime.primitives.linear"`.
+        fn embedded_source_for_module(module_path: &str) -> Option<&'static str> {
+            let suffix = module_path.strip_prefix("neuroscript_runtime.primitives.")?;
+            match suffix {
+                $( $suffix => Some(embedded_sources::$name), )+
+                _ => None,
+            }
+        }
+    };
 }
 
-/// Look up the embedded Python source for a module path like "neuroscript_runtime.primitives.linear".
-fn embedded_source_for_module(module_path: &str) -> Option<&'static str> {
-    let suffix = module_path.strip_prefix("neuroscript_runtime.primitives.")?;
-    match suffix {
-        "activations" => Some(embedded_primitives::ACTIVATIONS),
-        "attention" => Some(embedded_primitives::ATTENTION),
-        "convolutions" => Some(embedded_primitives::CONVOLUTIONS),
-        "embeddings" => Some(embedded_primitives::EMBEDDINGS),
-        "linear" => Some(embedded_primitives::LINEAR),
-        "logging" => Some(embedded_primitives::LOGGING),
-        "normalization" => Some(embedded_primitives::NORMALIZATION),
-        "operations" => Some(embedded_primitives::OPERATIONS),
-        "pooling" => Some(embedded_primitives::POOLING),
-        "regularization" => Some(embedded_primitives::REGULARIZATION),
-        "structural" => Some(embedded_primitives::STRUCTURAL),
-        _ => None,
+embedded_primitives! {
+    ACTIVATIONS,    "activations"    => "activations.py",
+    ATTENTION,      "attention"      => "attention.py",
+    CONVOLUTIONS,   "convolutions"   => "convolutions.py",
+    EMBEDDINGS,     "embeddings"     => "embeddings.py",
+    LINEAR,         "linear"         => "linear.py",
+    LOGGING,        "logging"        => "logging.py",
+    NORMALIZATION,  "normalization"  => "normalization.py",
+    OPERATIONS,     "operations"     => "operations.py",
+    POOLING,        "pooling"        => "pooling.py",
+    REGULARIZATION, "regularization" => "regularization.py",
+    STRUCTURAL,     "structural"     => "structural.py",
+}
+
+/// Strip the module-level docstring and import lines from an embedded Python source,
+/// emitting only the class definitions.  The caller provides a unified import block
+/// so per-file imports would be duplicates.
+fn strip_preamble(source: &str) -> String {
+    let mut out = String::new();
+    let mut in_module_docstring = false;
+    let mut preamble_done = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if !preamble_done {
+            // Detect opening of a module-level triple-quoted docstring
+            if !in_module_docstring && trimmed.starts_with("\"\"\"") {
+                in_module_docstring = true;
+                // Check if the docstring opens and closes on the same line
+                // (e.g. `"""one-liner"""`)
+                if trimmed.len() > 3 && trimmed[3..].contains("\"\"\"") {
+                    in_module_docstring = false;
+                }
+                continue;
+            }
+            // Inside a module-level docstring — skip until closing triple-quote
+            if in_module_docstring {
+                if trimmed.contains("\"\"\"") {
+                    in_module_docstring = false;
+                }
+                continue;
+            }
+            // Skip import / from lines
+            if trimmed.starts_with("import ") || trimmed.starts_with("from ") {
+                continue;
+            }
+            // Skip blank lines that are still part of the preamble
+            if trimmed.is_empty() {
+                continue;
+            }
+            // First non-preamble line (e.g. `class Foo(nn.Module):`)
+            preamble_done = true;
+        }
+
+        out.push_str(line);
+        out.push('\n');
     }
+
+    out
 }
 
 /// Options for code generation.
@@ -383,14 +430,15 @@ pub fn generate_pytorch_with_options(
     }
 
     let registry = StdlibRegistry::new();
-    let primitives: Vec<String> = all_primitives.iter().cloned().collect();
+    let primitives: Vec<String> = all_primitives.into_iter().collect();
 
     let mut imports_output = String::new();
 
     if options.bundle {
-        // Bundle mode: emit unified imports and inline primitive class definitions
+        // Bundle mode: emit a unified import block (superset of what all primitive
+        // files use) then inline only the class definitions that are needed.
         writeln!(imports_output, "import math").unwrap();
-        writeln!(imports_output, "from typing import Optional, Tuple").unwrap();
+        writeln!(imports_output, "from typing import List, Optional, Tuple, Union").unwrap();
         writeln!(imports_output, "import torch").unwrap();
         writeln!(imports_output, "import torch.nn as nn").unwrap();
         writeln!(imports_output, "import torch.nn.functional as F").unwrap();
@@ -400,25 +448,8 @@ pub fn generate_pytorch_with_options(
         let modules = registry.modules_for_primitives(&primitives);
         for module_path in &modules {
             if let Some(source) = embedded_source_for_module(module_path) {
-                writeln!(imports_output, "# --- inlined from {} ---", module_path).unwrap();
-                for line in source.lines() {
-                    let trimmed = line.trim();
-                    // Skip import/from lines — already covered by unified block above
-                    if trimmed.starts_with("import ")
-                        || trimmed.starts_with("from ")
-                        || trimmed.starts_with("\"\"\"")
-                            && source.lines().next().map_or(false, |l| {
-                                l.trim().starts_with("\"\"\"")
-                            })
-                    {
-                        // Skip module-level docstrings (triple-quoted at start)
-                        // and all import statements
-                        if trimmed.starts_with("import ") || trimmed.starts_with("from ") {
-                            continue;
-                        }
-                    }
-                    writeln!(imports_output, "{}", line).unwrap();
-                }
+                writeln!(imports_output, "# --- inlined from {} ---\n", module_path).unwrap();
+                imports_output.push_str(&strip_preamble(source));
                 writeln!(imports_output).unwrap();
             }
         }
