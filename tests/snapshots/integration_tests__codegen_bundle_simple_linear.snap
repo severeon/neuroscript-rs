@@ -1,0 +1,119 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import math
+from typing import List, Optional, Tuple, Union
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# --- inlined from neuroscript_runtime.primitives.linear ---
+
+class Linear(nn.Module):
+    """
+    Fully-connected linear transformation: y = xW^T + b
+
+    This is a shape-aware wrapper around torch.nn.Linear that validates
+    tensor dimensions according to NeuroScript's shape algebra.
+
+    Args:
+        in_features: Size of each input sample (last dimension)
+        out_features: Size of each output sample (last dimension)
+        bias: If True, adds a learnable bias. Default: True
+
+    Shape:
+        - Input: [*, in_features] where * means any number of dimensions
+        - Output: [*, out_features] with same leading dimensions as input
+
+    Examples:
+        >>> layer = Linear(512, 256)
+        >>> x = torch.randn(32, 10, 512)  # [batch, seq, in_features]
+        >>> out = layer(x)                 # [32, 10, 256]
+        >>> out.shape
+        torch.Size([32, 10, 256])
+
+    Notes:
+        - Preserves all leading dimensions (broadcasting-compatible)
+        - Weight shape: [out_features, in_features]
+        - Bias shape: [out_features] if bias=True
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> None:
+        super().__init__()
+
+        if in_features <= 0:
+            raise ValueError(f"in_features must be positive, got {in_features}")
+        if out_features <= 0:
+            raise ValueError(f"out_features must be positive, got {out_features}")
+
+        self.in_features = in_features
+        self.out_features = out_features
+
+        # Use PyTorch's Linear implementation for the actual computation
+        self.linear = nn.Linear(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            device=device,
+            dtype=dtype,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Apply linear transformation.
+
+        Args:
+            input: Input tensor of shape [*, in_features]
+
+        Returns:
+            Output tensor of shape [*, out_features]
+
+        Raises:
+            ValueError: If input's last dimension doesn't match in_features
+        """
+        # Validate input shape
+        if input.size(-1) != self.in_features:
+            raise ValueError(
+                f"Input feature dimension mismatch: expected {self.in_features}, "
+                f"got {input.size(-1)} (input shape: {list(input.shape)})"
+            )
+
+        # Validate input is at least 1D
+        if input.dim() == 0:
+            raise ValueError(
+                f"Input must be at least 1D, got scalar (shape: {list(input.shape)})"
+            )
+
+        return self.linear(input)
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"in_features={self.in_features}, out_features={self.out_features}, bias={self.linear.bias is not None}"
+
+    @property
+    def weight(self) -> torch.Tensor:
+        """Weight matrix [out_features, in_features]."""
+        return self.linear.weight
+
+    @property
+    def bias(self) -> Optional[torch.Tensor]:
+        """Bias vector [out_features] or None."""
+        return self.linear.bias
+
+class SimpleLinear(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_0 = Linear(512, 256)
+
+    def forward(self, x):
+        linear_0 = self.linear_0(x)
+        # Linear() output shape: [*, out_dim]
+        return linear_0
