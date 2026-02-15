@@ -1,12 +1,12 @@
 ---
 sidebar_position: 2
 title: Compiler Reference
-description: Complete reference for parse, validate, and compile commands
+description: Complete reference for parse, validate, compile, and list commands
 ---
 
 # Compiler Reference
 
-The NeuroScript CLI provides three commands for working with `.ns` source files: **parse**, **validate**, and **compile**.
+The NeuroScript CLI provides four commands for working with `.ns` source files: **parse**, **validate**, **compile**, and **list**.
 
 ## `neuroscript parse`
 
@@ -184,6 +184,12 @@ The bundled file includes:
 # Generate a self-contained model file
 neuroscript compile transformer.ns --bundle -o transformer.py
 
-# Verify it runs with only torch
-python -c "import torch; exec(open('transformer.py').read())"
+# Verify it works without neuroscript_runtime installed
+python -c "
+import importlib.util, torch
+spec = importlib.util.spec_from_file_location('model', 'transformer.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+print('Classes:', [c for c in dir(mod) if not c.startswith('_')])
+"
 ```
