@@ -63,10 +63,70 @@ pub fn resolve_neuron_contracts(program: &mut Program) -> Result<(), Vec<Validat
         errors.extend(resolve_contracts_for_neuron(program, neuron_name));
     }
 
+    // Post-resolution check: detect any remaining MatchSubject::Named patterns
+    // that weren't resolved (e.g., because the argument was a complex expression
+    // rather than a simple neuron name). These will cause codegen failures, so
+    // report them here with a clear message.
+    //
+    // Only run this check when resolution itself didn't produce errors — if
+    // resolution already failed (no matching arm, multi-step pipeline), the
+    // Named match is still present and would be redundantly flagged here.
+    if errors.is_empty() {
+        for (neuron_name, neuron) in &program.neurons {
+            if let NeuronBody::Graph { connections, .. } = &neuron.body {
+                for conn in connections {
+                    collect_unresolved_contracts(&conn.source, neuron_name, &mut errors);
+                    collect_unresolved_contracts(&conn.destination, neuron_name, &mut errors);
+                }
+            }
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+/// Check for remaining MatchSubject::Named patterns that were not resolved.
+/// These would cause codegen failures since NeuronContract patterns cannot be
+/// lowered to runtime shape checks.
+fn collect_unresolved_contracts(
+    endpoint: &Endpoint,
+    neuron_name: &str,
+    errors: &mut Vec<ValidationError>,
+) {
+    match endpoint {
+        Endpoint::Match(match_expr) => {
+            if let MatchSubject::Named(param_name) = &match_expr.subject {
+                errors.push(ValidationError::Custom(format!(
+                    "Unresolved contract match on '{}' in neuron '{}'. Contract dispatch \
+                     requires a concrete neuron name at the call site — ensure the argument \
+                     for '{}' is a direct neuron name, not a complex expression.",
+                    param_name, neuron_name, param_name
+                )));
+            }
+            // Also check nested endpoints in arms
+            for arm in &match_expr.arms {
+                for ep in &arm.pipeline {
+                    collect_unresolved_contracts(ep, neuron_name, errors);
+                }
+            }
+        }
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                for ep in &branch.pipeline {
+                    collect_unresolved_contracts(ep, neuron_name, errors);
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                for ep in else_branch {
+                    collect_unresolved_contracts(ep, neuron_name, errors);
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -129,7 +189,10 @@ fn resolve_contracts_for_neuron(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // Get the neuron definition to find which param is the subject
+    // Clone the neuron definition to release the immutable borrow on `program`.
+    // This is necessary because we later call `resolve_match_in_neuron` which
+    // borrows `program` mutably. The clone cost is acceptable since this only
+    // runs for neurons containing Named match subjects (typically few).
     let neuron = match program.neurons.get(neuron_name) {
         Some(n) => n.clone(),
         None => return errors,
@@ -542,8 +605,15 @@ fn ports_match(
     true
 }
 
-/// Check if a contract shape pattern matches a concrete shape
-/// Uses the existing shape compatibility check from the validator
+/// Check if a contract shape pattern matches a concrete shape.
+///
+/// Delegates to the validator's `shapes_compatible`, which checks structural
+/// compatibility: wildcards match any single dimension, variadics match zero
+/// or more, and named dimensions match any concrete dimension. This is the
+/// same semantics used for connection shape validation — contract patterns
+/// are intentionally treated identically to port shape patterns, since a
+/// contract arm like `in [*, seq, d]` means "this block accepts any shape
+/// matching `[*, seq, d]`", which is exactly what shapes_compatible checks.
 fn shape_pattern_matches(pattern: &Shape, concrete: &Shape) -> bool {
     crate::validator::shapes::shapes_compatible(pattern, concrete)
 }
@@ -984,5 +1054,186 @@ mod tests {
         } else {
             panic!("Expected Graph body");
         }
+    }
+
+    #[test]
+    fn test_contract_match_nested_in_if_branch() {
+        // Contract match inside an if-expression branch should still be resolved
+        let mut program = Program::new();
+        program.neurons.insert(
+            "Block2D".to_string(),
+            NeuronDef {
+                name: "Block2D".to_string(),
+                params: vec![],
+                inputs: vec![make_port(
+                    "default",
+                    vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                )],
+                outputs: vec![make_port(
+                    "default",
+                    vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                )],
+                body: NeuronBody::Primitive(ImplRef::Source {
+                    source: "test".to_string(),
+                    path: "test".to_string(),
+                }),
+                max_cycle_depth: None,
+                doc: None,
+            },
+        );
+
+        // Higher-order neuron with contract match nested inside an if branch pipeline
+        let contract_match = Endpoint::Match(MatchExpr {
+            subject: MatchSubject::Named("block".to_string()),
+            arms: vec![make_neuron_contract_arm(
+                vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                vec![ref_endpoint("blocks")],
+            )],
+            id: 0,
+        });
+
+        program.neurons.insert(
+            "Conditional".to_string(),
+            NeuronDef {
+                name: "Conditional".to_string(),
+                params: vec![
+                    Param {
+                        name: "block".to_string(),
+                        default: None,
+                        type_annotation: Some(ParamType::Neuron),
+                    },
+                    Param {
+                        name: "use_block".to_string(),
+                        default: Some(Value::Int(1)),
+                        type_annotation: None,
+                    },
+                ],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: ref_endpoint("in"),
+                        destination: Endpoint::If(IfExpr {
+                            branches: vec![IfBranch {
+                                condition: Value::Name("use_block".to_string()),
+                                pipeline: vec![contract_match],
+                            }],
+                            else_branch: Some(vec![ref_endpoint("out")]),
+                            id: 0,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        // Caller
+        program.neurons.insert(
+            "Caller".to_string(),
+            NeuronDef {
+                name: "Caller".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![Binding {
+                        name: "c".to_string(),
+                        call_name: "Conditional".to_string(),
+                        args: vec![
+                            Value::Name("Block2D".to_string()),
+                            Value::Int(1),
+                        ],
+                        kwargs: vec![],
+                        scope: Scope::Instance { lazy: false },
+                        frozen: false,
+                        unroll_group: None,
+                    }],
+                    context_unrolls: vec![],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = resolve_neuron_contracts(&mut program);
+        assert!(result.is_ok());
+
+        // Verify the nested contract match was resolved inside the if branch
+        let conditional = program.neurons.get("Conditional").unwrap();
+        if let NeuronBody::Graph { connections, .. } = &conditional.body {
+            if let Endpoint::If(if_expr) = &connections[0].destination {
+                assert_eq!(if_expr.branches.len(), 1);
+                // The contract match should have been replaced with Ref("blocks")
+                assert_eq!(if_expr.branches[0].pipeline.len(), 1);
+                match &if_expr.branches[0].pipeline[0] {
+                    Endpoint::Ref(port_ref) => {
+                        assert_eq!(port_ref.node, "blocks");
+                    }
+                    other => panic!(
+                        "Expected Ref endpoint in if branch, got {:?}",
+                        other
+                    ),
+                }
+            } else {
+                panic!("Expected If endpoint");
+            }
+        } else {
+            panic!("Expected Graph body");
+        }
+    }
+
+    #[test]
+    fn test_unresolved_contract_detected_post_resolution() {
+        // A higher-order neuron with a Named match but no call sites should
+        // be flagged as unresolved in the post-resolution check
+        let mut program = Program::new();
+
+        program.neurons.insert(
+            "Uncalled".to_string(),
+            NeuronDef {
+                name: "Uncalled".to_string(),
+                params: vec![Param {
+                    name: "block".to_string(),
+                    default: None,
+                    type_annotation: Some(ParamType::Neuron),
+                }],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: ref_endpoint("in"),
+                        destination: Endpoint::Match(MatchExpr {
+                            subject: MatchSubject::Named("block".to_string()),
+                            arms: vec![make_neuron_contract_arm(
+                                vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                                vec![Dim::Wildcard, Dim::Named("dim".to_string())],
+                                vec![ref_endpoint("blocks")],
+                            )],
+                            id: 0,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = resolve_neuron_contracts(&mut program);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        let msg = format!("{}", errors[0]);
+        assert!(
+            msg.contains("Unresolved contract match"),
+            "Expected 'Unresolved contract match' error, got: {}",
+            msg
+        );
     }
 }
