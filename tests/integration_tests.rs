@@ -9,7 +9,7 @@
 //! Snapshots are stored in tests/snapshots/ and managed by the `insta` crate.
 
 use neuroscript::interfaces::*;
-use neuroscript::{generate_pytorch, parse, validate};
+use neuroscript::{generate_pytorch, generate_pytorch_with_options, CodegenOptions, parse, validate};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -591,6 +591,74 @@ fn snapshot_codegen_cnn_demo_2() {
 }
 
 // ============================================================================
+// Unroll Codegen Snapshot Tests
+// ============================================================================
+
+#[test]
+fn snapshot_codegen_unroll_context() {
+    let source =
+        fs::read_to_string("examples/unroll_context.ns").expect("Failed to read unroll_context.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "NamedStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_context", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_gpt2() {
+    let source =
+        fs::read_to_string("examples/unroll_gpt2.ns").expect("Failed to read unroll_gpt2.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "GPT2Small").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_gpt2", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_static() {
+    let source =
+        fs::read_to_string("examples/unroll_static.ns").expect("Failed to read unroll_static.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "SharedLayers").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_static", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_threaded() {
+    let source = fs::read_to_string("examples/unroll_threaded.ns")
+        .expect("Failed to read unroll_threaded.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "TransformerStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_threaded", code);
+}
+
+// ============================================================================
 // Error Message Snapshot Tests
 // ============================================================================
 
@@ -719,4 +787,150 @@ fn snapshot_all_examples() {
             }
         }
     }
+}
+
+// ============================================================================
+// Bundle Mode Tests
+// ============================================================================
+
+#[test]
+fn bundle_mode_no_runtime_imports() {
+    let source = r#"
+use core,nn/*
+
+neuron SimpleLinear:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 256) -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+
+    let options = CodegenOptions { bundle: true };
+    let code =
+        generate_pytorch_with_options(&program, "SimpleLinear", &options).expect("Codegen failed");
+
+    // Must not contain any neuroscript_runtime import statements (comments are fine)
+    let has_runtime_import = code.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed.starts_with("from neuroscript_runtime") || trimmed.starts_with("import neuroscript_runtime")
+    });
+    assert!(
+        !has_runtime_import,
+        "Bundle mode output must not import from neuroscript_runtime.\nGot:\n{}",
+        code
+    );
+
+    // Must contain inlined class definitions
+    assert!(
+        code.contains("class Linear(nn.Module):"),
+        "Bundle mode output must inline the Linear class definition"
+    );
+
+    // Must contain the unified import block
+    assert!(code.contains("import torch"));
+    assert!(code.contains("import torch.nn as nn"));
+    assert!(code.contains("import torch.nn.functional as F"));
+}
+
+#[test]
+fn bundle_mode_strips_module_docstrings() {
+    let source = r#"
+use core,nn/*
+
+neuron SimpleLinear:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 256) -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+
+    let options = CodegenOptions { bundle: true };
+    let code =
+        generate_pytorch_with_options(&program, "SimpleLinear", &options).expect("Codegen failed");
+
+    // The linear.py module docstring mentions "Linear (dense/fully-connected) layer primitive."
+    // It must be stripped in bundle mode.
+    assert!(
+        !code.contains("Linear (dense/fully-connected) layer primitive"),
+        "Bundle mode must strip module-level docstrings.\nGot:\n{}",
+        code
+    );
+}
+
+#[test]
+fn bundle_mode_default_mode_unchanged() {
+    let source = r#"
+use core,nn/*
+
+neuron SimpleLinear:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 256) -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+
+    // Default options (bundle: false) must produce the same output as generate_pytorch
+    let default_code = generate_pytorch(&program, "SimpleLinear").expect("Codegen failed");
+    let options = CodegenOptions { bundle: false };
+    let explicit_code =
+        generate_pytorch_with_options(&program, "SimpleLinear", &options).expect("Codegen failed");
+
+    assert_eq!(default_code, explicit_code);
+
+    // Default mode must use neuroscript_runtime imports
+    assert!(
+        default_code.contains("from neuroscript_runtime"),
+        "Default mode should import from neuroscript_runtime"
+    );
+}
+
+#[test]
+fn bundle_mode_snapshot() {
+    let source = r#"
+use core,nn/*
+
+neuron SimpleLinear:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 256) -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+
+    let options = CodegenOptions { bundle: true };
+    let code =
+        generate_pytorch_with_options(&program, "SimpleLinear", &options).expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_bundle_simple_linear", code);
 }

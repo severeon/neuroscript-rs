@@ -34,7 +34,7 @@ pub mod validator;
 pub mod wasm;
 
 // Re-export main IR types (avoiding glob to prevent conflicts)
-pub use codegen::generate_pytorch;
+pub use codegen::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
 pub use interfaces::*;
 // Shape algebra and stdlib registry accessed via their modules to avoid conflicts
 pub use validator::*;
@@ -45,10 +45,13 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 }
 
 /// Validate a NeuroScript program for correctness:
-/// 1. All referenced neurons exist
-/// 2. Connection endpoints match (tuple arity, port names, shapes)
-/// 3. No cycles in the dependency graph
-/// 4. Shape compatibility for all connections
+/// 1. Expand unroll constructs (named aggregates)
+/// 2. All referenced neurons exist
+/// 3. Connection endpoints match (tuple arity, port names, shapes)
+/// 4. No cycles in the dependency graph
+/// 5. Shape compatibility for all connections (shape inference)
+/// 6. Resolve neuron contract match expressions (`match(param): ...`)
+///    for higher-order neurons with `: Neuron` typed parameters
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Expand unroll constructs before any validation
     unroll::expand_unrolls(program)?;

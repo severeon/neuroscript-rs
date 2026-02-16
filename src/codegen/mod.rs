@@ -22,7 +22,7 @@ pub mod utils;
 
 // Re-exports for public API
 pub use crate::interfaces::CodegenError;
-pub use generator::generate_pytorch;
+pub use generator::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
 
 #[cfg(test)]
 mod tests;

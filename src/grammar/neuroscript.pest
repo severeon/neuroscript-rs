@@ -201,7 +201,7 @@ param = {
 }
 
 type_annotation = {
-    ident  // Currently only "NeuronType" is supported
+    ident  // Currently only "Neuron" (or legacy "NeuronType") is supported
 }
 
 // ============================================================================

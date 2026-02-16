@@ -635,6 +635,19 @@ impl StdlibRegistry {
         imports.sort();
         imports
     }
+
+    /// Get unique module paths for a set of used primitives, sorted for deterministic output.
+    pub fn modules_for_primitives(&self, used_primitives: &[String]) -> Vec<String> {
+        let mut modules = std::collections::BTreeSet::new();
+        for name in used_primitives {
+            if let Some(impl_ref) = self.lookup(name) {
+                if let ImplRef::Source { source, .. } = impl_ref {
+                    modules.insert(source.clone());
+                }
+            }
+        }
+        modules.into_iter().collect()
+    }
 }
 
 impl Default for StdlibRegistry {

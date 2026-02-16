@@ -24,18 +24,35 @@ pub fn optimize_matches(program: &mut Program, enable_dead_elim: bool) -> usize 
 
 fn optimize_endpoint(endpoint: &mut Endpoint) -> usize {
     let mut count = 0;
-    if let Endpoint::Match(match_expr) = endpoint {
-        // Prune arms
-        let initial_len = match_expr.arms.len();
-        match_expr.arms.retain(|arm| arm.is_reachable);
-        count += initial_len - match_expr.arms.len();
+    match endpoint {
+        Endpoint::Match(match_expr) => {
+            // Prune arms
+            let initial_len = match_expr.arms.len();
+            match_expr.arms.retain(|arm| arm.is_reachable);
+            count += initial_len - match_expr.arms.len();
 
-        // Recurse into remaining arms
-        for arm in &mut match_expr.arms {
-            for pipe_endpoint in &mut arm.pipeline {
-                count += optimize_endpoint(pipe_endpoint);
+            // Recurse into remaining arms
+            for arm in &mut match_expr.arms {
+                for pipe_endpoint in &mut arm.pipeline {
+                    count += optimize_endpoint(pipe_endpoint);
+                }
             }
         }
+        Endpoint::If(if_expr) => {
+            // Recurse into if/elif branches
+            for branch in &mut if_expr.branches {
+                for pipe_endpoint in &mut branch.pipeline {
+                    count += optimize_endpoint(pipe_endpoint);
+                }
+            }
+            // Recurse into else branch
+            if let Some(else_branch) = &mut if_expr.else_branch {
+                for pipe_endpoint in else_branch {
+                    count += optimize_endpoint(pipe_endpoint);
+                }
+            }
+        }
+        _ => {}
     }
     count
 }
@@ -57,14 +74,31 @@ pub fn count_matches(program: &Program) -> usize {
 
 fn count_matches_in_endpoint(endpoint: &Endpoint) -> usize {
     let mut count = 0;
-    if let Endpoint::Match(match_expr) = endpoint {
-        count += 1;
-        // Recurse into arms
-        for arm in &match_expr.arms {
-            for pipe_endpoint in &arm.pipeline {
-                count += count_matches_in_endpoint(pipe_endpoint);
+    match endpoint {
+        Endpoint::Match(match_expr) => {
+            count += 1;
+            // Recurse into arms
+            for arm in &match_expr.arms {
+                for pipe_endpoint in &arm.pipeline {
+                    count += count_matches_in_endpoint(pipe_endpoint);
+                }
             }
         }
+        Endpoint::If(if_expr) => {
+            // Recurse into if/elif branches
+            for branch in &if_expr.branches {
+                for pipe_endpoint in &branch.pipeline {
+                    count += count_matches_in_endpoint(pipe_endpoint);
+                }
+            }
+            // Recurse into else branch
+            if let Some(else_branch) = &if_expr.else_branch {
+                for pipe_endpoint in else_branch {
+                    count += count_matches_in_endpoint(pipe_endpoint);
+                }
+            }
+        }
+        _ => {}
     }
     count
 }

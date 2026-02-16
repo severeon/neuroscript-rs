@@ -132,7 +132,7 @@ pub(super) fn substitute_params(ports: &[Port], params: &[Param], args: &[Value]
 }
 
 /// Substitute parameter values in a shape
-pub(super) fn substitute_shape(shape: &Shape, bindings: &HashMap<String, i64>) -> Shape {
+pub(crate) fn substitute_shape(shape: &Shape, bindings: &HashMap<String, i64>) -> Shape {
     Shape {
         dims: shape
             .dims
@@ -143,7 +143,7 @@ pub(super) fn substitute_shape(shape: &Shape, bindings: &HashMap<String, i64>) -
 }
 
 /// Substitute parameter values in a dimension
-pub(super) fn substitute_dim(dim: &Dim, bindings: &HashMap<String, i64>) -> Dim {
+pub(crate) fn substitute_dim(dim: &Dim, bindings: &HashMap<String, i64>) -> Dim {
     match dim {
         Dim::Named(name) => {
             if let Some(val) = bindings.get(name) {
