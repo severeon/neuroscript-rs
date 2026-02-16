@@ -591,6 +591,74 @@ fn snapshot_codegen_cnn_demo_2() {
 }
 
 // ============================================================================
+// Unroll Codegen Snapshot Tests
+// ============================================================================
+
+#[test]
+fn snapshot_codegen_unroll_context() {
+    let source =
+        fs::read_to_string("examples/unroll_context.ns").expect("Failed to read unroll_context.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "NamedStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_context", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_gpt2() {
+    let source =
+        fs::read_to_string("examples/unroll_gpt2.ns").expect("Failed to read unroll_gpt2.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "GPT2Small").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_gpt2", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_static() {
+    let source =
+        fs::read_to_string("examples/unroll_static.ns").expect("Failed to read unroll_static.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "SharedLayers").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_static", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_threaded() {
+    let source = fs::read_to_string("examples/unroll_threaded.ns")
+        .expect("Failed to read unroll_threaded.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "TransformerStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_threaded", code);
+}
+
+// ============================================================================
 // Error Message Snapshot Tests
 // ============================================================================
 

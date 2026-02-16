@@ -1,0 +1,92 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.activations import GELU
+from neuroscript_runtime.primitives.attention import MultiHeadSelfAttention
+from neuroscript_runtime.primitives.embeddings import Embedding
+from neuroscript_runtime.primitives.linear import Linear
+from neuroscript_runtime.primitives.normalization import LayerNorm
+from neuroscript_runtime.primitives.regularization import Dropout
+from neuroscript_runtime.primitives.structural import Add
+
+class FFN(nn.Module):
+    def __init__(self, dim, expansion):
+        super().__init__()
+        self.dim = dim
+        self.expansion = expansion
+        self.g_e_l_u_1 = GELU()
+        self.linear_0 = Linear(dim, expansion)
+        self.linear_2 = Linear(expansion, dim)
+
+    def forward(self, x):
+        linear_0 = self.linear_0(x)
+        # Linear() output shape: [*batch, out_dim]
+        g_e_l_u_1 = self.g_e_l_u_1(linear_0)
+        # GELU() output shape: [*shape]
+        linear_2 = self.linear_2(g_e_l_u_1)
+        # Linear() output shape: [*batch, out_dim]
+        return linear_2
+
+class TransformerBlock(nn.Module):
+    def __init__(self, dim, num_heads, d_ff):
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.d_ff = d_ff
+        self.add_3 = Add()
+        self.add_7 = Add()
+        self.dropout_2 = Dropout(0.1)
+        self.dropout_6 = Dropout(0.1)
+        self.f_f_n_5 = FFN(dim, d_ff)
+        self.layer_norm_0 = LayerNorm(dim)
+        self.layer_norm_4 = LayerNorm(dim)
+        self.multi_head_self_attention_1 = MultiHeadSelfAttention(dim, num_heads)
+
+    def forward(self, x):
+        skip1 = x
+        attn_path = x
+        layer_norm_0 = self.layer_norm_0(attn_path)
+        # LayerNorm() output shape: [*shape, dim]
+        multi_head_self_attention_1 = self.multi_head_self_attention_1(layer_norm_0)
+        # MultiHeadSelfAttention() output shape: [*batch, seq_len, dim]
+        dropout_2 = self.dropout_2(multi_head_self_attention_1)
+        # Dropout() output shape: [*shape]
+        add_3 = self.add_3((skip1, dropout_2))
+        skip2 = add_3
+        ffn_path = add_3
+        layer_norm_4 = self.layer_norm_4(ffn_path)
+        # LayerNorm() output shape: [*shape, dim]
+        f_f_n_5 = self.f_f_n_5(layer_norm_4)
+        dropout_6 = self.dropout_6(f_f_n_5)
+        # Dropout() output shape: [*shape]
+        add_7 = self.add_7((skip2, dropout_6))
+        return add_7
+
+class GPT2Small(nn.Module):
+    def __init__(self, vocab_size=50257, d_model=768, num_heads=12, d_ff=3072, num_layers=12):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_ff = d_ff
+        self.num_layers = num_layers
+        self.embed = Embedding(vocab_size, d_model)
+        self.ln_f = LayerNorm(d_model)
+        self.head = Linear(d_model, vocab_size)
+        self.blocks = nn.ModuleList([
+            TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)
+        ])
+
+    def forward(self, x):
+        embed = self.embed(x)
+        # Embedding() output shape: [*batch, seq_len, embedding_dim]
+        for block in self.blocks:
+            embed = block(embed)
+        ln_f = self.ln_f(embed)
+        # LayerNorm() output shape: [*shape, dim]
+        head = self.head(ln_f)
+        # Linear() output shape: [*batch, out_dim]
+        return head

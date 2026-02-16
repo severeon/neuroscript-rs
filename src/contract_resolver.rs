@@ -23,14 +23,19 @@
 //! against each arm's contract. The first matching arm's pipeline replaces the
 //! match expression.
 //!
-//! # Limitations
+//! # Multi-endpoint pipelines
 //!
-//! - Only `Value::Name` arguments are resolved. Complex expressions (conditionals,
-//!   calls) passed as neuron parameters are left unresolved for runtime handling.
-//! - Single-endpoint pipelines in matching arms are replaced inline. Multi-endpoint
-//!   pipelines require connection graph restructuring and are reported as errors.
+//! When a matching arm contains a multi-step pipeline (e.g., `blocks -> out`),
+//! the resolver splices the pipeline into the parent connection graph:
+//! - The first endpoint replaces the match expression inline
+//! - Additional connections are inserted for the remaining pipeline steps
 
 use crate::interfaces::*;
+use std::collections::HashMap;
+
+/// Maximum recursion depth for contract resolution to prevent infinite loops
+/// in pathological cases (e.g., mutually recursive contract definitions).
+const MAX_CONTRACT_RESOLUTION_DEPTH: usize = 32;
 
 /// Resolve all neuron contract match expressions in the program.
 ///
@@ -40,8 +45,7 @@ use crate::interfaces::*;
 /// 3. Match ports against each arm's `NeuronPortContract`
 /// 4. Select the first matching arm's pipeline
 ///
-/// Returns `Err` with collected errors if any contracts cannot be resolved
-/// (no matching arm, or multi-endpoint pipeline limitation).
+/// Returns `Err` with collected errors if any contracts cannot be resolved.
 #[must_use]
 pub fn resolve_neuron_contracts(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     let mut errors = Vec::new();
@@ -69,14 +73,14 @@ pub fn resolve_neuron_contracts(program: &mut Program) -> Result<(), Vec<Validat
     // report them here with a clear message.
     //
     // Only run this check when resolution itself didn't produce errors — if
-    // resolution already failed (no matching arm, multi-step pipeline), the
-    // Named match is still present and would be redundantly flagged here.
+    // resolution already failed (no matching arm, etc.), the Named match is
+    // still present and would be redundantly flagged here.
     if errors.is_empty() {
         for (neuron_name, neuron) in &program.neurons {
             if let NeuronBody::Graph { connections, .. } = &neuron.body {
                 for conn in connections {
-                    collect_unresolved_contracts(&conn.source, neuron_name, &mut errors);
-                    collect_unresolved_contracts(&conn.destination, neuron_name, &mut errors);
+                    collect_unresolved_contracts(&conn.source, neuron_name, &mut errors, 0);
+                    collect_unresolved_contracts(&conn.destination, neuron_name, &mut errors, 0);
                 }
             }
         }
@@ -96,7 +100,11 @@ fn collect_unresolved_contracts(
     endpoint: &Endpoint,
     neuron_name: &str,
     errors: &mut Vec<ValidationError>,
+    depth: usize,
 ) {
+    if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        return;
+    }
     match endpoint {
         Endpoint::Match(match_expr) => {
             if let MatchSubject::Named(param_name) = &match_expr.subject {
@@ -110,19 +118,19 @@ fn collect_unresolved_contracts(
             // Also check nested endpoints in arms
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
-                    collect_unresolved_contracts(ep, neuron_name, errors);
+                    collect_unresolved_contracts(ep, neuron_name, errors, depth + 1);
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &if_expr.branches {
                 for ep in &branch.pipeline {
-                    collect_unresolved_contracts(ep, neuron_name, errors);
+                    collect_unresolved_contracts(ep, neuron_name, errors, depth + 1);
                 }
             }
             if let Some(else_branch) = &if_expr.else_branch {
                 for ep in else_branch {
-                    collect_unresolved_contracts(ep, neuron_name, errors);
+                    collect_unresolved_contracts(ep, neuron_name, errors, depth + 1);
                 }
             }
         }
@@ -134,7 +142,8 @@ fn collect_unresolved_contracts(
 fn has_named_match(neuron: &NeuronDef) -> bool {
     if let NeuronBody::Graph { connections, .. } = &neuron.body {
         for conn in connections {
-            if endpoint_has_named_match(&conn.source) || endpoint_has_named_match(&conn.destination)
+            if endpoint_has_named_match(&conn.source, 0)
+                || endpoint_has_named_match(&conn.destination, 0)
             {
                 return true;
             }
@@ -144,7 +153,10 @@ fn has_named_match(neuron: &NeuronDef) -> bool {
 }
 
 /// Recursively check if an endpoint contains a named match
-fn endpoint_has_named_match(endpoint: &Endpoint) -> bool {
+fn endpoint_has_named_match(endpoint: &Endpoint, depth: usize) -> bool {
+    if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        return false;
+    }
     match endpoint {
         Endpoint::Match(match_expr) => {
             if matches!(match_expr.subject, MatchSubject::Named(_)) {
@@ -153,7 +165,7 @@ fn endpoint_has_named_match(endpoint: &Endpoint) -> bool {
             // Also check nested endpoints in arms
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
-                    if endpoint_has_named_match(ep) {
+                    if endpoint_has_named_match(ep, depth + 1) {
                         return true;
                     }
                 }
@@ -163,14 +175,14 @@ fn endpoint_has_named_match(endpoint: &Endpoint) -> bool {
         Endpoint::If(if_expr) => {
             for branch in &if_expr.branches {
                 for ep in &branch.pipeline {
-                    if endpoint_has_named_match(ep) {
+                    if endpoint_has_named_match(ep, depth + 1) {
                         return true;
                     }
                 }
             }
             if let Some(else_branch) = &if_expr.else_branch {
                 for ep in else_branch {
-                    if endpoint_has_named_match(ep) {
+                    if endpoint_has_named_match(ep, depth + 1) {
                         return true;
                     }
                 }
@@ -189,50 +201,94 @@ fn resolve_contracts_for_neuron(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // Clone the neuron definition to release the immutable borrow on `program`.
-    // This is necessary because we later call `resolve_match_in_neuron` which
-    // borrows `program` mutably. The clone cost is acceptable since this only
-    // runs for neurons containing Named match subjects (typically few).
-    let neuron = match program.neurons.get(neuron_name) {
-        Some(n) => n.clone(),
-        None => return errors,
+    // Extract only the data we need from the neuron definition before taking a
+    // mutable borrow on `program` for `resolve_match_in_neuron`. This avoids
+    // cloning the entire NeuronDef.
+    let (match_params, param_info) = {
+        let neuron = match program.neurons.get(neuron_name) {
+            Some(n) => n,
+            None => return errors,
+        };
+
+        let match_params = collect_named_match_params(neuron);
+        if match_params.is_empty() {
+            return errors;
+        }
+
+        // Extract (name, index, type_annotation) for each param used in a named match
+        let param_info: Vec<(String, usize, Option<ParamType>)> = match_params
+            .iter()
+            .filter_map(|name| {
+                neuron.params.iter().position(|p| &p.name == name).map(|idx| {
+                    (
+                        name.clone(),
+                        idx,
+                        neuron.params[idx].type_annotation.clone(),
+                    )
+                })
+            })
+            .collect();
+
+        (match_params, param_info)
     };
 
-    // Find named match subjects and their parameter names
-    let match_params: Vec<String> = collect_named_match_params(&neuron);
-    if match_params.is_empty() {
-        return errors;
-    }
+    let _ = match_params; // consumed via param_info
 
     // For each parameter used in a named match, find call sites that pass a concrete neuron
     // and resolve the match at that call site
-    for param_name in &match_params {
-        // Find the parameter index
-        let param_idx = match neuron.params.iter().position(|p| &p.name == param_name) {
-            Some(idx) => idx,
-            None => continue,
-        };
+    for (param_name, param_idx, type_annotation) in &param_info {
+        // Verify the parameter is typed as Neuron. The validator should have already
+        // caught this, but we check defensively to avoid resolving contracts on
+        // non-Neuron parameters.
+        if *type_annotation != Some(ParamType::Neuron) {
+            errors.push(ValidationError::Custom(format!(
+                "Parameter '{}' in neuron '{}' is used in a contract match but is not \
+                 typed as `: Neuron`. Add the type annotation to enable contract resolution.",
+                param_name, neuron_name
+            )));
+            continue;
+        }
 
         // Find all call sites in the program that instantiate this neuron.
         // Only `Value::Name` arguments are detected — complex expressions (conditionals,
         // nested calls) are intentionally skipped, as they cannot be resolved at compile
         // time. Such cases are left for runtime resolution or will produce a codegen error
         // if they contain NeuronContract patterns.
-        let call_sites: Vec<(String, String)> = find_call_sites(program, neuron_name, param_idx);
+        let call_sites: Vec<(String, String)> =
+            find_call_sites(program, neuron_name, param_name, *param_idx);
 
         // For each call site, resolve the contract
         for (_caller_name, concrete_neuron_name) in &call_sites {
             // Look up the concrete neuron's port declarations
             if let Some(concrete_neuron) = program.neurons.get(concrete_neuron_name) {
+                // Build a substitution map from the concrete neuron's parameter defaults.
+                // This resolves named dimensions (e.g., `d_model`) in port shapes when
+                // the neuron has default values for those parameters.
+                let bindings = build_default_bindings(&concrete_neuron.params);
+
                 let input_ports: Vec<(String, Shape)> = concrete_neuron
                     .inputs
                     .iter()
-                    .map(|p| (p.name.clone(), p.shape.clone()))
+                    .map(|p| {
+                        let shape = if bindings.is_empty() {
+                            p.shape.clone()
+                        } else {
+                            crate::validator::shapes::substitute_shape(&p.shape, &bindings)
+                        };
+                        (p.name.clone(), shape)
+                    })
                     .collect();
                 let output_ports: Vec<(String, Shape)> = concrete_neuron
                     .outputs
                     .iter()
-                    .map(|p| (p.name.clone(), p.shape.clone()))
+                    .map(|p| {
+                        let shape = if bindings.is_empty() {
+                            p.shape.clone()
+                        } else {
+                            crate::validator::shapes::substitute_shape(&p.shape, &bindings)
+                        };
+                        (p.name.clone(), shape)
+                    })
                     .collect();
 
                 // Try to resolve the match expression
@@ -250,13 +306,25 @@ fn resolve_contracts_for_neuron(
     errors
 }
 
+/// Build a bindings map from parameter default values.
+/// Maps parameter names to their integer default values for shape substitution.
+fn build_default_bindings(params: &[Param]) -> HashMap<String, i64> {
+    let mut bindings = HashMap::new();
+    for param in params {
+        if let Some(Value::Int(val)) = &param.default {
+            bindings.insert(param.name.clone(), *val);
+        }
+    }
+    bindings
+}
+
 /// Collect parameter names used as subjects in named match expressions
 fn collect_named_match_params(neuron: &NeuronDef) -> Vec<String> {
     let mut params = Vec::new();
     if let NeuronBody::Graph { connections, .. } = &neuron.body {
         for conn in connections {
-            collect_named_params_from_endpoint(&conn.source, &mut params);
-            collect_named_params_from_endpoint(&conn.destination, &mut params);
+            collect_named_params_from_endpoint(&conn.source, &mut params, 0);
+            collect_named_params_from_endpoint(&conn.destination, &mut params, 0);
         }
     }
     params.sort();
@@ -264,7 +332,10 @@ fn collect_named_match_params(neuron: &NeuronDef) -> Vec<String> {
     params
 }
 
-fn collect_named_params_from_endpoint(endpoint: &Endpoint, params: &mut Vec<String>) {
+fn collect_named_params_from_endpoint(endpoint: &Endpoint, params: &mut Vec<String>, depth: usize) {
+    if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        return;
+    }
     match endpoint {
         Endpoint::Match(match_expr) => {
             if let MatchSubject::Named(name) = &match_expr.subject {
@@ -272,19 +343,19 @@ fn collect_named_params_from_endpoint(endpoint: &Endpoint, params: &mut Vec<Stri
             }
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
-                    collect_named_params_from_endpoint(ep, params);
+                    collect_named_params_from_endpoint(ep, params, depth + 1);
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &if_expr.branches {
                 for ep in &branch.pipeline {
-                    collect_named_params_from_endpoint(ep, params);
+                    collect_named_params_from_endpoint(ep, params, depth + 1);
                 }
             }
             if let Some(else_branch) = &if_expr.else_branch {
                 for ep in else_branch {
-                    collect_named_params_from_endpoint(ep, params);
+                    collect_named_params_from_endpoint(ep, params, depth + 1);
                 }
             }
         }
@@ -295,12 +366,14 @@ fn collect_named_params_from_endpoint(endpoint: &Endpoint, params: &mut Vec<Stri
 /// Find call sites in the program that instantiate the given neuron.
 /// Returns `(caller_neuron_name, concrete_arg_value)` pairs.
 ///
-/// Only detects `Value::Name` arguments at the neuron parameter position.
-/// Complex expressions (conditionals, nested calls, arithmetic) are not
-/// resolvable at compile time and are intentionally skipped.
+/// Checks both positional arguments (by `param_idx`) and keyword arguments
+/// (by `param_name`). Only `Value::Name` arguments are detected — complex
+/// expressions (conditionals, nested calls, arithmetic) are not resolvable
+/// at compile time and are intentionally skipped.
 fn find_call_sites(
     program: &Program,
     target_neuron: &str,
+    param_name: &str,
     param_idx: usize,
 ) -> Vec<(String, String)> {
     let mut sites = Vec::new();
@@ -315,8 +388,18 @@ fn find_call_sites(
             // Check context bindings
             for binding in context_bindings {
                 if binding.call_name == target_neuron {
+                    // Check positional args first
                     if let Some(Value::Name(arg_name)) = binding.args.get(param_idx) {
                         sites.push((caller_name.clone(), arg_name.clone()));
+                    } else {
+                        // Check kwargs by parameter name
+                        for (kw_name, kw_value) in &binding.kwargs {
+                            if kw_name == param_name {
+                                if let Value::Name(arg_name) = kw_value {
+                                    sites.push((caller_name.clone(), arg_name.clone()));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -326,16 +409,20 @@ fn find_call_sites(
                 find_call_sites_in_endpoint(
                     &conn.source,
                     target_neuron,
+                    param_name,
                     param_idx,
                     caller_name,
                     &mut sites,
+                    0,
                 );
                 find_call_sites_in_endpoint(
                     &conn.destination,
                     target_neuron,
+                    param_name,
                     param_idx,
                     caller_name,
                     &mut sites,
+                    0,
                 );
             }
         }
@@ -347,34 +434,75 @@ fn find_call_sites(
 fn find_call_sites_in_endpoint(
     endpoint: &Endpoint,
     target_neuron: &str,
+    param_name: &str,
     param_idx: usize,
     caller_name: &str,
     sites: &mut Vec<(String, String)>,
+    depth: usize,
 ) {
+    if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        return;
+    }
     match endpoint {
-        Endpoint::Call { name, args, .. } => {
+        Endpoint::Call {
+            name, args, kwargs, ..
+        } => {
             if name == target_neuron {
+                // Check positional args first
                 if let Some(Value::Name(arg_name)) = args.get(param_idx) {
                     sites.push((caller_name.to_string(), arg_name.clone()));
+                } else {
+                    // Check kwargs by parameter name
+                    for (kw_name, kw_value) in kwargs {
+                        if kw_name == param_name {
+                            if let Value::Name(arg_name) = kw_value {
+                                sites.push((caller_name.to_string(), arg_name.clone()));
+                            }
+                        }
+                    }
                 }
             }
         }
         Endpoint::Match(match_expr) => {
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
-                    find_call_sites_in_endpoint(ep, target_neuron, param_idx, caller_name, sites);
+                    find_call_sites_in_endpoint(
+                        ep,
+                        target_neuron,
+                        param_name,
+                        param_idx,
+                        caller_name,
+                        sites,
+                        depth + 1,
+                    );
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &if_expr.branches {
                 for ep in &branch.pipeline {
-                    find_call_sites_in_endpoint(ep, target_neuron, param_idx, caller_name, sites);
+                    find_call_sites_in_endpoint(
+                        ep,
+                        target_neuron,
+                        param_name,
+                        param_idx,
+                        caller_name,
+                        sites,
+                        depth + 1,
+                    );
                 }
             }
             if let Some(else_branch) = &if_expr.else_branch {
                 for ep in else_branch {
-                    find_call_sites_in_endpoint(ep, target_neuron, param_idx, caller_name, sites);
+                    find_call_sites_in_endpoint(
+                        ep,
+                        target_neuron,
+                        param_name,
+                        param_idx,
+                        caller_name,
+                        sites,
+                        depth + 1,
+                    );
                 }
             }
         }
@@ -384,6 +512,9 @@ fn find_call_sites_in_endpoint(
 
 /// Resolve a named match expression in a neuron by checking concrete port shapes
 /// against the match arm contracts. Returns any errors encountered.
+///
+/// When a multi-endpoint pipeline is resolved, the first endpoint replaces the
+/// match expression and additional connections are spliced into the connection list.
 fn resolve_match_in_neuron(
     program: &mut Program,
     neuron_name: &str,
@@ -398,36 +529,107 @@ fn resolve_match_in_neuron(
     };
 
     if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
-        for conn in connections.iter_mut() {
-            errors.extend(resolve_match_in_endpoint(
+        // Collect pending insertions: (insert_after_index, new_connections)
+        let mut pending_insertions: Vec<(usize, Vec<Connection>)> = Vec::new();
+
+        for (conn_idx, conn) in connections.iter_mut().enumerate() {
+            // Resolve source endpoint
+            let (src_errors, src_pipeline) = resolve_match_in_endpoint(
                 &mut conn.source,
                 param_name,
                 input_ports,
                 output_ports,
                 neuron_name,
-            ));
-            errors.extend(resolve_match_in_endpoint(
+                0,
+            );
+            errors.extend(src_errors);
+            if let Some(remaining) = src_pipeline {
+                // Multi-endpoint resolution in source: conn.source is now the first
+                // endpoint. Chain: conn.source -> remaining[0] -> remaining[1] -> ...
+                let mut new_conns = Vec::new();
+                // Connect the replaced endpoint to the first remaining
+                new_conns.push(Connection {
+                    source: conn.source.clone(),
+                    destination: remaining[0].clone(),
+                });
+                // Connect remaining endpoints to each other
+                for i in 0..remaining.len() - 1 {
+                    new_conns.push(Connection {
+                        source: remaining[i].clone(),
+                        destination: remaining[i + 1].clone(),
+                    });
+                }
+                pending_insertions.push((conn_idx, new_conns));
+            }
+
+            // Resolve destination endpoint
+            let (dst_errors, dst_pipeline) = resolve_match_in_endpoint(
                 &mut conn.destination,
                 param_name,
                 input_ports,
                 output_ports,
                 neuron_name,
-            ));
+                0,
+            );
+            errors.extend(dst_errors);
+            if let Some(remaining) = dst_pipeline {
+                // Multi-endpoint resolution in destination: conn.destination is now
+                // the first endpoint. Chain: conn.dest -> remaining[0] -> remaining[1] -> ...
+                let mut new_conns = Vec::new();
+                // Connect the replaced endpoint to the first remaining
+                new_conns.push(Connection {
+                    source: conn.destination.clone(),
+                    destination: remaining[0].clone(),
+                });
+                // Connect remaining endpoints to each other
+                for i in 0..remaining.len() - 1 {
+                    new_conns.push(Connection {
+                        source: remaining[i].clone(),
+                        destination: remaining[i + 1].clone(),
+                    });
+                }
+                pending_insertions.push((conn_idx, new_conns));
+            }
+        }
+
+        // Insert new connections in reverse order to preserve indices
+        pending_insertions.sort_by(|a, b| b.0.cmp(&a.0));
+        for (after_idx, new_conns) in pending_insertions {
+            for (i, new_conn) in new_conns.into_iter().enumerate() {
+                connections.insert(after_idx + 1 + i, new_conn);
+            }
         }
     }
     errors
 }
 
 /// Recursively resolve named match expressions in an endpoint.
-/// Returns errors for unresolvable cases (no matching arm, multi-endpoint pipeline).
+///
+/// Returns `(errors, Option<pipeline>)`:
+/// - `errors`: any validation errors encountered
+/// - `Some(pipeline)`: when a multi-endpoint pipeline was resolved. The first
+///   endpoint has already been placed into `*endpoint`; the returned vec contains
+///   the remaining endpoints that need to be spliced into the connection graph.
+/// - `None`: single-endpoint or no resolution occurred (handled inline)
 fn resolve_match_in_endpoint(
     endpoint: &mut Endpoint,
     param_name: &str,
     input_ports: &[(String, Shape)],
     output_ports: &[(String, Shape)],
     neuron_name: &str,
-) -> Vec<ValidationError> {
+    depth: usize,
+) -> (Vec<ValidationError>, Option<Vec<Endpoint>>) {
     let mut errors = Vec::new();
+
+    if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        errors.push(ValidationError::Custom(format!(
+            "Contract resolution depth limit ({}) exceeded in neuron '{}'. \
+             This may indicate circular or excessively nested contract definitions.",
+            MAX_CONTRACT_RESOLUTION_DEPTH, neuron_name
+        )));
+        return (errors, None);
+    }
+
     match endpoint {
         Endpoint::Match(match_expr) => {
             let should_resolve = matches!(
@@ -449,19 +651,15 @@ fn resolve_match_in_endpoint(
                                     .into_iter()
                                     .next()
                                     .expect("pipeline verified to have exactly 1 element");
-                                return errors;
+                                return (errors, None);
                             }
-                            n => {
-                                // Multi-endpoint pipeline requires connection graph
-                                // restructuring that is not yet implemented.
-                                errors.push(ValidationError::Custom(format!(
-                                    "Contract match on '{}' in neuron '{}' resolved to a \
-                                     multi-step pipeline ({} endpoints). Currently only \
-                                     single-endpoint replacement is supported. Use a single \
-                                     endpoint in the matching arm's pipeline, or wrap the \
-                                     pipeline in a separate neuron.",
-                                    param_name, neuron_name, n
-                                )));
+                            _ => {
+                                // Multi-endpoint pipeline: replace match with first endpoint
+                                // and return remaining endpoints for splicing
+                                let mut pipeline_iter = pipeline.into_iter();
+                                *endpoint = pipeline_iter.next().unwrap();
+                                let remaining: Vec<Endpoint> = pipeline_iter.collect();
+                                return (errors, Some(remaining));
                             }
                         }
                     }
@@ -480,13 +678,15 @@ fn resolve_match_in_endpoint(
             if let Endpoint::Match(match_expr) = endpoint {
                 for arm in &mut match_expr.arms {
                     for ep in &mut arm.pipeline {
-                        errors.extend(resolve_match_in_endpoint(
+                        let (nested_errors, _) = resolve_match_in_endpoint(
                             ep,
                             param_name,
                             input_ports,
                             output_ports,
                             neuron_name,
-                        ));
+                            depth + 1,
+                        );
+                        errors.extend(nested_errors);
                     }
                 }
             }
@@ -494,30 +694,34 @@ fn resolve_match_in_endpoint(
         Endpoint::If(if_expr) => {
             for branch in &mut if_expr.branches {
                 for ep in &mut branch.pipeline {
-                    errors.extend(resolve_match_in_endpoint(
+                    let (nested_errors, _) = resolve_match_in_endpoint(
                         ep,
                         param_name,
                         input_ports,
                         output_ports,
                         neuron_name,
-                    ));
+                        depth + 1,
+                    );
+                    errors.extend(nested_errors);
                 }
             }
             if let Some(else_branch) = &mut if_expr.else_branch {
                 for ep in else_branch {
-                    errors.extend(resolve_match_in_endpoint(
+                    let (nested_errors, _) = resolve_match_in_endpoint(
                         ep,
                         param_name,
                         input_ports,
                         output_ports,
                         neuron_name,
-                    ));
+                        depth + 1,
+                    );
+                    errors.extend(nested_errors);
                 }
             }
         }
         _ => {}
     }
-    errors
+    (errors, None)
 }
 
 /// Find the first arm whose NeuronPortContract matches the given ports
@@ -856,7 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_endpoint_pipeline_reports_error() {
+    fn test_multi_endpoint_pipeline_splices_connections() {
         // Create a concrete neuron with matching 2D ports
         let mut program = Program::new();
         program.neurons.insert(
@@ -903,7 +1107,7 @@ mod tests {
                             arms: vec![make_neuron_contract_arm(
                                 vec![Dim::Wildcard, Dim::Named("dim".to_string())],
                                 vec![Dim::Wildcard, Dim::Named("dim".to_string())],
-                                // Multi-endpoint pipeline
+                                // Multi-endpoint pipeline: blocks -> out
                                 vec![ref_endpoint("blocks"), ref_endpoint("out")],
                             )],
                             id: 0,
@@ -942,15 +1146,177 @@ mod tests {
         );
 
         let result = resolve_neuron_contracts(&mut program);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        let msg = format!("{}", errors[0]);
-        assert!(
-            msg.contains("multi-step pipeline"),
-            "Expected multi-step pipeline error, got: {}",
-            msg
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
+
+        // Verify the match was replaced and connections were spliced
+        let multi_step = program.neurons.get("MultiStep").unwrap();
+        if let NeuronBody::Graph { connections, .. } = &multi_step.body {
+            // Original: in -> match(block)
+            // After resolution with pipeline [blocks, out]:
+            //   in -> blocks (match replaced with first endpoint)
+            //   blocks -> out (spliced connection)
+            assert_eq!(
+                connections.len(),
+                2,
+                "Expected 2 connections after splicing, got {}",
+                connections.len()
+            );
+
+            // First connection: in -> blocks
+            match &connections[0].destination {
+                Endpoint::Ref(port_ref) => {
+                    assert_eq!(port_ref.node, "blocks");
+                }
+                other => panic!("Expected Ref(blocks) destination, got {:?}", other),
+            }
+
+            // Second connection: blocks -> out
+            match (&connections[1].source, &connections[1].destination) {
+                (Endpoint::Ref(src), Endpoint::Ref(dst)) => {
+                    assert_eq!(src.node, "blocks");
+                    assert_eq!(dst.node, "out");
+                }
+                other => panic!(
+                    "Expected blocks -> out connection, got {:?}",
+                    other
+                ),
+            }
+        } else {
+            panic!("Expected Graph body");
+        }
+    }
+
+    #[test]
+    fn test_multi_endpoint_pipeline_three_steps() {
+        // Test a 3-step pipeline: blocks -> norm -> out
+        let mut program = Program::new();
+        program.neurons.insert(
+            "Block3D".to_string(),
+            NeuronDef {
+                name: "Block3D".to_string(),
+                params: vec![],
+                inputs: vec![make_port(
+                    "default",
+                    vec![
+                        Dim::Wildcard,
+                        Dim::Named("seq".to_string()),
+                        Dim::Named("dim".to_string()),
+                    ],
+                )],
+                outputs: vec![make_port(
+                    "default",
+                    vec![
+                        Dim::Wildcard,
+                        Dim::Named("seq".to_string()),
+                        Dim::Named("dim".to_string()),
+                    ],
+                )],
+                body: NeuronBody::Primitive(ImplRef::Source {
+                    source: "test".to_string(),
+                    path: "test".to_string(),
+                }),
+                max_cycle_depth: None,
+                doc: None,
+            },
         );
+
+        program.neurons.insert(
+            "ThreeStep".to_string(),
+            NeuronDef {
+                name: "ThreeStep".to_string(),
+                params: vec![Param {
+                    name: "block".to_string(),
+                    default: None,
+                    type_annotation: Some(ParamType::Neuron),
+                }],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: ref_endpoint("in"),
+                        destination: Endpoint::Match(MatchExpr {
+                            subject: MatchSubject::Named("block".to_string()),
+                            arms: vec![make_neuron_contract_arm(
+                                vec![
+                                    Dim::Wildcard,
+                                    Dim::Named("seq".to_string()),
+                                    Dim::Named("dim".to_string()),
+                                ],
+                                vec![
+                                    Dim::Wildcard,
+                                    Dim::Named("seq".to_string()),
+                                    Dim::Named("dim".to_string()),
+                                ],
+                                // 3-step pipeline
+                                vec![
+                                    ref_endpoint("blocks"),
+                                    ref_endpoint("norm"),
+                                    ref_endpoint("out"),
+                                ],
+                            )],
+                            id: 0,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        program.neurons.insert(
+            "Caller".to_string(),
+            NeuronDef {
+                name: "Caller".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![Binding {
+                        name: "ts".to_string(),
+                        call_name: "ThreeStep".to_string(),
+                        args: vec![Value::Name("Block3D".to_string())],
+                        kwargs: vec![],
+                        scope: Scope::Instance { lazy: false },
+                        frozen: false,
+                        unroll_group: None,
+                    }],
+                    context_unrolls: vec![],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = resolve_neuron_contracts(&mut program);
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
+
+        let three_step = program.neurons.get("ThreeStep").unwrap();
+        if let NeuronBody::Graph { connections, .. } = &three_step.body {
+            // in -> blocks, blocks -> norm, norm -> out
+            assert_eq!(connections.len(), 3);
+            // Verify chain
+            match &connections[0].destination {
+                Endpoint::Ref(r) => assert_eq!(r.node, "blocks"),
+                o => panic!("Expected blocks, got {:?}", o),
+            }
+            match (&connections[1].source, &connections[1].destination) {
+                (Endpoint::Ref(s), Endpoint::Ref(d)) => {
+                    assert_eq!(s.node, "blocks");
+                    assert_eq!(d.node, "norm");
+                }
+                o => panic!("Expected blocks->norm, got {:?}", o),
+            }
+            match (&connections[2].source, &connections[2].destination) {
+                (Endpoint::Ref(s), Endpoint::Ref(d)) => {
+                    assert_eq!(s.node, "norm");
+                    assert_eq!(d.node, "out");
+                }
+                o => panic!("Expected norm->out, got {:?}", o),
+            }
+        }
     }
 
     #[test]
@@ -1235,5 +1601,159 @@ mod tests {
             "Expected 'Unresolved contract match' error, got: {}",
             msg
         );
+    }
+
+    #[test]
+    fn test_parameter_default_substitution_enables_matching() {
+        // A concrete neuron with named dimensions and default values should
+        // have those dimensions substituted before matching
+        let mut program = Program::new();
+
+        // TransformerBlock with d_model parameter defaulting to 512
+        program.neurons.insert(
+            "TransformerBlock".to_string(),
+            NeuronDef {
+                name: "TransformerBlock".to_string(),
+                params: vec![Param {
+                    name: "d_model".to_string(),
+                    default: Some(Value::Int(512)),
+                    type_annotation: None,
+                }],
+                inputs: vec![make_port(
+                    "default",
+                    vec![
+                        Dim::Wildcard,
+                        Dim::Named("seq".to_string()),
+                        Dim::Named("d_model".to_string()),
+                    ],
+                )],
+                outputs: vec![make_port(
+                    "default",
+                    vec![
+                        Dim::Wildcard,
+                        Dim::Named("seq".to_string()),
+                        Dim::Named("d_model".to_string()),
+                    ],
+                )],
+                body: NeuronBody::Primitive(ImplRef::Source {
+                    source: "core".to_string(),
+                    path: "transformer/TransformerBlock".to_string(),
+                }),
+                max_cycle_depth: None,
+                doc: None,
+            },
+        );
+
+        // Higher-order neuron matching on 3D shapes
+        program.neurons.insert(
+            "Stack".to_string(),
+            NeuronDef {
+                name: "Stack".to_string(),
+                params: vec![Param {
+                    name: "block".to_string(),
+                    default: None,
+                    type_annotation: Some(ParamType::Neuron),
+                }],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![],
+                    connections: vec![Connection {
+                        source: ref_endpoint("in"),
+                        destination: Endpoint::Match(MatchExpr {
+                            subject: MatchSubject::Named("block".to_string()),
+                            arms: vec![make_neuron_contract_arm(
+                                vec![
+                                    Dim::Wildcard,
+                                    Dim::Named("seq".to_string()),
+                                    Dim::Named("d".to_string()),
+                                ],
+                                vec![
+                                    Dim::Wildcard,
+                                    Dim::Named("seq".to_string()),
+                                    Dim::Named("d".to_string()),
+                                ],
+                                vec![ref_endpoint("layers")],
+                            )],
+                            id: 0,
+                        }),
+                    }],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        // Caller passes TransformerBlock
+        program.neurons.insert(
+            "Caller".to_string(),
+            NeuronDef {
+                name: "Caller".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![Binding {
+                        name: "s".to_string(),
+                        call_name: "Stack".to_string(),
+                        args: vec![Value::Name("TransformerBlock".to_string())],
+                        kwargs: vec![],
+                        scope: Scope::Instance { lazy: false },
+                        frozen: false,
+                        unroll_group: None,
+                    }],
+                    context_unrolls: vec![],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = resolve_neuron_contracts(&mut program);
+        assert!(
+            result.is_ok(),
+            "Expected Ok after default substitution, got: {:?}",
+            result
+        );
+
+        // Verify the match was resolved
+        let stack = program.neurons.get("Stack").unwrap();
+        if let NeuronBody::Graph { connections, .. } = &stack.body {
+            match &connections[0].destination {
+                Endpoint::Ref(port_ref) => {
+                    assert_eq!(port_ref.node, "layers");
+                }
+                other => panic!("Expected Ref(layers), got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_default_bindings() {
+        let params = vec![
+            Param {
+                name: "d_model".to_string(),
+                default: Some(Value::Int(512)),
+                type_annotation: None,
+            },
+            Param {
+                name: "block".to_string(),
+                default: None,
+                type_annotation: Some(ParamType::Neuron),
+            },
+            Param {
+                name: "num_heads".to_string(),
+                default: Some(Value::Int(8)),
+                type_annotation: None,
+            },
+        ];
+
+        let bindings = build_default_bindings(&params);
+        assert_eq!(bindings.len(), 2);
+        assert_eq!(bindings["d_model"], 512);
+        assert_eq!(bindings["num_heads"], 8);
+        assert!(!bindings.contains_key("block"));
     }
 }
