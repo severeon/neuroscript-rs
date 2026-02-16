@@ -1,0 +1,15 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron SmartStack(block, d_model, count = 6):
+  inputs:
+    default: [*, seq, d_model]
+  outputs:
+    default: [*, seq, d_model]
+  graph:
+    in -> match:
+      NeuronPortContract { input_ports: [("default", Shape { dims: [Wildcard, Named("seq"), Named("d_model")] })], output_ports: [("default", Shape { dims: [Wildcard, Named("seq"), Named("d_model")] })] }: blocks -> out
+      NeuronPortContract { input_ports: [("default", Shape { dims: [Wildcard, Named("d_model")] })], output_ports: [("default", Shape { dims: [Wildcard, Named("d_model")] })] }: blocks -> out

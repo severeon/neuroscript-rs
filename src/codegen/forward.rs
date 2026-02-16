@@ -230,11 +230,6 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
-            Endpoint::Unroll(_) => {
-                return Err(CodegenError::UnsupportedFeature(
-                    "Unroll should be expanded before codegen".to_string(),
-                ));
-            }
         };
 
         // Determine source output count for implicit fork detection
@@ -325,14 +320,66 @@ fn process_destination(
             // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
             if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
                 if module_ref.starts_with("self.") {
-                    // Check if this is part of an unroll group
+                    // Check if this is a direct reference to an aggregate name (e.g., "blocks")
+                    if let Some((base_name, count, is_static)) = gen.aggregate_to_group.get(&port_ref.node).cloned() {
+                        let list_name = &port_ref.node;
+
+                        if !emitted_unroll_groups.contains(list_name) {
+                            emitted_unroll_groups.insert(list_name.clone());
+
+                            if is_static {
+                                // @static: call same class-level instance N times
+                                let range_expr = match &count {
+                                    Value::Name(param_name) => format!("self.{}", param_name),
+                                    Value::Int(n) => n.to_string(),
+                                    _ => "1".to_string(),
+                                };
+                                writeln!(
+                                    output,
+                                    "{}for _ in range({}):",
+                                    indent, range_expr
+                                )
+                                .unwrap();
+                                writeln!(
+                                    output,
+                                    "{}    {} = self.__class__.{}({})",
+                                    indent, source_var, base_name, source_var
+                                )
+                                .unwrap();
+                            } else {
+                                // Instance: iterate over nn.ModuleList
+                                writeln!(
+                                    output,
+                                    "{}for {} in self.{}:",
+                                    indent, base_name, list_name
+                                )
+                                .unwrap();
+                                writeln!(
+                                    output,
+                                    "{}    {} = {}({})",
+                                    indent, source_var, base_name, source_var
+                                )
+                                .unwrap();
+                            }
+
+                            binding_call_results
+                                .insert(port_ref.node.clone(), source_var.clone());
+                            return Ok(source_var);
+                        } else {
+                            binding_call_results
+                                .insert(port_ref.node.clone(), source_var.clone());
+                            return Ok(source_var);
+                        }
+                    }
+
+                    // Check if this is part of an unroll group (individual member)
                     if let Some(group_info) = gen.binding_to_unroll_group.get(&port_ref.node).cloned() {
                         let base_name = &group_info.base_name;
-                        let list_name = format!("{}s", base_name);
+                        let list_name = group_info.aggregate_name.clone();
 
-                        if !emitted_unroll_groups.contains(base_name) {
+                        if !emitted_unroll_groups.contains(&list_name) {
                             // First encounter of this group: emit a for loop
-                            emitted_unroll_groups.insert(base_name.clone());
+                            emitted_unroll_groups.insert(list_name.clone());
 
                             // Use the source var as the loop variable (mutated in-place)
                             writeln!(
@@ -589,11 +636,13 @@ fn process_destination(
             let has_reachable_catchall = match_expr.arms.iter().any(|arm| {
                 arm.is_reachable
                     && arm.guard.is_none()
-                    && arm
-                        .pattern
-                        .dims
-                        .iter()
-                        .all(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_)))
+                    && match &arm.pattern {
+                        MatchPattern::Shape(shape) => shape
+                            .dims
+                            .iter()
+                            .all(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_))),
+                        MatchPattern::NeuronContract(_) => false,
+                    }
             });
 
             for arm in &match_expr.arms {
@@ -602,8 +651,17 @@ fn process_destination(
                     continue;
                 }
 
+                let shape = match &arm.pattern {
+                    MatchPattern::Shape(s) => s,
+                    MatchPattern::NeuronContract(_) => {
+                        // NeuronContract should be resolved before codegen
+                        return Err(CodegenError::UnsupportedFeature(
+                            "NeuronContract patterns must be resolved before codegen".to_string(),
+                        ));
+                    }
+                };
                 let shape_check =
-                    generate_shape_check(gen, &arm.pattern, arm.guard.as_ref(), &source_var);
+                    generate_shape_check(gen, shape, arm.guard.as_ref(), &source_var);
 
                 // Determine prefix: use "else:" if pattern condition is same as previous
                 let prefix = if first {
@@ -783,11 +841,6 @@ fn process_destination(
             }
 
             Ok(result_var)
-        }
-        Endpoint::Unroll(_) => {
-            Err(CodegenError::UnsupportedFeature(
-                "Unroll should be expanded before codegen".to_string(),
-            ))
         }
     }
 }

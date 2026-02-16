@@ -10,8 +10,8 @@ use crate::grammar::error;
 use crate::grammar::Rule;
 use crate::interfaces::{
     BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Documentation, Endpoint,
-    GlobalBinding, ImplRef, MatchArm, MatchExpr, NeuronBody, NeuronDef, Param, ParseError, Port,
-    PortRef, Program, Shape, UnrollExpr, UseStmt, Value,
+    GlobalBinding, ImplRef, MatchArm, MatchExpr, MatchPattern, MatchSubject, NeuronBody, NeuronDef,
+    NeuronPortContract, Param, ParseError, Port, PortRef, Program, Shape, UseStmt, Value,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -315,10 +315,15 @@ impl AstBuilder {
         let name = self.extract_ident(inner.next().unwrap())?;
 
         let mut default = None;
+        let mut type_annotation = None;
         for p in inner {
             match p.as_rule() {
                 Rule::type_annotation => {
-                    // Type annotations are parsed but not yet used in IR
+                    let type_name = p.as_str();
+                    type_annotation = Some(match type_name {
+                        "Neuron" | "NeuronType" => crate::interfaces::ParamType::Neuron,
+                        _ => crate::interfaces::ParamType::Value,
+                    });
                 }
                 Rule::value => {
                     default = Some(self.build_value(p)?);
@@ -327,7 +332,7 @@ impl AstBuilder {
             }
         }
 
-        Ok(Param { name, default })
+        Ok(Param { name, default, type_annotation })
     }
 
     /// Build ports from in_section
@@ -506,12 +511,12 @@ impl AstBuilder {
                 Rule::context_binding => {
                     bindings.push(self.build_context_binding(inner)?);
                 }
-                Rule::unroll_context_block => {
+                Rule::named_unroll_context_block => {
                     // The PEG grammar greedily matches all subsequent context_bindings
                     // into the unroll block. Use indentation to separate bindings that
                     // belong inside the unroll from those that follow it at the same level.
                     let (unroll, overflow) =
-                        self.build_unroll_context_block_with_overflow(inner)?;
+                        self.build_named_unroll_context_block(inner)?;
                     unrolls.push(unroll);
                     bindings.extend(overflow);
                 }
@@ -522,18 +527,23 @@ impl AstBuilder {
         Ok((bindings, unrolls))
     }
 
-    /// Build an unroll context block, returning overflow bindings that belong
-    /// to the parent context section (at shallower indentation).
-    fn build_unroll_context_block_with_overflow(
+    /// Build a named unroll context block: `name = unroll(count):\n bindings...`
+    /// Returns overflow bindings that belong to the parent context section
+    /// (at shallower indentation).
+    fn build_named_unroll_context_block(
         &mut self,
         pair: Pair<Rule>,
     ) -> Result<(ContextUnroll, Vec<Binding>), ParseError> {
-        debug_assert_eq!(pair.as_rule(), Rule::unroll_context_block);
+        debug_assert_eq!(pair.as_rule(), Rule::named_unroll_context_block);
 
-        // Get the column of the unroll keyword to establish the baseline
+        // Get the column of the name to establish the baseline
         let unroll_col = pair.as_span().start_pos().line_col().1;
 
         let mut inner = pair.into_inner();
+
+        // Parse: ident = unroll(count):
+        let aggregate_name = inner.next().unwrap().as_str().to_string(); // ident
+        inner.next(); // Skip assign (=)
         inner.next(); // Skip keyword_unroll
         inner.next(); // Skip lparen
 
@@ -545,17 +555,11 @@ impl AstBuilder {
 
         let mut unroll_bindings = vec![];
         let mut overflow_bindings = vec![];
-        let mut first_binding_col: Option<usize> = None;
 
         for p in inner {
             match p.as_rule() {
                 Rule::context_binding => {
                     let col = p.as_span().start_pos().line_col().1;
-
-                    if first_binding_col.is_none() {
-                        // First binding establishes the expected inner indentation
-                        first_binding_col = Some(col);
-                    }
 
                     if col > unroll_col {
                         // More indented than unroll keyword → belongs inside
@@ -572,94 +576,12 @@ impl AstBuilder {
 
         Ok((
             ContextUnroll {
+                aggregate_name,
                 count,
                 bindings: unroll_bindings,
             },
             overflow_bindings,
         ))
-    }
-
-    /// Build a graph-level unroll expression
-    fn build_unroll_expr(&mut self, pair: Pair<Rule>) -> Result<UnrollExpr, ParseError> {
-        debug_assert_eq!(pair.as_rule(), Rule::unroll_expr);
-
-        // Get the column of the unroll keyword to establish the baseline
-        let unroll_col = pair.as_span().start_pos().line_col().1;
-
-        let mut inner = pair.into_inner();
-        inner.next(); // Skip keyword_unroll
-        inner.next(); // Skip lparen
-
-        let count = self.build_value(inner.next().unwrap())?;
-
-        // Skip rparen, colon, arrow
-        inner.next();
-        inner.next();
-        inner.next();
-
-        let pipeline_pair = inner.next().unwrap();
-        let (pipeline, tail) = self.build_unroll_pipeline(pipeline_pair, unroll_col)?;
-        let id = self.next_id();
-
-        Ok(UnrollExpr {
-            count,
-            pipeline,
-            tail,
-            id,
-        })
-    }
-
-    /// Build a pipeline inside an unroll expression, splitting by indentation.
-    ///
-    /// The PEG grammar greedily matches all subsequent indented_pipeline_items
-    /// into the unroll pipeline. We use indentation to separate items that belong
-    /// inside the unroll body (more indented) from those that follow it at the
-    /// same level (the tail / continuation after the unroll).
-    fn build_unroll_pipeline(
-        &mut self,
-        pair: Pair<Rule>,
-        unroll_col: usize,
-    ) -> Result<(Vec<Endpoint>, Vec<Endpoint>), ParseError> {
-        debug_assert_eq!(pair.as_rule(), Rule::unroll_pipeline);
-
-        let mut body = vec![];
-        let mut tail = vec![];
-        let mut in_tail = false;
-
-        for inner in pair.into_inner() {
-            match inner.as_rule() {
-                Rule::endpoint => {
-                    // Inline pipeline (single line) — all items are body
-                    body.push(self.build_endpoint(inner)?);
-                }
-                Rule::indented_pipeline => {
-                    for item in inner.into_inner() {
-                        if item.as_rule() == Rule::indented_pipeline_item {
-                            let item_col = item.as_span().start_pos().line_col().1;
-
-                            // Once we see an item at or before the unroll column,
-                            // everything from here on is tail (post-unroll continuation)
-                            if !in_tail && item_col <= unroll_col {
-                                in_tail = true;
-                            }
-
-                            for endpoint_pair in item.into_inner() {
-                                if endpoint_pair.as_rule() == Rule::endpoint {
-                                    if in_tail {
-                                        tail.push(self.build_endpoint(endpoint_pair)?);
-                                    } else {
-                                        body.push(self.build_endpoint(endpoint_pair)?);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok((body, tail))
     }
 
     /// Build a context binding with optional annotation
@@ -998,9 +920,9 @@ impl AstBuilder {
         let inner = pair.into_inner().next().unwrap();
 
         match inner.as_rule() {
+            Rule::match_eval_expr => Ok(Endpoint::Match(self.build_match_eval_expr(inner)?)),
             Rule::match_expr => Ok(Endpoint::Match(self.build_match_expr(inner)?)),
             Rule::if_expr => Ok(Endpoint::If(self.build_if_expr(inner)?)),
-            Rule::unroll_expr => Ok(Endpoint::Unroll(self.build_unroll_expr(inner)?)),
             Rule::tuple_endpoint => self.build_tuple_endpoint(inner),
             Rule::call_endpoint => self.build_call_endpoint(inner),
             Rule::ref_endpoint => self.build_ref_endpoint(inner),
@@ -1228,7 +1150,126 @@ impl AstBuilder {
         let id = self.next_node_id;
         self.next_node_id += 1;
 
-        Ok(MatchExpr { arms, id })
+        Ok(MatchExpr { subject: MatchSubject::Implicit, arms, id })
+    }
+
+    /// Build a match evaluation expression: `match(param_name): neuron_match_arms...`
+    fn build_match_eval_expr(&mut self, pair: Pair<Rule>) -> Result<MatchExpr, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::match_eval_expr);
+
+        let mut inner = pair.into_inner();
+
+        // Skip keyword_match, lparen
+        inner.next(); // keyword_match
+        inner.next(); // lparen
+
+        // Extract subject name from value
+        let subject_value = inner.next().unwrap();
+        let subject_name = match self.build_value(subject_value)? {
+            Value::Name(name) => name,
+            other => {
+                return Err(crate::grammar::error::expected(
+                    "parameter name",
+                    &format!("{}", other),
+                    0,
+                ));
+            }
+        };
+
+        // Skip rparen, colon
+        inner.next(); // rparen
+        inner.next(); // colon
+
+        let mut arms = vec![];
+        for p in inner {
+            if p.as_rule() == Rule::neuron_match_arm {
+                arms.push(self.build_neuron_match_arm(p)?);
+            }
+        }
+
+        let id = self.next_node_id;
+        self.next_node_id += 1;
+
+        Ok(MatchExpr {
+            subject: MatchSubject::Named(subject_name),
+            arms,
+            id,
+        })
+    }
+
+    /// Build a neuron match arm: `neuron_port_contract [where guard]: pipeline`
+    fn build_neuron_match_arm(&mut self, pair: Pair<Rule>) -> Result<MatchArm, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::neuron_match_arm);
+
+        let mut inner = pair.into_inner();
+
+        // Parse port contract
+        let contract = self.build_neuron_port_contract(inner.next().unwrap())?;
+
+        // Optional guard and pipeline
+        let mut guard = None;
+        let mut pipeline = vec![];
+
+        for p in inner {
+            match p.as_rule() {
+                Rule::value => {
+                    guard = Some(self.build_value(p)?);
+                }
+                Rule::match_pipeline | Rule::neuron_match_pipeline => {
+                    pipeline = self.build_match_pipeline(p)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(MatchArm {
+            pattern: MatchPattern::NeuronContract(contract),
+            guard,
+            pipeline,
+            is_reachable: true,
+        })
+    }
+
+    /// Build a neuron port contract: `in [shape] -> out [shape]`
+    fn build_neuron_port_contract(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<NeuronPortContract, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::neuron_port_contract);
+
+        let mut inner = pair.into_inner();
+
+        // Parse input: keyword_in, optional ident, shape
+        inner.next(); // keyword_in
+        let mut next = inner.next().unwrap();
+        let in_name = if next.as_rule() == Rule::ident {
+            let name = next.as_str().to_string();
+            next = inner.next().unwrap(); // advance to shape
+            name
+        } else {
+            "default".to_string()
+        };
+        let in_shape = self.build_shape(next)?;
+
+        // Skip arrow
+        inner.next();
+
+        // Parse output: keyword_out, optional ident, shape
+        inner.next(); // keyword_out
+        let mut next = inner.next().unwrap();
+        let out_name = if next.as_rule() == Rule::ident {
+            let name = next.as_str().to_string();
+            next = inner.next().unwrap(); // advance to shape
+            name
+        } else {
+            "default".to_string()
+        };
+        let out_shape = self.build_shape(next)?;
+
+        Ok(NeuronPortContract {
+            input_ports: vec![(in_name, in_shape)],
+            output_ports: vec![(out_name, out_shape)],
+        })
     }
 
     /// Build a match arm
@@ -1257,7 +1298,7 @@ impl AstBuilder {
         }
 
         Ok(MatchArm {
-            pattern,
+            pattern: MatchPattern::Shape(pattern),
             guard,
             pipeline,
             is_reachable: true,
@@ -1266,7 +1307,10 @@ impl AstBuilder {
 
     /// Build a match pipeline (supports both inline and indented)
     fn build_match_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
-        debug_assert_eq!(pair.as_rule(), Rule::match_pipeline);
+        debug_assert!(
+            pair.as_rule() == Rule::match_pipeline
+                || pair.as_rule() == Rule::neuron_match_pipeline
+        );
 
         let mut endpoints = vec![];
 
@@ -1275,13 +1319,24 @@ impl AstBuilder {
                 Rule::endpoint => {
                     endpoints.push(self.build_endpoint(inner)?);
                 }
-                Rule::indented_pipeline => {
+                Rule::indented_pipeline | Rule::neuron_match_indented_pipeline => {
                     // Handle indented multi-line pipelines
                     for item in inner.into_inner() {
                         if item.as_rule() == Rule::indented_pipeline_item {
                             for endpoint_pair in item.into_inner() {
                                 if endpoint_pair.as_rule() == Rule::endpoint {
                                     endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                }
+                            }
+                        } else if item.as_rule() == Rule::neuron_match_indented_item {
+                            // neuron_match_indented_item wraps indented_pipeline_item
+                            for pipeline_item in item.into_inner() {
+                                if pipeline_item.as_rule() == Rule::indented_pipeline_item {
+                                    for endpoint_pair in pipeline_item.into_inner() {
+                                        if endpoint_pair.as_rule() == Rule::endpoint {
+                                            endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                        }
+                                    }
                                 }
                             }
                         }

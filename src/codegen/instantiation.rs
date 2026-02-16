@@ -20,8 +20,8 @@ pub(super) fn generate_module_instantiations(
     let mut instantiated_count = 0;
 
     // Partition bindings into standalone and unroll groups
-    // Collect unroll groups: base_name -> (call_name, args, kwargs, count, members)
-    let mut unroll_groups: HashMap<String, (String, Vec<Value>, Vec<Kwarg>, Value, Vec<(String, usize)>)> =
+    // Collect unroll groups: base_name -> (call_name, args, kwargs, count, members, aggregate_name, scope)
+    let mut unroll_groups: HashMap<String, (String, Vec<Value>, Vec<Kwarg>, Value, Vec<(String, usize)>, String, Scope)> =
         HashMap::new();
     let mut standalone_bindings: Vec<&Binding> = Vec::new();
 
@@ -44,6 +44,8 @@ pub(super) fn generate_module_instantiations(
                         binding.kwargs.clone(),
                         group_info.count.clone(),
                         Vec::new(),
+                        group_info.aggregate_name.clone(),
+                        binding.scope.clone(),
                     )
                 });
             entry.4.push((binding.name.clone(), group_info.index));
@@ -133,13 +135,13 @@ pub(super) fn generate_module_instantiations(
         }
     }
 
-    // 2. Process unroll groups as nn.ModuleList
+    // 2. Process unroll groups
     // Sort groups by their first member's position in the original binding list
     // to maintain declaration order
     let mut sorted_groups: Vec<_> = unroll_groups.into_iter().collect();
     sorted_groups.sort_by_key(|(_, group)| group.4.first().map(|(_, idx)| *idx).unwrap_or(0));
 
-    for (base_name, (call_name, args, kwargs, count, members)) in &sorted_groups {
+    for (base_name, (call_name, args, kwargs, count, members, aggregate_name, scope)) in &sorted_groups {
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
             neuron.is_primitive()
         } else {
@@ -151,7 +153,8 @@ pub(super) fn generate_module_instantiations(
         }
 
         let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
-        let list_name = format!("{}s", base_name);
+        let list_name = aggregate_name.clone();
+        let is_static = matches!(scope, Scope::Static);
 
         // Determine the range expression
         let range_expr = match count {
@@ -160,23 +163,54 @@ pub(super) fn generate_module_instantiations(
             _ => members.len().to_string(),
         };
 
-        writeln!(
-            output,
-            "        self.{} = nn.ModuleList([",
-            list_name
-        )
-        .unwrap();
-        writeln!(
-            output,
-            "            {}({}{}) for _ in range({})",
-            call_name, args_str, kwargs_str, range_expr
-        )
-        .unwrap();
-        writeln!(output, "        ])").unwrap();
+        if is_static {
+            // @static: single shared class-level instance called N times
+            writeln!(
+                output,
+                "        if not hasattr(self.__class__, '{}'):",
+                base_name
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "            self.__class__.{} = {}({}{})",
+                base_name, call_name, args_str, kwargs_str
+            )
+            .unwrap();
 
-        // Register the ModuleList var name
-        gen.var_names
-            .insert(list_name.clone(), format!("self.{}", list_name));
+            // Register the class-level var name for the base binding
+            gen.var_names.insert(
+                base_name.clone(),
+                format!("self.__class__.{}", base_name),
+            );
+
+            // Register aggregate name pointing to (base_name, count, is_static=true)
+            gen.var_names
+                .insert(list_name.clone(), format!("self.__class__.{}", base_name));
+        } else {
+            // Instance scope: nn.ModuleList with N separate instances
+            writeln!(
+                output,
+                "        self.{} = nn.ModuleList([",
+                list_name
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "            {}({}{}) for _ in range({})",
+                call_name, args_str, kwargs_str, range_expr
+            )
+            .unwrap();
+            writeln!(output, "        ])").unwrap();
+
+            // Register the ModuleList var name
+            gen.var_names
+                .insert(list_name.clone(), format!("self.{}", list_name));
+        }
+
+        // Register aggregate name for forward() to detect and emit for-loops
+        gen.aggregate_to_group
+            .insert(list_name.clone(), (base_name.clone(), count.clone(), is_static));
 
         // Also register each individual member so forward() can look them up
         for (member_name, _) in members {

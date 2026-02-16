@@ -1,28 +1,18 @@
-//! Compile-time unroll expansion pass.
+//! Compile-time context-unroll expansion pass.
 //!
-//! Runs before validation and codegen, lowering `Endpoint::Unroll` and
-//! `ContextUnroll` into ordinary IR (N copies of connections/bindings).
+//! Runs before validation and codegen, lowering `ContextUnroll` blocks into
+//! ordinary bindings (N copies with suffixed names). Graph-level unroll
+//! expansion is not handled here; connections are copied through as-is.
 
 use crate::interfaces::*;
 
 /// Maximum allowed unroll count to prevent resource exhaustion.
 const MAX_UNROLL_COUNT: usize = 1024;
 
-/// Maximum recursion depth for `max_endpoint_id` to prevent stack overflow
-/// on deeply nested IR structures.
-const MAX_ENDPOINT_DEPTH: usize = 100;
-
-/// Prefix for temporary variables generated during graph-level unroll expansion.
-const UNROLL_TEMP_PREFIX: &str = "_unroll";
-
-/// Port names that act as pipeline terminators (not chained through intermediate iterations).
-const TERMINAL_PORTS: &[&str] = &["out", "in"];
-
-/// Expand all unroll constructs in a program.
+/// Expand all context-unroll constructs in a program.
 ///
-/// This modifies the program in place, replacing:
-/// - `ContextUnroll` blocks with N suffixed bindings
-/// - `Endpoint::Unroll` in connections with N chained connections
+/// This modifies the program in place, replacing `ContextUnroll` blocks
+/// with N suffixed bindings (e.g., `block_0`, `block_1`, ...).
 ///
 /// Must be called before validation.
 pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>> {
@@ -43,12 +33,8 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
             connections,
         } = &neuron.body
         {
-            // Skip if no unrolls present
-            let has_graph_unrolls = connections.iter().any(|c| {
-                has_unroll_endpoint(&c.source) || has_unroll_endpoint(&c.destination)
-            });
-
-            if context_unrolls.is_empty() && !has_graph_unrolls {
+            // Skip if no context unrolls present
+            if context_unrolls.is_empty() {
                 continue;
             }
 
@@ -58,26 +44,25 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                 * 4; // rough overestimate per binding
             let mut new_bindings = Vec::with_capacity(context_bindings.len() + estimated_new);
             new_bindings.extend_from_slice(context_bindings);
-            let mut unroll_binding_map: Vec<(String, Vec<String>)> = Vec::new();
 
             for unroll in context_unrolls {
                 match resolve_count(&unroll.count, &params) {
                     Some(count) => {
                         for binding in &unroll.bindings {
                             if matches!(binding.scope, Scope::Static) {
-                                // @static: single shared instance, no suffix
+                                // @static: single shared instance, keep unroll_group
+                                // for aggregate name tracking
                                 let mut b = binding.clone();
-                                b.unroll_group = None; // shared, not listed in group
+                                b.unroll_group = Some(UnrollGroupInfo {
+                                    base_name: binding.name.clone(),
+                                    count: unroll.count.clone(),
+                                    index: 0,
+                                    aggregate_name: unroll.aggregate_name.clone(),
+                                });
                                 new_bindings.push(b);
-                                unroll_binding_map.push((
-                                    binding.name.clone(),
-                                    vec![binding.name.clone()],
-                                ));
                             } else {
-                                let mut suffixed_names = Vec::new();
                                 for i in 0..count {
                                     let suffixed_name = format!("{}_{}", binding.name, i);
-                                    suffixed_names.push(suffixed_name.clone());
                                     new_bindings.push(Binding {
                                         name: suffixed_name,
                                         call_name: binding.call_name.clone(),
@@ -89,11 +74,10 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                                             base_name: binding.name.clone(),
                                             count: unroll.count.clone(),
                                             index: i,
+                                            aggregate_name: unroll.aggregate_name.clone(),
                                         }),
                                     });
                                 }
-                                unroll_binding_map
-                                    .push((binding.name.clone(), suffixed_names));
                             }
                         }
                     }
@@ -109,27 +93,8 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                 }
             }
 
-            // --- Expand graph-level unrolls in connections ---
-            let mut new_connections = Vec::new();
-            let mut next_id = find_max_endpoint_id(connections) + 1;
-
-            for conn in connections {
-                if has_unroll_endpoint(&conn.destination) {
-                    match expand_connection_unroll(
-                        conn,
-                        &params,
-                        name,
-                        &unroll_binding_map,
-                        &mut next_id,
-                        &mut errors,
-                    ) {
-                        Some(expanded) => new_connections.extend(expanded),
-                        None => new_connections.push(conn.clone()),
-                    }
-                } else {
-                    new_connections.push(conn.clone());
-                }
-            }
+            // Copy connections through unchanged
+            let new_connections = connections.clone();
 
             // Replace neuron body
             // Safety: name was collected from program.neurons.keys() above
@@ -148,11 +113,6 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
     } else {
         Err(errors)
     }
-}
-
-/// Check if an endpoint contains an Unroll
-fn has_unroll_endpoint(endpoint: &Endpoint) -> bool {
-    matches!(endpoint, Endpoint::Unroll(_))
 }
 
 /// Resolve an unroll count to a concrete usize.
@@ -182,267 +142,6 @@ fn resolve_count(count: &Value, params: &[Param]) -> Option<usize> {
     }
 }
 
-/// Find the highest endpoint ID used in a set of connections.
-fn find_max_endpoint_id(connections: &[Connection]) -> usize {
-    let mut max_id = 0;
-    for conn in connections {
-        max_id = max_id.max(max_endpoint_id(&conn.source));
-        max_id = max_id.max(max_endpoint_id(&conn.destination));
-    }
-    max_id
-}
-
-fn max_endpoint_id(endpoint: &Endpoint) -> usize {
-    max_endpoint_id_inner(endpoint, 0)
-}
-
-fn max_endpoint_id_inner(endpoint: &Endpoint, depth: usize) -> usize {
-    if depth > MAX_ENDPOINT_DEPTH {
-        return 0;
-    }
-    match endpoint {
-        Endpoint::Call { id, .. } => *id,
-        Endpoint::Match(m) => {
-            let mut max = m.id;
-            for arm in &m.arms {
-                for ep in &arm.pipeline {
-                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
-                }
-            }
-            max
-        }
-        Endpoint::If(expr) => {
-            let mut max = expr.id;
-            for branch in &expr.branches {
-                for ep in &branch.pipeline {
-                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
-                }
-            }
-            if let Some(else_branch) = &expr.else_branch {
-                for ep in else_branch {
-                    max = max.max(max_endpoint_id_inner(ep, depth + 1));
-                }
-            }
-            max
-        }
-        Endpoint::Unroll(u) => {
-            let mut max = u.id;
-            for ep in &u.pipeline {
-                max = max.max(max_endpoint_id_inner(ep, depth + 1));
-            }
-            for ep in &u.tail {
-                max = max.max(max_endpoint_id_inner(ep, depth + 1));
-            }
-            max
-        }
-        _ => 0,
-    }
-}
-
-/// Expand a single connection whose destination is an Unroll endpoint.
-///
-/// Given: `source -> unroll(N): -> pipeline`
-/// Produces N chained connections:
-///   source -> pipeline[0]_0 -> pipeline[1]_0 -> ... -> pipeline_0_out
-///   pipeline_0_out -> pipeline[0]_1 -> ... -> pipeline_1_out
-///   ...
-///   pipeline_(N-2)_out -> pipeline[0]_(N-1) -> ... -> next_endpoint
-fn expand_connection_unroll(
-    conn: &Connection,
-    params: &[Param],
-    neuron_name: &str,
-    unroll_binding_map: &[(String, Vec<String>)],
-    next_id: &mut usize,
-    errors: &mut Vec<ValidationError>,
-) -> Option<Vec<Connection>> {
-    let unroll = match &conn.destination {
-        Endpoint::Unroll(u) => u,
-        _ => return None,
-    };
-
-    let count = match resolve_count(&unroll.count, params) {
-        Some(c) => c,
-        None => {
-            errors.push(ValidationError::InvalidUnrollCount {
-                neuron: neuron_name.to_string(),
-                reason: format!("Could not resolve unroll count '{}'", unroll.count),
-            });
-            return None;
-        }
-    };
-
-    if count == 0 {
-        errors.push(ValidationError::InvalidUnrollCount {
-            neuron: neuron_name.to_string(),
-            reason: "Unroll count must be > 0".to_string(),
-        });
-        return None;
-    }
-
-    // Check for nested unrolls in the pipeline and tail
-    let has_nested = unroll.pipeline.iter().chain(unroll.tail.iter())
-        .any(|ep| has_unroll_endpoint(ep));
-    if has_nested {
-        errors.push(ValidationError::InvalidUnrollCount {
-            neuron: neuron_name.to_string(),
-            reason: "Nested unroll constructs are not supported".to_string(),
-        });
-        return None;
-    }
-
-    let mut result = Vec::new();
-
-    // Separate the body pipeline into repeated items and a terminal tail.
-    // A trailing Ref("out") or Ref("in") in the body is a terminus that
-    // should only appear on the final iteration (not chained through intermediates).
-    let (body_pipeline, body_tail_endpoint) = split_pipeline_tail(&unroll.pipeline);
-
-    if body_pipeline.is_empty() && body_tail_endpoint.is_none() && unroll.tail.is_empty() {
-        return Some(vec![]);
-    }
-
-    let mut prev_source = conn.source.clone();
-    // Track the output of the last iteration for chaining the post-unroll tail
-    let mut last_output = conn.source.clone();
-
-    for i in 0..count {
-        let expanded_body: Vec<Endpoint> = body_pipeline
-            .iter()
-            .map(|ep| rewrite_endpoint_for_iteration(ep, i, unroll_binding_map, next_id))
-            .collect();
-
-        let is_last_iteration = i == count - 1;
-
-        // Chain: prev_source -> body[0] -> body[1] -> ... -> body[last]
-        let mut current_source = prev_source.clone();
-        for ep in &expanded_body {
-            result.push(Connection {
-                source: current_source.clone(),
-                destination: ep.clone(),
-            });
-            current_source = ep.clone();
-        }
-
-        if !is_last_iteration {
-            // Create intermediate temp ref for next iteration
-            let temp_name = format!("{}_{}_{}", UNROLL_TEMP_PREFIX, unroll.id, i);
-            result.push(Connection {
-                source: current_source,
-                destination: Endpoint::Ref(PortRef::new(&temp_name)),
-            });
-            prev_source = Endpoint::Ref(PortRef::new(&temp_name));
-        } else if let Some(tail) = &body_tail_endpoint {
-            // Final iteration: connect to the body's terminal endpoint (e.g., `out`)
-            let rewritten_tail =
-                rewrite_endpoint_for_iteration(tail, i, unroll_binding_map, next_id);
-            result.push(Connection {
-                source: current_source,
-                destination: rewritten_tail.clone(),
-            });
-            last_output = rewritten_tail;
-        } else {
-            // No body tail — the last body item is the output
-            last_output = current_source;
-        }
-    }
-
-    // Chain the post-unroll tail (items that follow the unroll at the same indentation).
-    // These are emitted once, after the last iteration's output.
-    if !unroll.tail.is_empty() {
-        let mut tail_source = last_output;
-
-        for ep in &unroll.tail {
-            let rewritten = rewrite_endpoint_for_iteration(
-                ep,
-                count.saturating_sub(1),
-                unroll_binding_map,
-                next_id,
-            );
-            result.push(Connection {
-                source: tail_source,
-                destination: rewritten.clone(),
-            });
-            tail_source = rewritten;
-        }
-    }
-
-    Some(result)
-}
-
-/// Split a pipeline into (body, optional_tail).
-///
-/// If the last element is a terminal Ref (like `out` or `in`), it's separated
-/// as the tail so it's only emitted on the final iteration.
-fn split_pipeline_tail(pipeline: &[Endpoint]) -> (&[Endpoint], Option<&Endpoint>) {
-    if let Some(last) = pipeline.last() {
-        if let Endpoint::Ref(port_ref) = last {
-            if TERMINAL_PORTS.contains(&port_ref.node.as_str()) {
-                let body = &pipeline[..pipeline.len() - 1];
-                return (body, Some(last));
-            }
-        }
-    }
-    (pipeline, None)
-}
-
-/// Rewrite an endpoint for a specific unroll iteration:
-/// - Call endpoints get new unique IDs
-/// - Ref endpoints matching expanded context names get suffixed
-fn rewrite_endpoint_for_iteration(
-    endpoint: &Endpoint,
-    iteration: usize,
-    unroll_binding_map: &[(String, Vec<String>)],
-    next_id: &mut usize,
-) -> Endpoint {
-    match endpoint {
-        Endpoint::Call {
-            name,
-            args,
-            kwargs,
-            frozen,
-            ..
-        } => {
-            let id = *next_id;
-            *next_id += 1;
-            Endpoint::Call {
-                name: name.clone(),
-                args: args.clone(),
-                kwargs: kwargs.clone(),
-                id,
-                frozen: *frozen,
-            }
-        }
-        Endpoint::Ref(port_ref) => {
-            // Check if this ref matches an expanded context-unroll base name
-            for (base_name, suffixed_names) in unroll_binding_map {
-                if port_ref.node == *base_name {
-                    if suffixed_names.len() > 1 {
-                        // N suffixed bindings: rewrite to iteration-specific name
-                        if iteration < suffixed_names.len() {
-                            return Endpoint::Ref(PortRef {
-                                node: suffixed_names[iteration].clone(),
-                                port: port_ref.port.clone(),
-                            });
-                        }
-                    }
-                    // Single name (@static): keep the same ref name but return as-is.
-                    // The codegen will handle calling the same module multiple times
-                    // because each connection through the chain creates a fresh call.
-                    return endpoint.clone();
-                }
-            }
-            endpoint.clone()
-        }
-        // Nested unrolls are validated and rejected in expand_connection_unroll
-        // before this function is ever called. If we reach here, it's a bug.
-        Endpoint::Unroll(_) => {
-            unreachable!("Nested unroll should have been rejected during expansion")
-        }
-        // Pass through other endpoint types unchanged
-        _ => endpoint.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,6 +150,7 @@ mod tests {
         Param {
             name: name.to_string(),
             default: default.map(Value::Int),
+            type_annotation: None,
         }
     }
 
@@ -489,6 +189,7 @@ mod tests {
                 body: NeuronBody::Graph {
                     context_bindings: vec![],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
                         count: Value::Name("num_layers".to_string()),
                         bindings: vec![Binding {
                             name: "block".to_string(),
@@ -527,6 +228,7 @@ mod tests {
             assert_eq!(context_bindings[0].unroll_group.as_ref().unwrap().base_name, "block");
             assert_eq!(context_bindings[0].unroll_group.as_ref().unwrap().index, 0);
             assert_eq!(context_bindings[2].unroll_group.as_ref().unwrap().index, 2);
+            assert_eq!(context_bindings[0].unroll_group.as_ref().unwrap().aggregate_name, "blocks");
         } else {
             panic!("Expected Graph body, got Primitive");
         }
@@ -545,6 +247,7 @@ mod tests {
                 body: NeuronBody::Graph {
                     context_bindings: vec![],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
                         count: Value::Name("num_layers".to_string()),
                         bindings: vec![Binding {
                             name: "block".to_string(),
@@ -571,76 +274,14 @@ mod tests {
             context_bindings, ..
         } = &neuron.body
         {
-            // @static: single binding, no suffix
+            // @static: single binding, no suffix, but with unroll_group for aggregate tracking
             assert_eq!(context_bindings.len(), 1);
             assert_eq!(context_bindings[0].name, "block");
-        } else {
-            panic!("Expected Graph body, got Primitive");
-        }
-    }
-
-    #[test]
-    fn test_expand_threaded_unroll() {
-        let mut program = Program::new();
-        program.neurons.insert(
-            "Stack".to_string(),
-            NeuronDef {
-                name: "Stack".to_string(),
-                params: vec![make_param("d_model", Some(512))],
-                inputs: vec![],
-                outputs: vec![],
-                body: NeuronBody::Graph {
-                    context_bindings: vec![],
-                    context_unrolls: vec![],
-                    connections: vec![Connection {
-                        source: Endpoint::Ref(PortRef::new("in")),
-                        destination: Endpoint::Unroll(UnrollExpr {
-                            count: Value::Int(3),
-
-                            pipeline: vec![
-                                Endpoint::Call {
-                                    name: "TransformerBlock".to_string(),
-                                    args: vec![Value::Name("d_model".to_string())],
-                                    kwargs: vec![],
-                                    id: 0,
-                                    frozen: false,
-                                },
-                            ],
-                            tail: vec![
-                                Endpoint::Ref(PortRef::new("out")),
-                            ],
-                            id: 100,
-                        }),
-                    }],
-                },
-                max_cycle_depth: Some(10),
-                doc: None,
-            },
-        );
-
-        let result = expand_unrolls(&mut program);
-        assert!(result.is_ok());
-
-        let neuron = program.neurons.get("Stack").unwrap();
-        if let NeuronBody::Graph { connections, .. } = &neuron.body {
-            // Should have expanded into multiple connections
-            // 3 iterations, each with 2 pipeline items (Call + out)
-            // Iteration 0: in -> Call_0, Call_0 -> _unroll_100_0
-            // Iteration 1: _unroll_100_0 -> Call_1, Call_1 -> _unroll_100_1
-            // Iteration 2: _unroll_100_1 -> Call_2, Call_2 -> out
-            assert!(connections.len() > 1, "Expected expanded connections, got {}", connections.len());
-
-            // Verify no Unroll endpoints remain
-            for conn in connections {
-                assert!(
-                    !has_unroll_endpoint(&conn.source),
-                    "Source should not contain Unroll"
-                );
-                assert!(
-                    !has_unroll_endpoint(&conn.destination),
-                    "Destination should not contain Unroll"
-                );
-            }
+            assert!(context_bindings[0].unroll_group.is_some(), "Should have unroll_group for aggregate tracking");
+            let group = context_bindings[0].unroll_group.as_ref().unwrap();
+            assert_eq!(group.base_name, "block");
+            assert_eq!(group.aggregate_name, "blocks");
+            assert_eq!(group.index, 0);
         } else {
             panic!("Expected Graph body, got Primitive");
         }
@@ -659,6 +300,7 @@ mod tests {
                 body: NeuronBody::Graph {
                     context_bindings: vec![],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "items".to_string(),
                         count: Value::Int(0),
                         bindings: vec![],
                     }],
@@ -671,130 +313,6 @@ mod tests {
 
         let result = expand_unrolls(&mut program);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_count_one_degenerates() {
-        let mut program = Program::new();
-        program.neurons.insert(
-            "Single".to_string(),
-            NeuronDef {
-                name: "Single".to_string(),
-                params: vec![],
-                inputs: vec![],
-                outputs: vec![],
-                body: NeuronBody::Graph {
-                    context_bindings: vec![],
-                    context_unrolls: vec![],
-                    connections: vec![Connection {
-                        source: Endpoint::Ref(PortRef::new("in")),
-                        destination: Endpoint::Unroll(UnrollExpr {
-                            count: Value::Int(1),
-
-                            pipeline: vec![
-                                Endpoint::Call {
-                                    name: "Block".to_string(),
-                                    args: vec![],
-                                    kwargs: vec![],
-                                    id: 0,
-                                    frozen: false,
-                                },
-                            ],
-                            tail: vec![
-                                Endpoint::Ref(PortRef::new("out")),
-                            ],
-                            id: 200,
-                        }),
-                    }],
-                },
-                max_cycle_depth: Some(10),
-                doc: None,
-            },
-        );
-
-        let result = expand_unrolls(&mut program);
-        assert!(result.is_ok());
-
-        let neuron = program.neurons.get("Single").unwrap();
-        if let NeuronBody::Graph { connections, .. } = &neuron.body {
-            // count=1: single pass, no intermediate refs needed
-            assert!(connections.len() >= 1);
-            for conn in connections {
-                assert!(!has_unroll_endpoint(&conn.destination));
-            }
-        } else {
-            panic!("Expected Graph body, got Primitive");
-        }
-    }
-
-    #[test]
-    fn test_resolve_count_param_no_default() {
-        // Parameter exists but has no default value — can't resolve at compile time
-        let params = vec![Param {
-            name: "num_layers".to_string(),
-            default: None,
-        }];
-        assert_eq!(
-            resolve_count(&Value::Name("num_layers".to_string()), &params),
-            None
-        );
-    }
-
-    #[test]
-    fn test_resolve_count_exceeds_max() {
-        let params = vec![];
-        assert_eq!(resolve_count(&Value::Int(1024), &params), Some(1024));
-        assert_eq!(resolve_count(&Value::Int(1025), &params), None);
-        assert_eq!(resolve_count(&Value::Int(999999), &params), None);
-    }
-
-    #[test]
-    fn test_nested_unroll_errors() {
-        let mut program = Program::new();
-        program.neurons.insert(
-            "Nested".to_string(),
-            NeuronDef {
-                name: "Nested".to_string(),
-                params: vec![],
-                inputs: vec![],
-                outputs: vec![],
-                body: NeuronBody::Graph {
-                    context_bindings: vec![],
-                    context_unrolls: vec![],
-                    connections: vec![Connection {
-                        source: Endpoint::Ref(PortRef::new("in")),
-                        destination: Endpoint::Unroll(UnrollExpr {
-                            count: Value::Int(2),
-                            pipeline: vec![
-                                Endpoint::Unroll(UnrollExpr {
-                                    count: Value::Int(3),
-                                    pipeline: vec![Endpoint::Call {
-                                        name: "Block".to_string(),
-                                        args: vec![],
-                                        kwargs: vec![],
-                                        id: 0,
-                                        frozen: false,
-                                    }],
-                                    tail: vec![],
-                                    id: 50,
-                                }),
-                            ],
-                            tail: vec![
-                                Endpoint::Ref(PortRef::new("out")),
-                            ],
-                            id: 100,
-                        }),
-                    }],
-                },
-                max_cycle_depth: Some(10),
-                doc: None,
-            },
-        );
-
-        let result = expand_unrolls(&mut program);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::InvalidUnrollCount { .. })));
     }
 
     #[test]
@@ -811,6 +329,7 @@ mod tests {
                     context_bindings: vec![],
                     context_unrolls: vec![
                         ContextUnroll {
+                            aggregate_name: "attns".to_string(),
                             count: Value::Int(2),
                             bindings: vec![Binding {
                                 name: "attn".to_string(),
@@ -823,6 +342,7 @@ mod tests {
                             }],
                         },
                         ContextUnroll {
+                            aggregate_name: "ffns".to_string(),
                             count: Value::Int(3),
                             bindings: vec![Binding {
                                 name: "ffn".to_string(),
@@ -904,6 +424,7 @@ mod tests {
                         },
                     ],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
                         count: Value::Int(3),
                         bindings: vec![Binding {
                             name: "block".to_string(),
@@ -960,6 +481,7 @@ mod tests {
                 body: NeuronBody::Graph {
                     context_bindings: vec![],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
                         count: Value::Int(2),
                         bindings: vec![Binding {
                             name: "block".to_string(),
@@ -1003,75 +525,6 @@ mod tests {
         }
     }
 
-    /// Unroll inside a match arm pipeline is NOT expanded (expansion only
-    /// handles top-level connection destinations). The unexpanded Endpoint::Unroll
-    /// will be caught by the validator with "Unroll should be expanded before
-    /// validation". This test verifies the unroll passes through expansion
-    /// unchanged and the validator rejects it.
-    #[test]
-    fn test_unroll_inside_match_arm_not_expanded() {
-        let mut program = Program::new();
-        program.neurons.insert(
-            "MatchUnroll".to_string(),
-            NeuronDef {
-                name: "MatchUnroll".to_string(),
-                params: vec![make_param("dim", Some(256))],
-                inputs: vec![],
-                outputs: vec![],
-                body: NeuronBody::Graph {
-                    context_bindings: vec![],
-                    context_unrolls: vec![],
-                    connections: vec![Connection {
-                        source: Endpoint::Ref(PortRef::new("in")),
-                        destination: Endpoint::Match(MatchExpr {
-                            arms: vec![MatchArm {
-                                pattern: Shape { dims: vec![] },
-                                guard: None,
-                                is_reachable: true,
-                                pipeline: vec![Endpoint::Unroll(UnrollExpr {
-                                    count: Value::Int(3),
-                                    pipeline: vec![Endpoint::Call {
-                                        name: "Block".to_string(),
-                                        args: vec![],
-                                        kwargs: vec![],
-                                        id: 0,
-                                        frozen: false,
-                                    }],
-                                    tail: vec![],
-                                    id: 50,
-                                })],
-                            }],
-                            id: 100,
-                        }),
-                    }],
-                },
-                max_cycle_depth: Some(10),
-                doc: None,
-            },
-        );
-
-        // Expansion succeeds (it doesn't look inside match arms)
-        let result = expand_unrolls(&mut program);
-        assert!(result.is_ok());
-
-        // But the Unroll endpoint is still present inside the match arm
-        let neuron = program.neurons.get("MatchUnroll").unwrap();
-        if let NeuronBody::Graph { connections, .. } = &neuron.body {
-            let has_inner_unroll = connections.iter().any(|c| {
-                if let Endpoint::Match(m) = &c.destination {
-                    m.arms.iter().any(|arm| {
-                        arm.pipeline.iter().any(|ep| matches!(ep, Endpoint::Unroll(_)))
-                    })
-                } else {
-                    false
-                }
-            });
-            assert!(has_inner_unroll, "Unroll inside match arm should survive expansion unchanged");
-        } else {
-            panic!("Expected Graph body, got Primitive");
-        }
-    }
-
     /// Using a name that isn't a neuron parameter should produce an error.
     /// This covers the case where someone writes unroll(x) with a forward
     /// pass variable rather than a neuron parameter.
@@ -1088,6 +541,7 @@ mod tests {
                 body: NeuronBody::Graph {
                     context_bindings: vec![],
                     context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
                         count: Value::Name("num_layers".to_string()), // not a param!
                         bindings: vec![Binding {
                             name: "block".to_string(),
@@ -1121,5 +575,27 @@ mod tests {
             }
             other => panic!("Expected InvalidUnrollCount, got: {}", other),
         }
+    }
+
+    #[test]
+    fn test_resolve_count_param_no_default() {
+        // Parameter exists but has no default value -- can't resolve at compile time
+        let params = vec![Param {
+            name: "num_layers".to_string(),
+            default: None,
+            type_annotation: None,
+        }];
+        assert_eq!(
+            resolve_count(&Value::Name("num_layers".to_string()), &params),
+            None
+        );
+    }
+
+    #[test]
+    fn test_resolve_count_exceeds_max() {
+        let params = vec![];
+        assert_eq!(resolve_count(&Value::Int(1024), &params), Some(1024));
+        assert_eq!(resolve_count(&Value::Int(1025), &params), None);
+        assert_eq!(resolve_count(&Value::Int(999999), &params), None);
     }
 }

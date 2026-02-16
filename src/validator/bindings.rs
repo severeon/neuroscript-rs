@@ -13,11 +13,21 @@ pub(super) fn validate_bindings(
     let mut errors = Vec::new();
     let mut defined_bindings = HashSet::new();
 
+    // Collect neuron-typed parameter names for higher-order neuron support
+    let neuron_param_names: HashSet<&str> = neuron
+        .params
+        .iter()
+        .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
+        .map(|p| p.name.as_str())
+        .collect();
+
     // 1. Validate unified context: bindings
     for binding in context_bindings {
         // Check if the neuron being called exists
-        // (This could be a neuron in the program, a primitive, or a global name)
-        if !neuron_exists_fn(&binding.call_name, program, registry) {
+        // (This could be a neuron in the program, a primitive, a global name,
+        // or a neuron-typed parameter like `block: Neuron`)
+        let is_neuron_param = neuron_param_names.contains(binding.call_name.as_str());
+        if !is_neuron_param && !neuron_exists_fn(&binding.call_name, program, registry) {
             errors.push(ValidationError::MissingNeuron {
                 name: binding.call_name.clone(),
                 context: format!(
@@ -25,6 +35,40 @@ pub(super) fn validate_bindings(
                     binding.name, neuron.name
                 ),
             });
+        }
+
+        // Validate arguments to Neuron-typed parameters at call sites.
+        // When calling a user-defined neuron, check that any arg at a `: Neuron` parameter
+        // position is a valid neuron name (not an arbitrary value).
+        if !is_neuron_param {
+            if let Some(callee) = program.neurons.get(&binding.call_name) {
+                for (idx, param) in callee.params.iter().enumerate() {
+                    if param.type_annotation.as_ref() == Some(&ParamType::Neuron) {
+                        if let Some(arg) = binding.args.get(idx) {
+                            match arg {
+                                Value::Name(name) => {
+                                    if !neuron_exists_fn(name, program, registry)
+                                        && !neuron_param_names.contains(name.as_str())
+                                    {
+                                        errors.push(ValidationError::Custom(format!(
+                                            "Argument '{}' for Neuron-typed parameter '{}' of \
+                                             '{}' in neuron '{}' is not a known neuron",
+                                            name, param.name, binding.call_name, neuron.name
+                                        )));
+                                    }
+                                }
+                                _ => {
+                                    errors.push(ValidationError::Custom(format!(
+                                        "Parameter '{}' of '{}' expects a neuron type, but got \
+                                         a non-name value in neuron '{}'",
+                                        param.name, binding.call_name, neuron.name
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Check for duplicate binding names inside the same neuron

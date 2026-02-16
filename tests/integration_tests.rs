@@ -279,7 +279,10 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         Endpoint::Match(match_expr) => {
             let mut result = String::from("match:\n");
             for arm in &match_expr.arms {
-                result.push_str(&format!("      {}", format_shape(&arm.pattern)));
+                result.push_str(&format!("      {}", match &arm.pattern {
+                    MatchPattern::Shape(shape) => format_shape(shape),
+                    MatchPattern::NeuronContract(contract) => format!("{:?}", contract),
+                }));
                 if let Some(guard) = &arm.guard {
                     result.push_str(&format!(" where {}", format_value(guard)));
                 }
@@ -316,20 +319,6 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
                 result.push('\n');
             }
             result.trim_end().to_string()
-        }
-        Endpoint::Unroll(unroll_expr) => {
-            let mut result = format!("unroll({}):", format_value(&unroll_expr.count));
-            result.push_str(" -> ");
-            let pipeline_str: Vec<String> =
-                unroll_expr.pipeline.iter().map(format_endpoint).collect();
-            result.push_str(&pipeline_str.join(" -> "));
-            if !unroll_expr.tail.is_empty() {
-                result.push_str(" -> ");
-                let tail_str: Vec<String> =
-                    unroll_expr.tail.iter().map(format_endpoint).collect();
-                result.push_str(&tail_str.join(" -> "));
-            }
-            result
         }
     }
 }
@@ -599,6 +588,74 @@ fn snapshot_codegen_cnn_demo_2() {
     let code = generate_pytorch(&program, "CNN").expect("Codegen failed");
 
     insta::assert_snapshot!("codegen_cnn_demo_2", code);
+}
+
+// ============================================================================
+// Unroll Codegen Snapshot Tests
+// ============================================================================
+
+#[test]
+fn snapshot_codegen_unroll_context() {
+    let source =
+        fs::read_to_string("examples/unroll_context.ns").expect("Failed to read unroll_context.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "NamedStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_context", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_gpt2() {
+    let source =
+        fs::read_to_string("examples/unroll_gpt2.ns").expect("Failed to read unroll_gpt2.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "GPT2Small").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_gpt2", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_static() {
+    let source =
+        fs::read_to_string("examples/unroll_static.ns").expect("Failed to read unroll_static.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "SharedLayers").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_static", code);
+}
+
+#[test]
+fn snapshot_codegen_unroll_threaded() {
+    let source = fs::read_to_string("examples/unroll_threaded.ns")
+        .expect("Failed to read unroll_threaded.ns");
+
+    let mut program = parse(&source).expect("Parse failed");
+    let stdlib = neuroscript::stdlib::load_stdlib().expect("Failed to load stdlib");
+    program = neuroscript::stdlib::merge_programs(stdlib, program);
+
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "TransformerStack").expect("Codegen failed");
+
+    insta::assert_snapshot!("codegen_unroll_threaded", code);
 }
 
 // ============================================================================

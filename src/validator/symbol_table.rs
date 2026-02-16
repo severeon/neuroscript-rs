@@ -295,17 +295,30 @@ where
                 // Primitive neuron - skip detailed port validation
                 // Primitives are validated at codegen time
                 // Return a dummy port to allow validation to continue
-                Ok(vec![Port {
+                return Ok(vec![Port {
                     name: "default".to_string(),
                     shape: Shape { dims: vec![] },
                     variadic: false,
-                }])
-            } else {
-                Err(Box::new(ValidationError::MissingNeuron {
-                    name: name.clone(),
-                    context: ctx.neuron.name.clone(),
-                }))
+                }]);
             }
+
+            // 4. Check if this is a neuron-typed parameter (higher-order neuron)
+            let is_neuron_param = ctx.neuron.params.iter().any(|p| {
+                p.name == *name && p.type_annotation.as_ref() == Some(&ParamType::Neuron)
+            });
+            if is_neuron_param {
+                // Neuron-typed param: return a dummy port to allow validation to continue
+                return Ok(vec![Port {
+                    name: "default".to_string(),
+                    shape: Shape { dims: vec![] },
+                    variadic: false,
+                }]);
+            }
+
+            Err(Box::new(ValidationError::MissingNeuron {
+                name: name.clone(),
+                context: ctx.neuron.name.clone(),
+            }))
         }
         Endpoint::Ref(port_ref) => {
             // Check symbol table first (for intermediate nodes)
@@ -398,9 +411,6 @@ where
 
             Ok(all_branch_ports[0].clone())
         }
-        Endpoint::Unroll(_) => Err(Box::new(ValidationError::Custom(
-            "Unroll should be expanded before validation".to_string(),
-        ))),
     }
 }
 
@@ -512,7 +522,6 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
-        Endpoint::Unroll(_) => "Unroll".to_string(),
     }
 }
 
@@ -542,6 +551,5 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match".to_string(),
         Endpoint::If(_) => "if".to_string(),
-        Endpoint::Unroll(_) => "unroll".to_string(),
     }
 }

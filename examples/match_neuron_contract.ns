@@ -1,0 +1,18 @@
+# Match on neuron port contracts for shape-based dispatch
+# Selects wiring strategy based on the block's input/output shapes
+
+neuron SmartStack(block: Neuron, d_model, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model)
+    graph:
+        in ->
+            match(block):
+                in [*, seq, d_model] -> out [*, seq, d_model]:
+                    blocks
+                    out
+                in [*, d_model] -> out [*, d_model]:
+                    blocks
+                    out

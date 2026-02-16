@@ -19,7 +19,7 @@ neuron <RecursiveName>(<dim>, depth):
     @lazy recurse = <RecursiveName>(<dim>, depth - 1)
     @static norm = LayerNorm(<dim>)
   graph:
-    in -> match:
+    in -> match: ->
       [*] where depth > 0:
         Fork() -> (main, skip)
         main ->
@@ -39,7 +39,7 @@ neuron <RecursiveName>(<dim>, depth):
 #   context:
 #     @lazy recurse = SimpleStack(<dim>, depth - 1)
 #   graph:
-#     in -> match:
+#     in -> match: ->
 #       [*] where depth > 0:
 #         Linear(<dim>, <dim>)
 #         GELU()

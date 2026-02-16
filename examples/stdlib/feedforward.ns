@@ -72,7 +72,7 @@ neuron AdaptiveFFN:
     in: [*shape, dim]
     out: [*shape, dim]
     graph:
-        in -> match:
+        in -> match: ->
             # Small models: larger expansion
             [*, *, d] where d < 512:
                 Linear(d, d * 8) -> GELU() -> Linear(d * 8, d) -> out

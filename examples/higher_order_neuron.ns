@@ -1,0 +1,13 @@
+# Higher-order neuron: takes a neuron type as a parameter
+# The `block: Neuron` parameter allows passing any neuron constructor
+
+neuron Stack(block: Neuron, d_model, num_heads, d_ff, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model, num_heads, d_ff)
+    graph:
+        in ->
+            blocks
+            out

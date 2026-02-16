@@ -10,4 +10,5 @@ neuron NamedStack(d_model, num_heads, d_ff, num_layers = 3):
   outputs:
     default: [*, seq, d_model]
   graph:
-    in -> unroll(num_layers): -> block -> out
+    in -> blocks
+    blocks -> out

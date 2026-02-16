@@ -8,7 +8,7 @@
 mod bindings;
 pub mod core;
 mod cycles;
-mod shapes;
+pub(crate) mod shapes;
 mod symbol_table;
 
 // Re-export public API
