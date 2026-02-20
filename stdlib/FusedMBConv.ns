@@ -1,0 +1,17 @@
+/// Fused Mobile Inverted Bottleneck Block
+/// Uses a single 3x3 Conv2d for expansion instead of separate depthwise + pointwise.
+/// Reference: Gupta & Tan (2021), "EfficientNetV2"
+neuron FusedMBConv(channels, expansion, reduction):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv2d(channels, channels * expansion, 3, 1, 1)
+            BatchNorm(channels * expansion)
+            SiLU()
+            SEBlock(channels * expansion, reduction)
+            Conv2d(channels * expansion, channels, 1, 1, 0)
+            BatchNorm(channels)
+            projected
+        (projected, skip) -> Add() -> out

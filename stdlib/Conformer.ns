@@ -1,0 +1,41 @@
+/// Conformer Encoder Block
+/// Convolution-augmented transformer for speech and audio processing.
+/// Three sequential residual sub-blocks: attention, convolution, feed-forward.
+/// Reference: Gulati et al. (2020), "Conformer"
+neuron Conformer(dim, num_heads, ff_expansion, conv_kernel, dropout_rate):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Self-attention residual
+        in -> (attn_path, skip1)
+        attn_path ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            Dropout(dropout_rate)
+            attn_out
+        (attn_out, skip1) -> Add() -> attn_residual
+
+        # Convolution module residual
+        attn_residual -> (conv_path, skip2)
+        conv_path ->
+            LayerNorm(dim)
+            Transpose(1, 2)
+            Conv1d(dim, dim, conv_kernel, 1, conv_kernel / 2)
+            BatchNorm(dim)
+            SiLU()
+            Transpose(1, 2)
+            Dropout(dropout_rate)
+            conv_out
+        (conv_out, skip2) -> Add() -> conv_residual
+
+        # Feed-forward residual
+        conv_residual -> (ffn_path, skip3)
+        ffn_path ->
+            LayerNorm(dim)
+            FFN(dim, ff_expansion)
+            Dropout(dropout_rate)
+            ffn_out
+        (ffn_out, skip3) -> Add() -> ffn_residual
+
+        # Final normalization
+        ffn_residual -> LayerNorm(dim) -> out

@@ -156,17 +156,20 @@ pub fn load_stdlib_embedded() -> Result<Program, StdlibError> {
     const STDLIB_SOURCES: &[(&str, &str)] = &[
         // Composite neurons
         ("BottleneckBlock.ns", include_str!("../stdlib/BottleneckBlock.ns")),
+        ("Conformer.ns", include_str!("../stdlib/Conformer.ns")),
         ("ConvNeXtBlock.ns", include_str!("../stdlib/ConvNeXtBlock.ns")),
         ("CrossAttention.ns", include_str!("../stdlib/CrossAttention.ns")),
         ("DenseBlock.ns", include_str!("../stdlib/DenseBlock.ns")),
         ("DenseConnection.ns", include_str!("../stdlib/DenseConnection.ns")),
         ("Expert.ns", include_str!("../stdlib/Expert.ns")),
+        ("FusedMBConv.ns", include_str!("../stdlib/FusedMBConv.ns")),
         ("FFN.ns", include_str!("../stdlib/FFN.ns")),
         ("GatedFFN.ns", include_str!("../stdlib/GatedFFN.ns")),
         ("GeGLU.ns", include_str!("../stdlib/GeGLU.ns")),
         ("GLU.ns", include_str!("../stdlib/GLU.ns")),
         ("GroupedQueryAttention.ns", include_str!("../stdlib/GroupedQueryAttention.ns")),
         ("HighwayConnection.ns", include_str!("../stdlib/HighwayConnection.ns")),
+        ("InceptionBlock.ns", include_str!("../stdlib/InceptionBlock.ns")),
         ("MBConvBlock.ns", include_str!("../stdlib/MBConvBlock.ns")),
         ("MetaNeurons.ns", include_str!("../stdlib/MetaNeurons.ns")),
         ("MultiHeadAttention.ns", include_str!("../stdlib/MultiHeadAttention.ns")),
@@ -185,6 +188,7 @@ pub fn load_stdlib_embedded() -> Result<Program, StdlibError> {
         ("TransformerEncoderBlock.ns", include_str!("../stdlib/TransformerEncoderBlock.ns")),
         ("TransformerStack.ns", include_str!("../stdlib/TransformerStack.ns")),
         ("ViTBlock.ns", include_str!("../stdlib/ViTBlock.ns")),
+        ("WaveNetBlock.ns", include_str!("../stdlib/WaveNetBlock.ns")),
         // Primitives
         ("primitives/AdaptiveAvgPool.ns", include_str!("../stdlib/primitives/AdaptiveAvgPool.ns")),
         ("primitives/AdaptiveMaxPool.ns", include_str!("../stdlib/primitives/AdaptiveMaxPool.ns")),

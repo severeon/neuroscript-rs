@@ -1,0 +1,17 @@
+/// WaveNet Residual Block
+/// Gated activation unit with dilated causal convolution and residual connection.
+/// Reference: van den Oord et al. (2016), "WaveNet"
+neuron WaveNetBlock(channels, kernel_size):
+    in: [batch, channels, seq]
+    out: [batch, channels, seq]
+    graph:
+        in -> (main, skip)
+        main ->
+            Conv1d(channels, channels, kernel_size, 1, kernel_size / 2)
+            filtered
+        filtered -> (tanh_path, sigmoid_path)
+        tanh_path -> Tanh() -> tanh_out
+        sigmoid_path -> Sigmoid() -> sig_out
+        (tanh_out, sig_out) -> Multiply() -> gated
+        gated -> Linear(channels, channels) -> projection
+        (projection, skip) -> Add() -> out

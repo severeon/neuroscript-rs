@@ -1,0 +1,15 @@
+/// Inception Module
+/// Multi-scale parallel convolutions with concatenated outputs.
+/// Reference: Szegedy et al. (2015), "Going Deeper with Convolutions"
+neuron InceptionBlock(in_channels, out_1x1, out_3x3, out_5x5, out_pool):
+    in: [batch, in_channels, height, width]
+    out: [batch, *, height, width]
+    graph:
+        in -> (b1, b2, b3, b4)
+        b1 -> Conv2d(in_channels, out_1x1, 1, 1, 0) -> BatchNorm(out_1x1) -> ReLU() -> branch1
+        b2 -> Conv2d(in_channels, out_3x3, 3, 1, 1) -> BatchNorm(out_3x3) -> ReLU() -> branch2
+        b3 -> Conv2d(in_channels, out_5x5, 5, 1, 2) -> BatchNorm(out_5x5) -> ReLU() -> branch3
+        b4 -> MaxPool(3, 1, 1) -> Conv2d(in_channels, out_pool, 1, 1, 0) -> BatchNorm(out_pool) -> ReLU() -> branch4
+        (branch1, branch2) -> Concat(1) -> c12
+        (c12, branch3) -> Concat(1) -> c123
+        (c123, branch4) -> Concat(1) -> out
