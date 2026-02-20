@@ -1,6 +1,7 @@
 /// Conformer Encoder Block
 /// Convolution-augmented transformer for speech and audio processing.
 /// Three sequential residual sub-blocks: attention, convolution, feed-forward.
+/// conv_kernel must be odd for sequence-length preservation (padding = kernel/2).
 /// Reference: Gulati et al. (2020), "Conformer"
 neuron Conformer(dim, num_heads, ff_expansion, conv_kernel, dropout_rate):
     in: [batch, seq, dim]

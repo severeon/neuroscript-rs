@@ -34,6 +34,7 @@ RESEARCH_DIR="$CONTEXT_DIR/research"
 
 # Override cleanup to handle batch branch state
 CURRENT_BATCH_BRANCH=""
+ALL_COMPLETED_NEURONS=""
 
 orchestrator_cleanup() {
   if [ "$INTERRUPTED" = true ]; then return; fi
@@ -55,29 +56,26 @@ orchestrator_cleanup() {
   fi
 
   # Push any uncommitted work on the batch branch before leaving
-  if [ -n "$CURRENT_BATCH_BRANCH" ]; then
-    local current_branch
-    current_branch=$(cd "$ROOT_DIR" && git branch --show-current 2>/dev/null) || true
-    if [ "$current_branch" = "$CURRENT_BATCH_BRANCH" ]; then
-      # Stage and commit any work in progress
-      (cd "$ROOT_DIR" && {
-        git add stdlib/*.ns tests/test_*.py 2>/dev/null || true
-        git diff --cached --quiet 2>/dev/null || {
-          git commit -m "wip: interrupted pipeline — partial progress
+  local active_branch
+  active_branch=$(cd "$ROOT_DIR" && git branch --show-current 2>/dev/null) || true
+
+  if [ -n "$CURRENT_BATCH_BRANCH" ] && [ "$active_branch" = "$CURRENT_BATCH_BRANCH" ]; then
+    # Stage and commit any work in progress
+    (cd "$ROOT_DIR" && {
+      git add stdlib/*.ns tests/test_*.py 2>/dev/null || true
+      git diff --cached --quiet 2>/dev/null || {
+        git commit -m "wip: interrupted pipeline — partial progress
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
-          git push -u origin "$CURRENT_BATCH_BRANCH" 2>/dev/null || true
-          echo -e "${YELLOW}  Pushed partial work to $CURRENT_BATCH_BRANCH${NC}"
-        }
-      })
-    fi
+        git push -u origin "$CURRENT_BATCH_BRANCH" 2>/dev/null || true
+        echo -e "${YELLOW}  Pushed partial work to $CURRENT_BATCH_BRANCH${NC}"
+      }
+    })
   fi
 
   # Return to main branch
-  local current_branch
-  current_branch=$(cd "$ROOT_DIR" && git branch --show-current 2>/dev/null) || true
-  if [ -n "$current_branch" ] && [ "$current_branch" != "main" ]; then
-    echo -e "${YELLOW}  Returning to main branch (was on $current_branch)${NC}"
+  if [ -n "$active_branch" ] && [ "$active_branch" != "main" ]; then
+    echo -e "${YELLOW}  Returning to main branch (was on $active_branch)${NC}"
     (cd "$ROOT_DIR" && git checkout main 2>/dev/null) || true
   fi
 
@@ -519,6 +517,15 @@ EOF
   (cd "$ROOT_DIR" && git checkout main 2>/dev/null) || true
   CURRENT_BATCH_BRANCH=""
 
+  # Accumulate completed neurons for docs agent
+  if [ -n "$completed_neurons" ]; then
+    if [ -n "$ALL_COMPLETED_NEURONS" ]; then
+      ALL_COMPLETED_NEURONS="${ALL_COMPLETED_NEURONS}, ${completed_neurons}"
+    else
+      ALL_COMPLETED_NEURONS="$completed_neurons"
+    fi
+  fi
+
   log "Batch $batch_num done: $created created, $failed failed, $skipped skipped"
   return 0
 }
@@ -572,13 +579,13 @@ run_orchestrator() {
 
   show_batches
 
-  local all_completed=""
+  ALL_COMPLETED_NEURONS=""
 
   if [ -n "$target_batch" ]; then
     # Run a specific batch
     orchestrate_batch "$target_batch"
   elif [ "$single_only" = "true" ]; then
-    # Create just the next single neuron (find its batch, run just that one)
+    # Create just the next single neuron on its batch branch
     local next
     next=$(get_next_neuron)
     if [ -z "$next" ]; then
@@ -603,9 +610,30 @@ run_orchestrator() {
       return 1
     fi
 
-    # Temporarily mark all other neurons in this batch as "skip" by
-    # just running the batch (it skips completed/failed and checks deps)
-    orchestrate_batch "$found_batch"
+    # Set up batch branch for the single neuron
+    local batch_name
+    batch_name=$(get_batch_name "$found_batch")
+    CURRENT_BATCH_BRANCH="stdlib/batch-${found_batch}-${batch_name}"
+    log "Creating/checking out branch: $CURRENT_BATCH_BRANCH"
+
+    (cd "$ROOT_DIR" && {
+      git checkout main 2>/dev/null || true
+      git pull --ff-only origin main 2>/dev/null || true
+      git checkout -b "$CURRENT_BATCH_BRANCH" 2>/dev/null || {
+        git checkout "$CURRENT_BATCH_BRANCH" 2>/dev/null || true
+      }
+    })
+
+    # Create just this one neuron
+    log "Creating single neuron: $next (batch $found_batch: $batch_name)"
+    create_neuron_in_batch "$next" || true
+
+    # Push and return to main
+    (cd "$ROOT_DIR" && {
+      git push -u origin "$CURRENT_BATCH_BRANCH" 2>&1 || true
+      git checkout main 2>/dev/null || true
+    })
+    CURRENT_BATCH_BRANCH=""
   else
     # Run all batches in order
     local count
@@ -623,6 +651,11 @@ run_orchestrator() {
 
       orchestrate_batch "$next_batch"
     done
+  fi
+
+  # Run docs agent if we completed any neurons in a full run
+  if [ "$single_only" = "false" ] && [ -z "$target_batch" ] && [ -n "$ALL_COMPLETED_NEURONS" ]; then
+    run_docs_agent "$ALL_COMPLETED_NEURONS"
   fi
 
   log "============================================"

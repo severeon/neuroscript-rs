@@ -1,13 +1,14 @@
 /// WaveNet Residual Block
 /// Gated activation unit with dilated causal convolution and residual connection.
+/// Dilation controls the receptive field; stack blocks with dilation 1, 2, 4, 8, ...
 /// Reference: van den Oord et al. (2016), "WaveNet"
-neuron WaveNetBlock(channels, kernel_size):
+neuron WaveNetBlock(channels, kernel_size, dilation):
     in: [batch, channels, seq]
     out: [batch, channels, seq]
     graph:
         in -> (main, skip)
         main ->
-            Conv1d(channels, channels, kernel_size, 1, kernel_size / 2)
+            Conv1d(channels, channels, kernel_size, 1, dilation * (kernel_size - 1) / 2, dilation)
             filtered
         filtered -> (tanh_path, sigmoid_path)
         tanh_path -> Tanh() -> tanh_out
