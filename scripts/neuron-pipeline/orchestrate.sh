@@ -489,7 +489,6 @@ Each neuron has been independently validated (parse + compile).
 
 ## Neurons
 $(while read -r n; do
-    local s
     s=$(jq -r --arg n "$n" '.neurons[] | select(.name == $n) | .status' "$MANIFEST")
     case "$s" in
       completed) echo "- [x] $n" ;;

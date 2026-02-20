@@ -9,13 +9,12 @@ class ReferenceWaveNetBlock(nn.Module):
         padding = dilation * (kernel_size - 1) // 2
         self.conv = nn.Conv1d(channels, channels, kernel_size,
                               padding=padding, dilation=dilation)
-        self.proj = nn.Linear(channels, channels)
+        self.proj = nn.Conv1d(channels, channels, 1)
 
     def forward(self, x):
         filtered = self.conv(x)
         gated = torch.tanh(filtered) * torch.sigmoid(filtered)
-        # Linear operates on last dim: [batch, channels, seq] -> need channels last
-        projection = self.proj(gated.transpose(1, 2)).transpose(1, 2)
+        projection = self.proj(gated)
         return projection + x
 
 

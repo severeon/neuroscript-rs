@@ -427,7 +427,7 @@
       "lessons_learned": null,
       "turns_used": null,
       "paper": null,
-      "test_file": null,
+      "test_file": "tests/test_inception_block.py",
       "completed_at": "2026-02-20T17:51:18Z"
     },
     {
@@ -453,7 +453,7 @@
       "lessons_learned": null,
       "turns_used": null,
       "paper": null,
-      "test_file": null,
+      "test_file": "tests/test_fused_mb_conv.py",
       "completed_at": "2026-02-20T17:51:18Z"
     },
     {
@@ -482,7 +482,7 @@
       "lessons_learned": null,
       "turns_used": null,
       "paper": null,
-      "test_file": null,
+      "test_file": "tests/test_conformer.py",
       "completed_at": "2026-02-20T17:51:18Z"
     },
     {
@@ -495,8 +495,7 @@
         "Conv1d",
         "Tanh",
         "Sigmoid",
-        "Multiply",
-        "Linear"
+        "Multiply"
       ],
       "pattern": "residual",
       "target_file": "stdlib/WaveNetBlock.ns",
@@ -509,7 +508,7 @@
       "lessons_learned": null,
       "turns_used": null,
       "paper": null,
-      "test_file": null,
+      "test_file": "tests/test_wave_net_block.py",
       "completed_at": "2026-02-20T17:51:18Z"
     }
   ]

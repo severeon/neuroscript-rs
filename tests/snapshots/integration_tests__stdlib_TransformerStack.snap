@@ -4,21 +4,11 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron SequentialTransformer(d_model, num_heads, d_ff):
+neuron TransformerStack(d_model, num_heads, d_ff, layers = 10):
   inputs:
     default: [*batch, seq, d_model]
   outputs:
     default: [*batch, seq, d_model]
   graph:
-    in -> SimpleTransformerBlock#2(d_model)
-    SimpleTransformerBlock#2(d_model) -> out
-
-neuron TransformerStack2(d_model, num_heads, d_ff):
-  inputs:
-    default: [*batch, seq, d_model]
-  outputs:
-    default: [*batch, seq, d_model]
-  graph:
-    in -> SimpleTransformerBlock#0(d_model)
-    SimpleTransformerBlock#0(d_model) -> SimpleTransformerBlock#1(d_model)
-    SimpleTransformerBlock#1(d_model) -> out
+    in -> stack
+    stack -> out

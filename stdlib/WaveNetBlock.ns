@@ -14,5 +14,5 @@ neuron WaveNetBlock(channels, kernel_size, dilation):
         tanh_path -> Tanh() -> tanh_out
         sigmoid_path -> Sigmoid() -> sig_out
         (tanh_out, sig_out) -> Multiply() -> gated
-        gated -> Linear(channels, channels) -> projection
+        gated -> Conv1d(channels, channels, 1) -> projection
         (projection, skip) -> Add() -> out
