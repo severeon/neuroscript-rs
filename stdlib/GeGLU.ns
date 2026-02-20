@@ -19,5 +19,7 @@ neuron GeGLU(dim, hidden_dim):
         value_path ->
             Linear(dim, hidden_dim)
             value
-        (gate, value) -> Multiply() -> projected
-        projected -> Linear(hidden_dim, dim) -> out
+        (gate, value) -> 
+            Multiply()
+            Linear(hidden_dim, dim)
+            out

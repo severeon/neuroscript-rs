@@ -103,6 +103,11 @@ const config = {
             position: 'left',
           },
           {
+            label: 'Neuron Genealogy',
+            to: '/neuron-genealogy',
+            position: 'left',
+          },
+          {
             href: 'https://github.com/neuroscript/neuroscript',
             label: 'GitHub',
             position: 'right',
@@ -134,6 +139,10 @@ const config = {
               {
                 label: 'Playground',
                 to: '/playground',
+              },
+              {
+                label: 'Neuron Genealogy',
+                to: '/neuron-genealogy',
               },
             ],
           },

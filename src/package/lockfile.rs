@@ -63,8 +63,12 @@ pub struct LockedPackage {
 }
 
 /// Source of a package (registry, git, or path)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(untagged)]
+///
+/// Serialized as a prefixed string:
+///   - `"registry+https://..."` for registry sources
+///   - `"git+https://...?rev=abc123"` for git sources
+///   - `"path+/some/path"` for local path sources
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageSource {
     /// From a registry (e.g., "registry+https://axons.neuroscript.org")
     Registry(String),
@@ -77,6 +81,60 @@ pub enum PackageSource {
 
     /// From a local path (for development)
     Path(PathBuf),
+}
+
+impl Serialize for PackageSource {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let s = match self {
+            PackageSource::Registry(url) => {
+                if url.starts_with("registry+") {
+                    url.clone()
+                } else {
+                    format!("registry+{}", url)
+                }
+            }
+            PackageSource::Git { url, rev } => format!("git+{}?rev={}", url, rev),
+            PackageSource::Path(path) => format!("path+{}", path.display()),
+        };
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for PackageSource {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+
+        if let Some(rest) = s.strip_prefix("path+") {
+            Ok(PackageSource::Path(PathBuf::from(rest)))
+        } else if let Some(rest) = s.strip_prefix("git+") {
+            // Parse "git+url?rev=hash"
+            if let Some((url, query)) = rest.split_once('?') {
+                let rev = query
+                    .strip_prefix("rev=")
+                    .unwrap_or(query)
+                    .to_string();
+                Ok(PackageSource::Git {
+                    url: url.to_string(),
+                    rev,
+                })
+            } else {
+                Ok(PackageSource::Git {
+                    url: rest.to_string(),
+                    rev: String::new(),
+                })
+            }
+        } else if let Some(rest) = s.strip_prefix("registry+") {
+            Ok(PackageSource::Registry(format!("registry+{}", rest)))
+        } else {
+            // Legacy: bare path (no prefix) — treat as path if it looks like a filesystem path
+            if s.starts_with('/') || s.starts_with('.') || s.contains('/') && !s.contains("://") {
+                Ok(PackageSource::Path(PathBuf::from(&s)))
+            } else {
+                // Assume registry
+                Ok(PackageSource::Registry(s))
+            }
+        }
+    }
 }
 
 impl Lockfile {

@@ -202,7 +202,6 @@ fn collect_calls(endpoint: &Endpoint, called: &mut HashSet<String>) {
             }
         }
         Endpoint::Ref(_) => {}
-        Endpoint::Unroll(_) => {}
     }
 }
 
@@ -300,6 +299,25 @@ fn format_shape(shape: &Shape) -> String {
     format!("[{}]", dims.join(", "))
 }
 
+fn format_match_pattern(pattern: &crate::interfaces::MatchPattern) -> String {
+    match pattern {
+        crate::interfaces::MatchPattern::Shape(shape) => format_shape(shape),
+        crate::interfaces::MatchPattern::NeuronContract(contract) => {
+            let inputs: Vec<String> = contract
+                .input_ports
+                .iter()
+                .map(|(name, shape)| format!("{}: {}", name, format_shape(shape)))
+                .collect();
+            let outputs: Vec<String> = contract
+                .output_ports
+                .iter()
+                .map(|(name, shape)| format!("{}: {}", name, format_shape(shape)))
+                .collect();
+            format!("in {} -> out {}", inputs.join(", "), outputs.join(", "))
+        }
+    }
+}
+
 fn format_dim(dim: &Dim) -> String {
     match dim {
         Dim::Literal(n) => n.to_string(),
@@ -393,7 +411,6 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match { ... }".to_string(),
         Endpoint::If(_) => "if { ... }".to_string(),
-        Endpoint::Unroll(_) => "unroll { ... }".to_string(),
     }
 }
 
@@ -404,7 +421,7 @@ fn collect_match_exprs(neuron_name: &str, endpoint: &Endpoint, result: &mut Vec<
                 .arms
                 .iter()
                 .map(|arm| MatchArmInfo {
-                    pattern: format_shape(&arm.pattern),
+                    pattern: format_match_pattern(&arm.pattern),
                     guard: arm.guard.as_ref().map(format_value),
                     is_reachable: arm.is_reachable,
                 })
@@ -434,6 +451,6 @@ fn collect_match_exprs(neuron_name: &str, endpoint: &Endpoint, result: &mut Vec<
                 }
             }
         }
-        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Unroll(_) => {}
+        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) => {}
     }
 }

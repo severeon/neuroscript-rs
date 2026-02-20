@@ -55,7 +55,7 @@ neuron DynamicBranch(dim):
         light_branch = Linear(dim, dim)
     
     graph:
-        in -> match:
+        in -> match: ->
             [*, 1, dim]: heavy_branch -> out
             [*, _, dim]: light_branch -> out
 ```
@@ -299,8 +299,14 @@ The bundled file includes:
 # Generate a self-contained model file
 neuroscript compile transformer.ns --bundle -o transformer.py
 
-# Verify it runs with only torch
-python -c "import torch; exec(open('transformer.py').read())"
+# Verify it works without neuroscript_runtime installed
+python -c "
+import importlib.util, torch
+spec = importlib.util.spec_from_file_location('model', 'transformer.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+print('Classes:', [c for c in dir(mod) if not c.startswith('_')])
+"
 ```
 
 ---
@@ -6603,7 +6609,7 @@ NeuroScript's `match` expressions let you route tensors to different processing 
 ## Basic Match Syntax
 
 ```neuroscript
-in -> match:
+in -> match: ->
     [pattern]: pipeline -> out
     [pattern]: different_pipeline -> out
 ```
@@ -6636,7 +6642,7 @@ Captured dimensions can be used in:
     in: [*, d]
     out: [*, 512]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 512: Linear(d, 512) -> out
             [*, d] where d <= 512: Linear(d, 256) -> Linear(256, 512) -> out`}
 />
@@ -6656,7 +6662,7 @@ Click "Show Analysis" to see the match arms and their patterns.
     in: [*, d]
     out: [*, 128]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 1024: Linear(d, 512) -> GELU() -> Linear(512, 128) -> out
             [*, d] where d > 512: Linear(d, 256) -> GELU() -> Linear(256, 128) -> out
             [*, d] where d > 128: Linear(d, 128) -> out
@@ -6697,7 +6703,7 @@ Match on multiple dimensions for sequence models:
     in: [*, seq, d]
     out: [*, seq, 512]
     graph:
-        in -> match:
+        in -> match: ->
             [*, seq, d] where d == 512: Identity() -> out
             [*, seq, d] where d < 512: Linear(d, 512) -> out
             [*, seq, d] where d > 512: Linear(d, 512) -> out`}
@@ -6714,7 +6720,7 @@ Captured dimensions can be used as arguments to neurons in the pipeline:
     in: [*, d]
     out: [*, 512]
     graph:
-        in -> match:
+        in -> match: ->
             [*, d] where d > 512:
                 Linear(d, 512)
                 out
@@ -6899,7 +6905,7 @@ in ->
     out
 
 # match: shape-based (runtime)
-in -> match:
+in -> match: ->
     [*, d] where d > 512: Linear(d, 512) -> out
     [*, d]: Linear(d, 256) -> Linear(256, 512) -> out
 ```
@@ -6928,50 +6934,34 @@ The `unroll` construct expands repeated layers at **compile time**. Instead of w
 
 The name is intentional — this is not a runtime loop. The compiler literally unrolls the construct into N separate graph nodes before code generation. The count must be a literal integer or a parameter with a default value, never a runtime value.
 
-## Sequential Threading
+## Named Unroll Syntax
 
-The most common form chains iterations sequentially — the output of iteration *k* feeds the input of iteration *k+1*:
+Declare an unroll block in the `context:` section with a **named aggregate**:
 
 <InteractiveExample
   title="Transformer Stack"
-  description="N transformer blocks chained sequentially via unroll"
+  description="N transformer blocks chained sequentially via named unroll"
   initialCode={`neuron TransformerStack(d_model, num_heads, d_ff, num_layers=6):
     in: [batch, seq, d_model]
     out: [batch, seq, d_model]
-    graph:
-        in ->
-            unroll(num_layers): ->
-                TransformerBlock(d_model, num_heads, d_ff)
-            out`}
-/>
-
-The `->` after the colon is what makes this sequential. It means "thread the data through each iteration." The unrolled block must have compatible input/output shapes since each output becomes the next input.
-
-## Context-Scoped Bindings
-
-When you need named bindings for each iteration, declare them inside an `unroll` block in the `context:` section:
-
-<InteractiveExample
-  title="Context-Scoped Unroll"
-  description="Each iteration gets its own independent block instance"
-  initialCode={`neuron NamedStack(d_model, num_heads, d_ff, num_layers=3):
-    in: [batch, seq, d_model]
-    out: [batch, seq, d_model]
     context:
-        unroll(num_layers):
+        blocks = unroll(num_layers):
             block = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
-            unroll(num_layers): ->
-                block
+            blocks
             out`}
 />
 
-The compiler matches context-unroll bindings to graph-unroll references by the unroll parameter. Iteration 0 gets instance 0, iteration 1 gets instance 1, and so on. Each `block` is an independent module with its own weights.
+Here's what's happening:
+- `blocks = unroll(num_layers):` declares a named aggregate called `blocks`
+- Inside, `block = TransformerBlock(...)` defines the binding for each iteration
+- In the graph, `blocks` references the aggregate — the compiler expands it into a sequential chain where each iteration's output feeds the next iteration's input
+- Each `block` is an independent module with its own weights
 
 ## Weight Sharing with @static
 
-To reuse the **same weights** across all iterations (like a Universal Transformer), combine `unroll` with `@static`:
+To reuse the **same weights** across all iterations (like a Universal Transformer), add `@static` to the binding:
 
 <InteractiveExample
   title="Weight Sharing"
@@ -6980,20 +6970,19 @@ To reuse the **same weights** across all iterations (like a Universal Transforme
     in: [batch, seq, d_model]
     out: [batch, seq, d_model]
     context:
-        unroll(num_steps):
+        blocks = unroll(num_steps):
             @static block = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
-            unroll(num_steps): ->
-                block
+            blocks
             out`}
 />
 
-`@static` means one instance, reused across all references. The generated code creates a single `TransformerBlock` in `__init__` and calls it `num_steps` times in `forward`.
+`@static` means one instance, reused across all iterations. The generated code creates a single `TransformerBlock` in `__init__` and calls it `num_steps` times in `forward`.
 
 ## End-to-End Example: GPT-2
 
-`unroll` composes naturally with other pipeline steps — it's just another block in the chain:
+`unroll` composes naturally with other pipeline steps — the aggregate is just another node in the chain:
 
 <InteractiveExample
   title="GPT-2 Small"
@@ -7003,79 +6992,34 @@ To reuse the **same weights** across all iterations (like a Universal Transforme
     out: [*, seq, vocab_size]
     context:
         embed = Embedding(vocab_size, d_model)
-        unroll(num_layers):
+        blocks = unroll(num_layers):
             block = TransformerBlock(d_model, num_heads, d_ff)
         ln_f = LayerNorm(d_model)
         head = Linear(d_model, vocab_size)
     graph:
-        in -> embed -> e
-        e ->
-            unroll(num_layers): ->
-                block
-            mid
-        mid -> ln_f -> head -> out`}
+        in ->
+            embed
+            blocks
+            ln_f
+            head
+            out`}
 />
 
-This replaces what would otherwise be 12 hand-written `TransformerBlock` calls.
-
-## Multiple Bindings Per Iteration
-
-Each unroll iteration can contain multiple bindings:
-
-```neuroscript
-neuron MultiScaleEncoder(dim, num_heads, d_ff, num_scales=4):
-    in: [*, seq, dim]
-    out: [*, seq, dim]
-    context:
-        unroll(num_scales):
-            encoder = TransformerBlock(dim, num_heads, d_ff)
-            norm = LayerNorm(dim)
-    graph:
-        in ->
-            unroll(num_scales): ->
-                encoder
-                norm
-            out
-```
-
-Each iteration gets its own independent `encoder` and `norm` pair.
-
-## Mixed Scoping
-
-Unroll-scoped and regular bindings compose freely:
-
-```neuroscript
-neuron HybridStack(dim, num_heads, d_ff, num_layers=6):
-    in: [*, seq, dim]
-    out: [*, seq, dim]
-    context:
-        @static shared_norm = LayerNorm(dim)
-        unroll(num_layers):
-            block = TransformerBlock(dim, num_heads, d_ff)
-    graph:
-        in ->
-            unroll(num_layers): ->
-                block
-                shared_norm
-            out
-```
-
-Each iteration gets its own `block` (independent weights), but all iterations share the same `shared_norm` instance.
+This replaces what would otherwise be 12 hand-written `TransformerBlock` calls. The `blocks` aggregate sits naturally between `embed` and `ln_f` in the pipeline.
 
 ## Key Rules
 
 - The count must be a **literal integer or a parameter with a default value** — it must be resolvable at compile time
-- The `->` after the colon means **sequential threading** (output feeds next input)
 - Each iteration gets **independent weights** unless `@static` is used
-- Context-unroll bindings are **scoped** — they can only be referenced inside a matching graph-unroll
-- Referencing an unroll-scoped binding outside a matching unroll is a **compile error**
+- The aggregate name (e.g., `blocks`) references the entire unrolled group as a sequential chain
+- Unroll blocks are declared in `context:` and referenced by name in `graph:`
 
 ## Try It Yourself
 
 Experiment with unroll:
 - Change `num_layers` to see how the expanded graph changes
 - Add `@static` to see the difference in generated code
-- Add multiple bindings per iteration
+- Compose the aggregate with other pipeline steps
 - Click "Show Analysis" to see the unrolled structure
 
 ---
@@ -7197,3 +7141,117 @@ Experiment with variadic ports:
 - Create a composite neuron with a variadic port
 - Try passing different numbers of inputs to the same variadic neuron
 - Click "Show Analysis" to see how shapes flow through variadic connections
+
+---
+
+// File: tutorials/higher-order-neurons
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Higher-Order Neurons
+
+NeuroScript supports **higher-order neurons** — neurons that accept other neuron types as parameters. This lets you build generic architectures that work with any block type, similar to higher-order functions in programming.
+
+## The `: Neuron` Type Annotation
+
+Mark a parameter as a neuron type by adding `: Neuron`:
+
+```neuroscript
+neuron Stack(block: Neuron, d_model, count=6):
+```
+
+The `block` parameter doesn't hold a value — it holds a **neuron constructor**. When someone instantiates `Stack`, they pass a neuron name (like `TransformerBlock`), and `block` can be used anywhere a neuron name would appear.
+
+## Basic Higher-Order Neuron
+
+<InteractiveExample
+  title="Generic Stack"
+  description="A reusable stack that works with any block type"
+  initialCode={`neuron Stack(block: Neuron, d_model, num_heads, d_ff, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model, num_heads, d_ff)
+    graph:
+        in ->
+            blocks
+            out`}
+/>
+
+This neuron:
+- Takes `block: Neuron` as its first parameter
+- Uses `block(d_model, num_heads, d_ff)` in context bindings just like any neuron call
+- Can be instantiated with different block types: `Stack(TransformerBlock, 512, 8, 2048)`
+
+## Contract Dispatch with `match(param):`
+
+Sometimes you need different wiring strategies depending on what block is passed. The `match(param):` syntax inspects a neuron parameter's port shapes at compile time:
+
+<InteractiveExample
+  title="Shape-Aware Stack"
+  description="Selects wiring strategy based on the block's port signatures"
+  initialCode={`neuron SmartStack(block: Neuron, d_model, count=6):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        blocks = unroll(count):
+            layer = block(d_model)
+    graph:
+        in ->
+            match(block):
+                in [*, seq, d_model] -> out [*, seq, d_model]:
+                    blocks
+                    out
+                in [*, d_model] -> out [*, d_model]:
+                    blocks
+                    out`}
+/>
+
+Each arm specifies an **input/output port contract**:
+- `in [*, seq, d_model] -> out [*, seq, d_model]` matches blocks that process sequences
+- `in [*, d_model] -> out [*, d_model]` matches blocks that process individual vectors
+
+The compiler resolves this at compile time: when `SmartStack` is instantiated with a concrete block, it checks the block's declared ports against each arm and selects the first match.
+
+## How It Works
+
+1. **Parameter declaration**: `block: Neuron` tells the compiler this parameter receives a neuron type
+2. **Usage in context**: `block(args...)` instantiates the neuron, just like calling any other neuron
+3. **Contract dispatch** (optional): `match(block):` lets you inspect the block's port shapes
+4. **Resolution**: When the higher-order neuron is instantiated with a concrete block, the compiler resolves all `match(block):` expressions at compile time
+
+## Combining with Unroll
+
+Higher-order neurons compose naturally with named unrolls:
+
+```neuroscript
+neuron RepeatBlock(block: Neuron, d_model, count=4):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    context:
+        layers = unroll(count):
+            layer = block(d_model)
+    graph:
+        in ->
+            layers
+            out
+```
+
+The `block` parameter is called inside the unroll to create `count` independent instances, each with its own weights. The `layers` aggregate then threads data through all of them sequentially.
+
+## Key Rules
+
+- Parameters with `: Neuron` annotation hold neuron constructors, not tensor values
+- A neuron-typed parameter can be used anywhere a neuron name appears (in context bindings, in graph calls)
+- `match(param):` arms use port contract patterns (`in [shape] -> out [shape]`), not tensor shape patterns
+- Contract dispatch is resolved at **compile time** — the block's ports must match at least one arm
+- All standard neuron features (unroll, @static, pipeline chaining) work with neuron-typed parameters
+
+## Try It Yourself
+
+Experiment with higher-order neurons:
+- Change the block parameter to different neuron types
+- Add contract dispatch to handle blocks with different port shapes
+- Combine with `@static` unroll for weight-shared stacks
+- Click "Show Analysis" to see how the compiler resolves the contracts

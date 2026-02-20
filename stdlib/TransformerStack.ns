@@ -1,27 +1,14 @@
-# Transformer Stack
-#
-# Stacks N identical transformer blocks in sequence.
-# This is the core of any transformer model (GPT, BERT, etc.)
-#
-# NOTE: Simplified version - full recursive implementation requires
-# `let:` bindings for recursion (Phase 3+, not yet implemented)
-
-/// Small transformer stack (2 layers for testing)
-neuron TransformerStack2(d_model, num_heads, d_ff):
+/// Transformer Stack
+///
+/// Stacks N identical transformer blocks in sequence.
+/// This is the core of any transformer model (GPT, BERT, etc.)
+neuron TransformerStack(d_model, num_heads, d_ff, layers):
     in: [*batch, seq, d_model]
     out: [*batch, seq, d_model]
+    context:
+        stack = unroll(layers):
+            transformer: TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
-            SimpleTransformerBlock(d_model)
-            SimpleTransformerBlock(d_model)
-            out
-
-
-/// Simple sequential transformer
-neuron SequentialTransformer(d_model, num_heads, d_ff):
-    in: [*batch, seq, d_model]
-    out: [*batch, seq, d_model]
-    graph:
-        in ->
-            SimpleTransformerBlock(d_model)
+            stack
             out

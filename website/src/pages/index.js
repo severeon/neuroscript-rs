@@ -16,12 +16,7 @@ neuron GPT2Small(vocab=50257, d_model=768, heads=12, d_ff=3072, layers=12):
         ln_f = LayerNorm(d_model)
         head = Linear(d_model, vocab)
     graph:
-        in ->
-            embed
-            blocks
-            ln_f
-            head
-            out`;
+        in -> embed -> blocks -> ln_f -> head -> out`;
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
@@ -51,7 +46,7 @@ function GPT2Demo() {
       <div className="container">
         <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
           <h2 style={{fontSize: '1.75rem', marginBottom: '0.5rem'}}>
-            Define GPT-2 in 17 lines. Compile to PyTorch.
+            Define GPT-2 in 11 lines. Compile to PyTorch.
           </h2>
           <p style={{
             fontSize: '1rem',

@@ -18,12 +18,7 @@ export const EXAMPLES = [
         ln_f = LayerNorm(d_model)
         head = Linear(d_model, vocab_size)
     graph:
-        in ->
-            embed
-            blocks
-            ln_f
-            head
-            out`,
+        in -> embed -> blocks -> ln_f -> head -> out`,
     targetNeuron: 'GPT2Small',
     features: ['Unroll', 'Multi-line graph', 'Transformer architecture']
   },

@@ -464,86 +464,89 @@ run_pipeline() {
 }
 
 # ── CLI Entrypoint ───────────────────────────────────────────────
+# Guard: only run CLI when executed directly (not when sourced)
 
-require_jq
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  require_jq
 
-case "${1:-}" in
-  --status|-s)
-    show_status
-    ;;
+  case "${1:-}" in
+    --status|-s)
+      show_status
+      ;;
 
-  --next|-n)
-    next=$(get_next_neuron)
-    if [ -n "$next" ]; then
-      echo -e "${BOLD}$next${NC}"
-      get_neuron_info "$next" | jq .
-    else
-      echo "No neurons ready to create"
-    fi
-    ;;
+    --next|-n)
+      next=$(get_next_neuron)
+      if [ -n "$next" ]; then
+        echo -e "${BOLD}$next${NC}"
+        get_neuron_info "$next" | jq .
+      else
+        echo "No neurons ready to create"
+      fi
+      ;;
 
-  --reset|-r)
-    name="${2:?Usage: pipeline.sh --reset NEURON_NAME}"
-    update_status "$name" "pending"
-    tmp=$(mktemp)
-    jq --arg n "$name" \
-      '(.neurons[] | select(.name == $n)).attempts = 0 |
-       (.neurons[] | select(.name == $n)).last_error = null' \
-      "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
-    echo "Reset $name to pending"
-    ;;
+    --reset|-r)
+      name="${2:?Usage: pipeline.sh --reset NEURON_NAME}"
+      update_status "$name" "pending"
+      tmp=$(mktemp)
+      jq --arg n "$name" \
+        '(.neurons[] | select(.name == $n)).attempts = 0 |
+         (.neurons[] | select(.name == $n)).last_error = null' \
+        "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
+      echo "Reset $name to pending"
+      ;;
 
-  --dry-run|-d)
-    dry_run
-    ;;
+    --dry-run|-d)
+      dry_run
+      ;;
 
-  --one|-1)
-    require_claude
-    run_pipeline true
-    ;;
+    --one|-1)
+      require_claude
+      run_pipeline true
+      ;;
 
-  --create|-c)
-    name="${2:?Usage: pipeline.sh --create NEURON_NAME}"
-    require_claude
-    ensure_binary
-    # Verify neuron exists in manifest
-    info=$(get_neuron_info "$name")
-    if [ -z "$info" ]; then
-      die "$name not found in manifest"
-    fi
-    create_single_neuron "$name"
-    show_status
-    ;;
+    --create|-c)
+      name="${2:?Usage: pipeline.sh --create NEURON_NAME}"
+      require_claude
+      ensure_binary
+      # Verify neuron exists in manifest
+      info=$(get_neuron_info "$name")
+      if [ -z "$info" ]; then
+        die "$name not found in manifest"
+      fi
+      create_single_neuron "$name"
+      show_status
+      ;;
 
-  --help|-h)
-    echo "Neuron Pipeline - Dependency-aware neuron creation"
-    echo ""
-    echo "Usage: pipeline.sh [OPTION]"
-    echo ""
-    echo "Options:"
-    echo "  (none)              Run the full pipeline (all pending neurons)"
-    echo "  --one,    -1        Create only the next single neuron"
-    echo "  --create, -c NAME   Create a specific neuron by name"
-    echo "  --status, -s        Show current progress"
-    echo "  --next,   -n        Show next neuron to create (with details)"
-    echo "  --dry-run,-d        Show creation order without executing"
-    echo "  --reset,  -r NAME   Reset a failed neuron to pending"
-    echo "  --help,   -h        Show this help"
-    echo ""
-    echo "The manifest (manifest.json) tracks:"
-    echo "  - Neuron name, level, dependencies"
-    echo "  - Creation status (pending/in_progress/completed/failed)"
-    echo "  - Attempt count and last error"
-    echo ""
-    echo "To add new neurons, edit manifest.json directly."
-    ;;
+    --help|-h)
+      echo "Neuron Pipeline - Dependency-aware neuron creation"
+      echo ""
+      echo "Usage: pipeline.sh [OPTION]"
+      echo ""
+      echo "Options:"
+      echo "  (none)              Run the full pipeline (all pending neurons)"
+      echo "  --one,    -1        Create only the next single neuron"
+      echo "  --create, -c NAME   Create a specific neuron by name"
+      echo "  --status, -s        Show current progress"
+      echo "  --next,   -n        Show next neuron to create (with details)"
+      echo "  --dry-run,-d        Show creation order without executing"
+      echo "  --reset,  -r NAME   Reset a failed neuron to pending"
+      echo "  --help,   -h        Show this help"
+      echo ""
+      echo "The manifest (manifest.json) tracks:"
+      echo "  - Neuron name, level, dependencies"
+      echo "  - Creation status (pending/in_progress/completed/failed)"
+      echo "  - Attempt count and last error"
+      echo ""
+      echo "To add new neurons, edit manifest.json directly."
+      ;;
 
-  "")
-    require_claude
-    run_pipeline false
-    ;;
+    "")
+      require_claude
+      run_pipeline false
+      ;;
 
-  *)
-    die "Unknown option: $1. Use --help for usage."
-    ;;
-esac
+    *)
+      die "Unknown option: $1. Use --help for usage."
+      ;;
+  esac
+fi

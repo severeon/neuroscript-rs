@@ -24,7 +24,23 @@ COMMIT_COUNT=$(git log --after="$SESSION_START" --oneline 2>/dev/null | wc -l | 
 
 if [ "$COMMIT_COUNT" -gt 0 ]; then
   mkdir -p "$CONTEXT_DIR"
+
+  # Detect neurons created during this session (stdlib/*.ns files in commits)
+  NEURONS_CREATED=$(git log --after="$SESSION_START" --diff-filter=A --name-only --pretty=format: 2>/dev/null \
+    | grep '^stdlib/.*\.ns$' \
+    | sed 's|stdlib/||;s|\.ns$||' \
+    | sort -u \
+    | paste -sd ',' - 2>/dev/null || echo "")
+  CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+
   cat > "$MARKER" <<EOF
+---
+session_end: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+commits: $COMMIT_COUNT
+neurons_created: [${NEURONS_CREATED}]
+branch: $CURRENT_BRANCH
+---
+
 # Pending Session Reflection
 Session ended: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Commits made: $COMMIT_COUNT
