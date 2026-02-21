@@ -1,0 +1,39 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Conformer(dim, num_heads, ff_expansion, conv_kernel, dropout_rate):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (attn_path, skip1)
+    attn_path -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
+    MultiHeadSelfAttention#1(dim, num_heads) -> Dropout#2(dropout_rate)
+    Dropout#2(dropout_rate) -> attn_out
+    (attn_out, skip1) -> Add#3()
+    Add#3() -> attn_residual
+    attn_residual -> (conv_path, skip2)
+    conv_path -> LayerNorm#4(dim)
+    LayerNorm#4(dim) -> Transpose#5(1, 2)
+    Transpose#5(1, 2) -> Conv1d#6(dim, dim, conv_kernel, 1, (conv_kernel / 2))
+    Conv1d#6(dim, dim, conv_kernel, 1, (conv_kernel / 2)) -> BatchNorm#7(dim)
+    BatchNorm#7(dim) -> SiLU#8()
+    SiLU#8() -> Transpose#9(1, 2)
+    Transpose#9(1, 2) -> Dropout#10(dropout_rate)
+    Dropout#10(dropout_rate) -> conv_out
+    (conv_out, skip2) -> Add#11()
+    Add#11() -> conv_residual
+    conv_residual -> (ffn_path, skip3)
+    ffn_path -> LayerNorm#12(dim)
+    LayerNorm#12(dim) -> FFN#13(dim, ff_expansion)
+    FFN#13(dim, ff_expansion) -> Dropout#14(dropout_rate)
+    Dropout#14(dropout_rate) -> ffn_out
+    (ffn_out, skip3) -> Add#15()
+    Add#15() -> ffn_residual
+    ffn_residual -> LayerNorm#16(dim)
+    LayerNorm#16(dim) -> out

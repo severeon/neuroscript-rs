@@ -2,7 +2,57 @@
   "config": {
     "max_attempts": 3,
     "max_turns": 25,
-    "binary": "./target/release/neuroscript"
+    "binary": "./target/release/neuroscript",
+    "batches": [
+      {
+        "id": 1,
+        "name": "gating-neurons",
+        "neurons": [
+          "GLU",
+          "SwiGLU",
+          "GeGLU",
+          "GatedFFN",
+          "Expert"
+        ]
+      },
+      {
+        "id": 2,
+        "name": "residual-patterns",
+        "neurons": [
+          "PreNormResidual",
+          "PostNormResidual",
+          "ResNetBasicBlock"
+        ]
+      },
+      {
+        "id": 3,
+        "name": "conv-vision-blocks",
+        "neurons": [
+          "SEBlock",
+          "BottleneckBlock",
+          "ConvNeXtBlock",
+          "PatchEmbedding"
+        ]
+      },
+      {
+        "id": 4,
+        "name": "advanced-blocks",
+        "neurons": [
+          "ViTBlock",
+          "MBConvBlock"
+        ]
+      },
+      {
+        "id": 5,
+        "name": "extended-architectures",
+        "neurons": [
+          "InceptionBlock",
+          "FusedMBConv",
+          "Conformer",
+          "WaveNetBlock"
+        ]
+      }
+    ]
   },
   "neurons": [
     {
@@ -16,13 +66,13 @@
         "Multiply"
       ],
       "pattern": "composite",
-      "target_file": "neuroscript/stdlib/glu/src/GLU.ns",
+      "target_file": "stdlib/GLU.ns",
       "params": "dim, hidden_dim",
       "input_shape": "[*shape, dim]",
       "output_shape": "[*shape, dim]",
       "description": "Gated Linear Unit. Fork input into two parallel paths. Gate path: Linear(dim, hidden_dim) then Sigmoid(). Value path: Linear(dim, hidden_dim). Combine gate and value with Multiply(). Project back with Linear(hidden_dim, dim).",
       "attempts": 1,
-      "last_error": "file not created",
+      "last_error": null,
       "lessons_learned": "Created as Axon package. All pytest tests pass.",
       "turns_used": 1,
       "paper": "(Dauphin et al., 2017)",
@@ -32,7 +82,7 @@
     {
       "name": "SwiGLU",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Linear",
@@ -56,7 +106,7 @@
     {
       "name": "GeGLU",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Linear",
@@ -80,7 +130,7 @@
     {
       "name": "GatedFFN",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Linear",
@@ -105,7 +155,7 @@
     {
       "name": "Expert",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Linear",
         "GELU",
@@ -128,7 +178,7 @@
     {
       "name": "PreNormResidual",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -153,7 +203,7 @@
     {
       "name": "PostNormResidual",
       "level": 1,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -178,7 +228,7 @@
     {
       "name": "ResNetBasicBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -203,7 +253,7 @@
     {
       "name": "SEBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Multiply",
@@ -230,7 +280,7 @@
     {
       "name": "BottleneckBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -255,7 +305,7 @@
     {
       "name": "ConvNeXtBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -281,7 +331,7 @@
     {
       "name": "ViTBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -307,7 +357,7 @@
     {
       "name": "MBConvBlock",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Fork",
         "Add",
@@ -334,7 +384,7 @@
     {
       "name": "PatchEmbedding",
       "level": 2,
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "Conv2d",
         "Flatten",
@@ -353,6 +403,113 @@
       "paper": null,
       "test_file": null,
       "completed_at": null
+    },
+    {
+      "name": "InceptionBlock",
+      "level": 2,
+      "status": "completed",
+      "dependencies": [
+        "Fork",
+        "Conv2d",
+        "BatchNorm",
+        "ReLU",
+        "MaxPool",
+        "Concat"
+      ],
+      "pattern": "composite",
+      "target_file": "stdlib/InceptionBlock.ns",
+      "params": "in_channels, out_1x1, out_3x3, out_5x5, out_pool",
+      "input_shape": "[batch, in_channels, height, width]",
+      "output_shape": "[batch, *, height, width]",
+      "description": "Inception module (Szegedy et al. 2015). Four parallel branches. Branch 1: Conv2d(in_channels, out_1x1, 1, 1, 0) then BatchNorm(out_1x1) then ReLU(). Branch 2: Conv2d(in_channels, out_3x3, 3, 1, 1) then BatchNorm(out_3x3) then ReLU(). Branch 3: Conv2d(in_channels, out_5x5, 5, 1, 2) then BatchNorm(out_5x5) then ReLU(). Branch 4: MaxPool(3, 1, 1) then Conv2d(in_channels, out_pool, 1, 1, 0) then BatchNorm(out_pool) then ReLU(). Use nested Fork() to split into 4 paths. Concatenate all branches along channel dimension using chained Concat(1): (b1, b2) -> Concat(1) -> c12, (c12, b3) -> Concat(1) -> c123, (c123, b4) -> Concat(1) -> out.",
+      "attempts": 0,
+      "last_error": null,
+      "lessons_learned": null,
+      "turns_used": null,
+      "paper": null,
+      "test_file": "tests/test_inception_block.py",
+      "completed_at": "2026-02-20T17:51:18Z"
+    },
+    {
+      "name": "FusedMBConv",
+      "level": 2,
+      "status": "completed",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "Conv2d",
+        "BatchNorm",
+        "SiLU",
+        "SEBlock"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/FusedMBConv.ns",
+      "params": "channels, expansion, reduction",
+      "input_shape": "[batch, channels, height, width]",
+      "output_shape": "[batch, channels, height, width]",
+      "description": "Fused Mobile Inverted Bottleneck (EfficientNetV2, Gupta & Tan 2021). Unlike MBConvBlock which uses separate depthwise + pointwise convolutions, FusedMBConv uses a single standard Conv2d for expansion. Fork input into skip and main paths. Main: Conv2d(channels, channels * expansion, 3, 1, 1) then BatchNorm(channels * expansion) then SiLU() for fused expansion. Then SEBlock(channels * expansion, reduction) for squeeze-excitation. Then Conv2d(channels * expansion, channels, 1, 1, 0) then BatchNorm(channels) for projection. Add(main, skip) for residual connection.",
+      "attempts": 0,
+      "last_error": null,
+      "lessons_learned": null,
+      "turns_used": null,
+      "paper": null,
+      "test_file": "tests/test_fused_mb_conv.py",
+      "completed_at": "2026-02-20T17:51:18Z"
+    },
+    {
+      "name": "Conformer",
+      "level": 2,
+      "status": "completed",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "LayerNorm",
+        "FFN",
+        "MultiHeadSelfAttention",
+        "Conv1d",
+        "BatchNorm",
+        "SiLU",
+        "Dropout"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/Conformer.ns",
+      "params": "dim, num_heads, ff_expansion, conv_kernel, dropout_rate",
+      "input_shape": "[batch, seq, dim]",
+      "output_shape": "[batch, seq, dim]",
+      "description": "Conformer encoder block (Gulati et al. 2020). Convolution-augmented transformer for speech/audio. Three sequential residual sub-blocks. 1) Self-attention: Fork -> (skip, attn). attn: LayerNorm(dim) then MultiHeadSelfAttention(dim, num_heads) then Dropout(dropout_rate). Add(skip, attn_out). 2) Convolution module: Fork -> (skip, conv). conv: LayerNorm(dim) then Conv1d(dim, dim, conv_kernel, 1, conv_kernel / 2) then BatchNorm(dim) then SiLU() then Dropout(dropout_rate). Add(skip, conv_out). 3) Feed-forward: Fork -> (skip, ffn). ffn: LayerNorm(dim) then FFN(dim, ff_expansion) then Dropout(dropout_rate). Add(skip, ffn_out). Final LayerNorm(dim) -> out.",
+      "attempts": 0,
+      "last_error": null,
+      "lessons_learned": null,
+      "turns_used": null,
+      "paper": null,
+      "test_file": "tests/test_conformer.py",
+      "completed_at": "2026-02-20T17:51:18Z"
+    },
+    {
+      "name": "WaveNetBlock",
+      "level": 2,
+      "status": "completed",
+      "dependencies": [
+        "Fork",
+        "Add",
+        "Conv1d",
+        "Tanh",
+        "Sigmoid",
+        "Multiply"
+      ],
+      "pattern": "residual",
+      "target_file": "stdlib/WaveNetBlock.ns",
+      "params": "channels, kernel_size, dilation",
+      "input_shape": "[batch, channels, seq]",
+      "output_shape": "[batch, channels, seq]",
+      "description": "WaveNet residual block (van den Oord et al. 2016). Gated activation with dilated causal convolution and residual connection. Dilation controls the receptive field; stack blocks with dilation 1, 2, 4, 8, ... Fork input into (skip, main). Main path: Conv1d(channels, channels, kernel_size, 1, dilation * (kernel_size - 1) / 2, dilation) for dilated convolution. Fork filtered into (tanh_path, sigmoid_path). tanh_path: Tanh(). sigmoid_path: Sigmoid(). Multiply() for gated activation. Linear(channels, channels) for residual projection. Add(projection, skip) -> out.",
+      "attempts": 0,
+      "last_error": null,
+      "lessons_learned": null,
+      "turns_used": null,
+      "paper": null,
+      "test_file": "tests/test_wave_net_block.py",
+      "completed_at": "2026-02-20T17:51:18Z"
     }
   ]
 }

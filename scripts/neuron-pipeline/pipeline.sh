@@ -31,6 +31,44 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# ── Signal Handling ──────────────────────────────────────────────
+
+INTERRUPTED=false
+
+pipeline_cleanup() {
+  if [ "$INTERRUPTED" = true ]; then return; fi
+  INTERRUPTED=true
+  echo ""
+  echo -e "${YELLOW}Interrupted! Cleaning up...${NC}"
+
+  # Reset any in_progress neurons back to pending
+  if [ -f "$MANIFEST" ]; then
+    local tmp
+    tmp=$(mktemp)
+    if jq '(.neurons[] | select(.status == "in_progress")).status = "pending"' \
+         "$MANIFEST" > "$tmp" 2>/dev/null; then
+      mv "$tmp" "$MANIFEST"
+      echo -e "${YELLOW}  Reset in-progress neurons to pending${NC}"
+    else
+      rm -f "$tmp"
+    fi
+  fi
+
+  # Return to main branch if on a feature/neuron branch
+  local current_branch
+  current_branch=$(cd "$ROOT_DIR" && git branch --show-current 2>/dev/null) || true
+  if [ -n "$current_branch" ] && [ "$current_branch" != "main" ]; then
+    echo -e "${YELLOW}  Returning to main branch (was on $current_branch)${NC}"
+    (cd "$ROOT_DIR" && git checkout main 2>/dev/null) || true
+  fi
+
+  echo -e "${YELLOW}Pipeline stopped. Run --status to see progress.${NC}"
+  exit 130
+}
+
+# Install trap — callers can override with their own cleanup that calls this
+trap pipeline_cleanup SIGINT SIGTERM
+
 # ── Helpers ──────────────────────────────────────────────────────
 
 log() {
@@ -110,6 +148,73 @@ record_attempt() {
     '(.neurons[] | select(.name == $name)).attempts += 1 |
      (.neurons[] | select(.name == $name)).last_error = (if $error == "" then null else $error end)' \
     "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
+}
+
+# ── Restart / Scan Existing ──────────────────────────────────────
+
+restart_manifest() {
+  local binary="$ROOT_DIR/target/release/neuroscript"
+
+  echo -e "\n${BOLD}Restarting pipeline — scanning existing stdlib files...${NC}\n"
+
+  ensure_binary
+
+  local total=0 preserved=0 reset=0
+
+  # Iterate over all neurons in manifest
+  while IFS=$'\t' read -r name target; do
+    total=$((total + 1))
+    local full_path="$ROOT_DIR/$target"
+
+    if [ -f "$full_path" ]; then
+      # File exists — try validate + compile
+      local val_exit=0 comp_exit=0
+      "$binary" validate "$full_path" >/dev/null 2>&1 || val_exit=$?
+
+      if [ $val_exit -eq 0 ]; then
+        "$binary" compile "$full_path" --neuron "$name" >/dev/null 2>&1 || comp_exit=$?
+      fi
+
+      if [ $val_exit -eq 0 ] && [ $comp_exit -eq 0 ]; then
+        echo -e "  ${GREEN}✅ $name${NC} — validates & compiles, preserving as completed"
+        local tmp
+        tmp=$(mktemp)
+        jq --arg n "$name" '
+          (.neurons[] | select(.name == $n)) |=
+            (.status = "completed" | .last_error = null)
+        ' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
+        preserved=$((preserved + 1))
+      else
+        echo -e "  ${YELLOW}⚠️  $name${NC} — file exists but validation failed, resetting"
+        local tmp
+        tmp=$(mktemp)
+        jq --arg n "$name" '
+          (.neurons[] | select(.name == $n)) |=
+            (.status = "pending" | .attempts = 0 | .last_error = null |
+             .turns_used = null | .lessons_learned = null | .completed_at = null)
+        ' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
+        reset=$((reset + 1))
+      fi
+    else
+      echo -e "  ${BLUE}⬜ $name${NC} — no file at $target, resetting to pending"
+      local tmp
+      tmp=$(mktemp)
+      jq --arg n "$name" '
+        (.neurons[] | select(.name == $n)) |=
+          (.status = "pending" | .attempts = 0 | .last_error = null |
+           .turns_used = null | .lessons_learned = null | .completed_at = null)
+      ' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST"
+      reset=$((reset + 1))
+    fi
+  done < <(jq -r '.neurons[] | [.name, .target_file] | @tsv' "$MANIFEST")
+
+  echo ""
+  echo -e "  ${BOLD}Results:${NC} $total neurons scanned"
+  echo -e "    ${GREEN}Preserved: $preserved${NC} (valid files kept as completed)"
+  echo -e "    ${YELLOW}Reset:     $reset${NC} (pending for creation)"
+  echo ""
+
+  log "Restart: $preserved preserved, $reset reset out of $total"
 }
 
 # ── Status Display ───────────────────────────────────────────────
@@ -495,6 +600,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
       echo "Reset $name to pending"
       ;;
 
+    --restart)
+      restart_manifest
+      show_status
+      ;;
+
     --dry-run|-d)
       dry_run
       ;;
@@ -530,6 +640,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
       echo "  --next,   -n        Show next neuron to create (with details)"
       echo "  --dry-run,-d        Show creation order without executing"
       echo "  --reset,  -r NAME   Reset a failed neuron to pending"
+      echo "  --restart           Scan stdlib, preserve valid files, reset rest"
       echo "  --help,   -h        Show this help"
       echo ""
       echo "The manifest (manifest.json) tracks:"

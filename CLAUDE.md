@@ -33,7 +33,11 @@ NeuroScript is a neural architecture composition language implemented in Rust. I
 
 When writing or generating NeuroScript (.ns) files:
 
+* Comments use `#` (inline) and `///` (doc comments). **NOT** `//` — that is invalid syntax
 * Binding blocks use `context:` keyword (not `let:`), with optional annotations: `@lazy`, `@static`, `@global`
+* Context bindings use `=` for assignment: `transformer = TransformerBlock(d_model, num_heads, d_ff)`
+* Parameters support default values: `neuron Foo(dim, layers=10):`
+* Named unroll blocks for repeated layers: `stack = unroll(layers): block = TransformerBlock(...)`
 * Recursive bindings require `@lazy` annotation with arguments that change (e.g., `depth - 1`)
 * Only one variadic dimension per shape (e.g., `[*shape, dim]` works, `[*a, *b]` does not)
 * Implicit fork is preferred for splitting: `in -> (a, b, c)` — any single output → N-way tuple. Explicit Fork/Fork3 only for named port access
@@ -335,12 +339,25 @@ src/
 
 ## Key Language Concepts
 
+### Comments
+
+* Inline comments: `# this is a comment`
+* Doc comments: `/// This documents the neuron below` (must precede a `neuron` definition)
+* **`//` is NOT valid** — use `#` for inline comments
+
 ### Neurons
 
 Two types:
 
 * **Primitive**: Has `impl:` reference to external code (e.g., `impl: core,nn/Linear`)
 * **Composite**: Has `graph:` section with internal connections
+
+### Parameters and Defaults
+
+* Basic: `neuron Foo(dim, heads):`
+* With defaults: `neuron TransformerStack(d_model, num_heads, d_ff, layers=10):`
+* With type annotations: `neuron Route(block: Neuron):` (higher-order neuron parameter)
+* Grammar: `param = { ident ~ (colon ~ type_annotation)? ~ (assign ~ value)? }`
 
 ### Ports
 
@@ -381,25 +398,27 @@ Two types:
 
 ### Tuple Unpacking & Implicit Fork
 
-```rust
-// Implicit fork (v0.3.0+) — preferred for splitting tensors
-in -> (a, b, c)        // Single output auto-replicates to all bindings
-in -> (main, skip)     // Any number of outputs supported
+```neuroscript
+# Implicit fork — preferred for splitting tensors
+in -> (a, b, c)        # Single output auto-replicates to all bindings
+in -> (main, skip)     # Any number of outputs supported
 
-// Explicit Fork — only when you need named port access
+# Explicit Fork — only when you need named port access
 in -> Fork() -> f
 f.left -> ...
 f.right -> ...
 
-// NOT for inline calls
-Linear(dim, dim * 4)  // Call with args, not tuple
+# NOT for inline calls
+Linear(dim, dim * 4)  # Call with args, not tuple
 ```
 
 ### Match Expressions
 
 * Pattern match on tensor shapes with dimension capture
-* **Basic syntax**: `match: [pattern]: pipeline`
-* **With guards**: `match: [*, d] where d > 512: Linear(d, 512) -> out`
+* **Data-threading syntax**: `match: ->` followed by indented arms
+* **Match arm syntax**: `[pattern] where guard: pipeline`
+* **With guards**: `[*, d] where d > 512: Linear(d, 512) -> out`
+* **Dispatch on parameter**: `match(block):` followed by neuron port contract arms
 * **Dimension binding**: Captured dimensions (e.g., `d`, `seq`) can be:
   * Used in guard conditions (`where d > 512`)
   * Passed as arguments to neuron calls (`Linear(d, 512)`)
@@ -409,7 +428,8 @@ Linear(dim, dim * 4)  // Call with args, not tuple
 ### Context Bindings
 
 * Define reusable neuron instantiations within a neuron definition
-* Syntax: `context:` block with optional annotations (`@lazy`, `@static`, `@global`)
+* Syntax: `context:` block with bindings using `=` (not `:`)
+* Optional annotations: `@lazy`, `@static`, `@global`
 * Enables recursion via `@lazy` binding to self with modified parameters
 * Example:
 
@@ -420,10 +440,43 @@ Linear(dim, dim * 4)  // Call with args, not tuple
     context:
       @lazy recurse = MyNeuron(d_model, num_heads, d_ff, depth - 1)
     graph:
-      in -> match:
+      in -> match: ->
         [*, seq, d_model] where depth > 0: recurse
         [*, seq, d_model]: Identity() -> out
   ```
+
+### Unroll Blocks
+
+* Compile-time expansion of repeated layers (e.g., stacking N transformer blocks)
+* Named unroll blocks live inside `context:` sections
+* Syntax: `name = unroll(count): binding = NeuronCall(args)`
+* The unroll name becomes a sequential pipeline endpoint in the graph
+* Example:
+
+  ```neuroscript
+  neuron TransformerStack(d_model, num_heads, d_ff, layers=10):
+    in: [*batch, seq, d_model]
+    out: [*batch, seq, d_model]
+    context:
+      stack = unroll(layers):
+        transformer = TransformerBlock(d_model, num_heads, d_ff)
+    graph:
+      in ->
+        stack
+        out
+  ```
+
+### If/Elif/Else Expressions
+
+* Conditional branching within graph pipelines
+* Syntax: `if condition: pipeline`, with optional `elif` and `else` branches
+* Supports both inline and indented pipeline forms
+
+### Global Declarations
+
+* Module-level shared state: `@global vocab_table = Embedding(50257, 768)`
+* Global value bindings: `@global num_heads = 12`
+* Referenced in shapes/expressions via `@global name`
 
 ### Error Handling Philosophy
 
@@ -445,14 +498,16 @@ Comprehensive test suite with 126+ `.ns` files covering language features:
 
 ### Standard Library (`stdlib/`)
 
-6 library files with composable neurons:
+34 library files with composable neurons across several categories:
 
-* `FFN.ns`: Feed-forward networks (3 variants)
-* `Residual.ns`: Skip connections (5 variants)
-* `MultiHeadAttention.ns`: Attention mechanisms (5 variants)
-* `TransformerBlock.ns`: Complete transformer layers (5 variants)
-* `TransformerStack.ns`: Stacked transformers (6 variants)
-* `MetaNeurons.ns`: Routing and composition (16 neurons)
+* **Core**: `FFN.ns`, `GatedFFN.ns`, `GLU.ns`, `GeGLU.ns`, `SwiGLU.ns`
+* **Residual**: `Residual.ns`, `PreNormResidual.ns`, `PostNormResidual.ns`, `DenseConnection.ns`, `HighwayConnection.ns`
+* **Attention**: `MultiHeadAttention.ns`, `MultiQueryAttention.ns`, `GroupedQueryAttention.ns`, `CrossAttention.ns`, `RelativePositionBias.ns`
+* **Transformer**: `TransformerBlock.ns`, `TransformerEncoderBlock.ns`, `TransformerDecoderBlock.ns`, `TransformerStack.ns`
+* **Vision**: `PatchEmbedding.ns`, `ViTBlock.ns`, `InceptionBlock.ns`, `SEBlock.ns`
+* **ConvNets**: `ResNetBasicBlock.ns`, `BottleneckBlock.ns`, `ResNeXtBlock.ns`, `ConvNeXtBlock.ns`, `MBConvBlock.ns`, `FusedMBConv.ns`, `DenseBlock.ns`
+* **Audio/Sequence**: `Conformer.ns`, `WaveNetBlock.ns`
+* **Routing**: `MetaNeurons.ns` (16 routing/composition neurons), `Expert.ns`
 
 ### Unit Tests
 
@@ -580,7 +635,7 @@ Generated PyTorch modules are standalone after runtime is installed.
 * ✅ Shape algebra with pattern matching
 * ✅ Python runtime package
 * ✅ Standard library registry
-* ✅ Comprehensive test suite (126+ examples, 6 stdlib files)
+* ✅ Comprehensive test suite (126+ examples, 34 stdlib files)
 
 ### Phase 2: Codegen ✅ Complete
 
@@ -596,9 +651,10 @@ Generated PyTorch modules are standalone after runtime is installed.
 
 ### Phase 3: Advanced Features (In Progress)
 
+* ✅ Higher-order neurons (neuron parameters with `: Neuron` type annotation)
+* ✅ Named unroll blocks for repeated layers (`unroll(count):`)
+* ✅ Default parameter values (`layers=10`)
 * ⏳ Full dimension variable type inference across programs
-* ⏳ Loop constructs for repeated layers
-* ⏳ Higher-order neurons (neuron parameters)
 * ⏳ Graph simplification and fusion optimizations
 * ⏳ Multiple backends (ONNX, JAX, TorchScript)
 

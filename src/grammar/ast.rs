@@ -455,6 +455,11 @@ impl AstBuilder {
         let first = &inner[0];
 
         match first.as_rule() {
+            // Handle parenthesized expressions: lparen ~ dim ~ rparen
+            Rule::lparen => {
+                let dim_pair = &inner[1];
+                self.build_dim(dim_pair.clone())
+            }
             Rule::star => {
                 // Check for variadic: *name
                 if inner.len() > 1 && inner[1].as_rule() == Rule::ident {
@@ -1462,7 +1467,14 @@ impl AstBuilder {
     fn build_value_primary(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::value_primary);
 
-        let inner = pair.into_inner().next().unwrap();
+        let mut inner_iter = pair.into_inner();
+        let inner = inner_iter.next().unwrap();
+
+        // Handle parenthesized expressions: lparen ~ value ~ rparen
+        if inner.as_rule() == Rule::lparen {
+            let value_pair = inner_iter.next().unwrap();
+            return self.build_value(value_pair);
+        }
 
         match inner.as_rule() {
             Rule::float => {

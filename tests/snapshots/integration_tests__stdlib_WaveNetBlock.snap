@@ -1,0 +1,26 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron WaveNetBlock(channels, kernel_size, dilation):
+  inputs:
+    default: [batch, channels, seq]
+  outputs:
+    default: [batch, channels, seq]
+  graph:
+    in -> (main, skip)
+    main -> Conv1d#0(channels, channels, kernel_size, 1, ((dilation * (kernel_size - 1)) / 2), dilation)
+    Conv1d#0(channels, channels, kernel_size, 1, ((dilation * (kernel_size - 1)) / 2), dilation) -> filtered
+    filtered -> (tanh_path, sigmoid_path)
+    tanh_path -> Tanh#1()
+    Tanh#1() -> tanh_out
+    sigmoid_path -> Sigmoid#2()
+    Sigmoid#2() -> sig_out
+    (tanh_out, sig_out) -> Multiply#3()
+    Multiply#3() -> gated
+    gated -> Conv1d#4(channels, channels, 1)
+    Conv1d#4(channels, channels, 1) -> projection
+    (projection, skip) -> Add#5()
+    Add#5() -> out

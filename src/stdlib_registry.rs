@@ -100,6 +100,15 @@ impl StdlibRegistry {
         );
 
         self.register(
+            "ConstScale",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.operations",
+                "ConstScale",
+                "Constant scalar multiplication",
+            ),
+        );
+
+        self.register(
             "MatMul",
             ImplRef::with_desc(
                 "neuroscript_runtime.primitives.operations",

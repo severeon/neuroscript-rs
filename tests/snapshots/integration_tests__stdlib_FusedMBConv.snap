@@ -1,0 +1,22 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron FusedMBConv(channels, expansion, reduction):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  graph:
+    in -> (main, skip)
+    main -> Conv2d#0(channels, (channels * expansion), 3, 1, 1)
+    Conv2d#0(channels, (channels * expansion), 3, 1, 1) -> BatchNorm#1((channels * expansion))
+    BatchNorm#1((channels * expansion)) -> SiLU#2()
+    SiLU#2() -> SEBlock#3((channels * expansion), reduction)
+    SEBlock#3((channels * expansion), reduction) -> Conv2d#4((channels * expansion), channels, 1, 1, 0)
+    Conv2d#4((channels * expansion), channels, 1, 1, 0) -> BatchNorm#5(channels)
+    BatchNorm#5(channels) -> projected
+    (projected, skip) -> Add#6()
+    Add#6() -> out

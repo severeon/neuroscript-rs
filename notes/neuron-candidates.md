@@ -111,38 +111,38 @@ Level 4: Meta (ensembles, routers, control flow)
 - [x] `ScaledDotProductAttention` - core attention operation
 - [x] `MultiHeadAttention` - parallel attention heads
 - [x] `SelfAttention` - query=key=value
-- [ ] `CrossAttention` - query ≠ key=value
+- [x] `CrossAttention` - query ≠ key=value
 - [ ] `FlashAttention` - memory-efficient attention
 - [ ] `SparseAttention` - local/strided/block-sparse patterns
 - [ ] `LinearAttention` - kernel-based O(n) attention
-- [ ] `GroupedQueryAttention` (GQA) - shared key/value heads
-- [ ] `MultiQueryAttention` (MQA) - single key/value head
+- [x] `GroupedQueryAttention` (GQA) - shared key/value heads
+- [x] `MultiQueryAttention` (MQA) - single key/value head
 
 ### Feed-Forward Networks
 
 - [x] `FFN` / `MLP` - linear → activation → linear
-- [ ] `GatedFFN` - gating mechanism (GLU-style)
-- [ ] `SwiGLU` - SiLU gated FFN
-- [ ] `GeGLU` - GELU gated FFN
-- [ ] `Expert` - single expert block (for MoE)
+- [x] `GatedFFN` - gating mechanism (GLU-style)
+- [x] `SwiGLU` - SiLU gated FFN
+- [x] `GeGLU` - GELU gated FFN
+- [x] `Expert` - single expert block (for MoE)
 
 ### Residual Connections
 
-- [ ] `Residual` - add(x, f(x))
-- [ ] `PreNormResidual` - norm → f(x) → add
-- [ ] `PostNormResidual` - f(x) → norm → add
-- [ ] `HighwayConnection` - gated residual
-- [ ] `DenseConnection` - concatenate all previous layers
+- [x] `Residual` - add(x, f(x))
+- [x] `PreNormResidual` - norm → f(x) → add
+- [x] `PostNormResidual` - f(x) → norm → add
+- [x] `HighwayConnection` - gated residual
+- [x] `DenseConnection` - concatenate all previous layers
 
 ### Gating Mechanisms
 
-- [ ] `GLU` - gated linear unit
+- [x] `GLU` - gated linear unit
 - [ ] `LSTM-Gate` - forget/input/output gates
 - [ ] `GRU-Gate` - update/reset gates
 
 ### Positional Processing
 
-- [ ] `RelativePositionBias` - T5-style learned biases
+- [x] `RelativePositionBias` - T5-style learned biases
 - [ ] `ConditionalPositionEncoding` - conditional position embeddings
 
 ---
@@ -154,22 +154,22 @@ Level 4: Meta (ensembles, routers, control flow)
 ### Transformer Family
 
 - [x] `TransformerBlock` - attention + FFN + residuals
-- [ ] `TransformerEncoderBlock` - self-attention block
-- [ ] `TransformerDecoderBlock` - cross-attention block
-- [ ] `TransformerStack` - N stacked transformer Neurons
+- [x] `TransformerEncoderBlock` - self-attention block
+- [x] `TransformerDecoderBlock` - cross-attention block
+- [x] `TransformerStack` - N stacked transformer Neurons
 - [ ] `PrefixLM` - prefix language model block
 - [ ] `EncoderDecoder` - full transformer architecture
 
 ### Convolutional Architectures
 
-- [ ] `ResNetBlock` - residual block (basic/bottleneck)
-- [ ] `ResNeXtBlock` - grouped convolutions
-- [ ] `DenseBlock` - densely connected block
-- [ ] `InceptionBlock` - multi-scale convolutions
-- [ ] `SEBlock` - squeeze-and-excitation
-- [ ] `MBConvBlock` - mobile inverted bottleneck
-- [ ] `FusedMBConv` - fused mobile conv (EfficientNet)
-- [ ] `BottleneckBlock` - 1x1 → 3x3 → 1x1 conv
+- [x] `ResNetBlock` - residual block (basic/bottleneck)
+- [x] `ResNeXtBlock` - grouped convolutions
+- [x] `DenseBlock` - densely connected block
+- [x] `InceptionBlock` - multi-scale convolutions
+- [x] `SEBlock` - squeeze-and-excitation
+- [x] `MBConvBlock` - mobile inverted bottleneck
+- [x] `FusedMBConv` - fused mobile conv (EfficientNet)
+- [x] `BottleneckBlock` - 1x1 → 3x3 → 1x1 conv
 
 ### Recurrent/State Space
 
@@ -184,10 +184,10 @@ Level 4: Meta (ensembles, routers, control flow)
 
 ### Vision-Specific
 
-- [ ] `ConvNeXtBlock` - modernized ResNet block
+- [x] `ConvNeXtBlock` - modernized ResNet block
 - [ ] `SwinBlock` - shifted window attention
-- [ ] `ViTBlock` - vision transformer block
-- [ ] `PatchEmbedding` - image → patch embeddings
+- [x] `ViTBlock` - vision transformer block
+- [x] `PatchEmbedding` - image → patch embeddings
 - [ ] `PatchMerging` - hierarchical patch reduction
 - [ ] `FPN` - feature pyramid network
 - [ ] `UNetBlock` - U-Net encoder/decoder block
@@ -217,8 +217,8 @@ Level 4: Meta (ensembles, routers, control flow)
 
 - [ ] `MelSpectrogram` - mel-scale spectrogram
 - [ ] `MFCC` - mel-frequency cepstral coefficients
-- [ ] `WaveNetBlock` - dilated causal convolution
-- [ ] `Conformer` - convolution-augmented transformer
+- [x] `WaveNetBlock` - dilated causal convolution
+- [x] `Conformer` - convolution-augmented transformer
 - [ ] `WhisperEncoder` - speech encoder block
 - [ ] `WhisperDecoder` - speech decoder block
 

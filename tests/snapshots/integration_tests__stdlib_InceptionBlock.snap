@@ -1,0 +1,36 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron InceptionBlock(in_channels, out_1x1, out_3x3, out_5x5, out_pool):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, *, height, width]
+  graph:
+    in -> (b1, b2, b3, b4)
+    b1 -> Conv2d#0(in_channels, out_1x1, 1, 1, 0)
+    Conv2d#0(in_channels, out_1x1, 1, 1, 0) -> BatchNorm#1(out_1x1)
+    BatchNorm#1(out_1x1) -> ReLU#2()
+    ReLU#2() -> branch1
+    b2 -> Conv2d#3(in_channels, out_3x3, 3, 1, 1)
+    Conv2d#3(in_channels, out_3x3, 3, 1, 1) -> BatchNorm#4(out_3x3)
+    BatchNorm#4(out_3x3) -> ReLU#5()
+    ReLU#5() -> branch2
+    b3 -> Conv2d#6(in_channels, out_5x5, 5, 1, 2)
+    Conv2d#6(in_channels, out_5x5, 5, 1, 2) -> BatchNorm#7(out_5x5)
+    BatchNorm#7(out_5x5) -> ReLU#8()
+    ReLU#8() -> branch3
+    b4 -> MaxPool#9(3, 1, 1)
+    MaxPool#9(3, 1, 1) -> Conv2d#10(in_channels, out_pool, 1, 1, 0)
+    Conv2d#10(in_channels, out_pool, 1, 1, 0) -> BatchNorm#11(out_pool)
+    BatchNorm#11(out_pool) -> ReLU#12()
+    ReLU#12() -> branch4
+    (branch1, branch2) -> Concat#13(1)
+    Concat#13(1) -> c12
+    (c12, branch3) -> Concat#14(1)
+    Concat#14(1) -> c123
+    (c123, branch4) -> Concat#15(1)
+    Concat#15(1) -> out

@@ -2,12 +2,12 @@
 ///
 /// Stacks N identical transformer blocks in sequence.
 /// This is the core of any transformer model (GPT, BERT, etc.)
-neuron TransformerStack(d_model, num_heads, d_ff, layers):
+neuron TransformerStack(d_model, num_heads, d_ff, layers=10):
     in: [*batch, seq, d_model]
     out: [*batch, seq, d_model]
     context:
         stack = unroll(layers):
-            transformer: TransformerBlock(d_model, num_heads, d_ff)
+            transformer = TransformerBlock(d_model, num_heads, d_ff)
     graph:
         in ->
             stack

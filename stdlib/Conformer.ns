@@ -1,0 +1,62 @@
+/// Conformer Encoder Block
+///
+/// Convolution-augmented transformer for speech and audio processing.
+/// Macaron-style architecture with four sequential residual sub-blocks:
+/// half-step FFN, self-attention, convolution, half-step FFN, then LayerNorm.
+/// The two FFN modules use half-step residuals (output scaled by 0.5).
+/// conv_kernel must be odd for sequence-length preservation (padding = kernel/2).
+/// Reference: Gulati et al. (2020), "Conformer"
+neuron Conformer(dim, num_heads, ff_expansion, conv_kernel, dropout_rate):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # First half-step FFN residual
+        in -> (ffn1_path, skip1)
+        ffn1_path ->
+            LayerNorm(dim)
+            Linear(dim, ff_expansion)
+            SiLU()
+            Dropout(dropout_rate)
+            Linear(ff_expansion, dim)
+            Dropout(dropout_rate)
+            ConstScale(0.5)
+            ffn1_out
+        (ffn1_out, skip1) -> Add() -> ffn1_residual
+
+        # Self-attention residual
+        ffn1_residual -> (attn_path, skip2)
+        attn_path ->
+            LayerNorm(dim)
+            MultiHeadSelfAttention(dim, num_heads)
+            Dropout(dropout_rate)
+            attn_out
+        (attn_out, skip2) -> Add() -> attn_residual
+
+        # Convolution module residual
+        attn_residual -> (conv_path, skip3)
+        conv_path ->
+            LayerNorm(dim)
+            Transpose(1, 2)
+            Conv1d(dim, dim, conv_kernel, 1, conv_kernel / 2)
+            BatchNorm(dim)
+            SiLU()
+            Transpose(1, 2)
+            Dropout(dropout_rate)
+            conv_out
+        (conv_out, skip3) -> Add() -> conv_residual
+
+        # Second half-step FFN residual
+        conv_residual -> (ffn2_path, skip4)
+        ffn2_path ->
+            LayerNorm(dim)
+            Linear(dim, ff_expansion)
+            SiLU()
+            Dropout(dropout_rate)
+            Linear(ff_expansion, dim)
+            Dropout(dropout_rate)
+            ConstScale(0.5)
+            ffn2_out
+        (ffn2_out, skip4) -> Add() -> ffn2_residual
+
+        # Final LayerNorm
+        ffn2_residual -> LayerNorm(dim) -> out

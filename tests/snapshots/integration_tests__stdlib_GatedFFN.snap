@@ -17,8 +17,6 @@ neuron GatedFFN(dim, expansion, dropout_rate):
     value_path -> Linear#2(dim, expansion)
     Linear#2(dim, expansion) -> value
     (gate, value) -> Multiply#3()
-    Multiply#3() -> combined
-    combined -> Dropout#4(dropout_rate)
-    Dropout#4(dropout_rate) -> regularized
-    regularized -> Linear#5(expansion, dim)
+    Multiply#3() -> Dropout#4(dropout_rate)
+    Dropout#4(dropout_rate) -> Linear#5(expansion, dim)
     Linear#5(expansion, dim) -> out

@@ -2,12 +2,6 @@
 # Purpose: Demonstrate variadic input ports with Concat
 # Feature: Variadic ports allow a neuron to accept any number of inputs
 
-# Variadic Concat primitive — accepts 2, 3, or more inputs
-neuron Concat(dim):
-    in *inputs: [*shape]
-    out: [*shape_out]
-    impl: core,structural/Concat
-
 # Two-input concat (classic case)
 neuron TwoWayConcat(dim):
     in: [*, dim]
@@ -47,14 +41,3 @@ neuron ConcatNorm(dim):
     out: [*, dim]
     graph:
         in -> Concat(1) -> LayerNorm(dim) -> out
-
-# Supporting primitives
-neuron Linear(in_dim, out_dim):
-    in: [*, in_dim]
-    out: [*, out_dim]
-    impl: core,nn/Linear
-
-neuron LayerNorm(dim):
-    in: [*, dim]
-    out: [*, dim]
-    impl: core,normalization/LayerNorm
