@@ -676,30 +676,31 @@ fn test_codegen_unroll_threaded() {
     let source = include_str!("../../examples/unroll_threaded.ns");
     let mut program = parse(source).expect("Parse should succeed");
     if let Ok(stdlib) = crate::stdlib::load_stdlib() {
-        program.neurons.extend(stdlib.neurons);
+        // Use merge_programs so user neurons take priority over stdlib.
+        // The example defines TransformerStack which also exists in stdlib;
+        // extend() would clobber the example's definition.
+        program = crate::stdlib::merge_programs(stdlib, program);
     }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "TransformerStack").expect("Codegen should succeed");
 
     // Should use nn.ModuleList for unrolled blocks
-    // Note: stdlib TransformerStack uses "stack"/"transformer"/"layers" naming,
-    // which overwrites the example's "blocks"/"block"/"num_layers" via extend()
     assert!(
-        code.contains("nn.ModuleList(["),
+        code.contains("self.blocks = nn.ModuleList(["),
         "Should use nn.ModuleList for unrolled blocks"
     );
     assert!(
-        code.contains("TransformerBlock(d_model, num_heads, d_ff) for _ in range("),
-        "Should use range() in comprehension"
+        code.contains("TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)"),
+        "Should use range(num_layers) in comprehension"
     );
 
     // Forward should use a for loop
     assert!(
-        code.contains("for ") && code.contains("in self."),
+        code.contains("for block in self.blocks:"),
         "Should iterate over module list"
     );
     assert!(
-        code.contains("x = ") && code.contains("(x)"),
+        code.contains("x = block(x)"),
         "Should apply each block in-place"
     );
 }
@@ -709,7 +710,7 @@ fn test_codegen_unroll_context() {
     let source = include_str!("../../examples/unroll_context.ns");
     let mut program = parse(source).expect("Parse should succeed");
     if let Ok(stdlib) = crate::stdlib::load_stdlib() {
-        program.neurons.extend(stdlib.neurons);
+        program = crate::stdlib::merge_programs(stdlib, program);
     }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "NamedStack").expect("Codegen should succeed");
@@ -740,7 +741,7 @@ fn test_codegen_unroll_static() {
     let source = include_str!("../../examples/unroll_static.ns");
     let mut program = parse(source).expect("Parse should succeed");
     if let Ok(stdlib) = crate::stdlib::load_stdlib() {
-        program.neurons.extend(stdlib.neurons);
+        program = crate::stdlib::merge_programs(stdlib, program);
     }
     validate(&mut program).expect("Validation should succeed");
     let code = generate_pytorch(&program, "SharedLayers").expect("Codegen should succeed");
@@ -778,7 +779,7 @@ fn test_codegen_unroll_gpt2() {
 
     // Load stdlib neurons since the example file references TransformerBlock etc.
     if let Ok(stdlib) = crate::stdlib::load_stdlib() {
-        program.neurons.extend(stdlib.neurons);
+        program = crate::stdlib::merge_programs(stdlib, program);
     }
 
     validate(&mut program).expect("Validation should succeed");

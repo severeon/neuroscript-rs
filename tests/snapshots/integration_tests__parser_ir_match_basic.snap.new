@@ -1,0 +1,21 @@
+---
+source: tests/integration_tests.rs
+assertion_line: 399
+expression: formatted
+---
+=== Neurons ===
+
+neuron DimensionRouterInline(out_dim):
+  inputs:
+    default: [batch, in_dim]
+  outputs:
+    default: [batch, out_dim]
+  graph:
+    in -> match:
+      [batch, d] where (d > 1024): Linear#0(d, 512) -> Linear#1(512, out_dim)
+      [batch, d] where (d > 256): Linear#2(d, out_dim)
+      [batch, d]: Linear#3(d, out_dim)
+    match:
+      [batch, d] where (d > 1024): Linear#0(d, 512) -> Linear#1(512, out_dim)
+      [batch, d] where (d > 256): Linear#2(d, out_dim)
+      [batch, d]: Linear#3(d, out_dim) -> out
