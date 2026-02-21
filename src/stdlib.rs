@@ -197,6 +197,7 @@ pub fn load_stdlib_embedded() -> Result<Program, StdlibError> {
         ("primitives/BatchNorm.ns", include_str!("../stdlib/primitives/BatchNorm.ns")),
         ("primitives/Bias.ns", include_str!("../stdlib/primitives/Bias.ns")),
         ("primitives/Concat.ns", include_str!("../stdlib/primitives/Concat.ns")),
+        ("primitives/ConstScale.ns", include_str!("../stdlib/primitives/ConstScale.ns")),
         ("primitives/Conv1d.ns", include_str!("../stdlib/primitives/Conv1d.ns")),
         ("primitives/Conv2d.ns", include_str!("../stdlib/primitives/Conv2d.ns")),
         ("primitives/Conv3d.ns", include_str!("../stdlib/primitives/Conv3d.ns")),

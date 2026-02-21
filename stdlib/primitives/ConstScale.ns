@@ -1,0 +1,19 @@
+/// Constant Scale
+///
+/// Multiplies input by a fixed (non-learnable) scalar factor.
+/// Used for constant scaling operations like half-step residuals.
+///
+/// Parameters:
+/// - factor: The constant scalar multiplier
+///
+/// Shape Contract:
+/// - Input: [*shape] any tensor
+/// - Output: [*shape] same shape, scaled by factor
+///
+/// Notes:
+/// - No learnable parameters (pure scaling by constant)
+/// - Common use: half-step FFN in Conformer (factor=0.5)
+neuron ConstScale(factor):
+    in: [*shape]
+    out: [*shape]
+    impl: core,operations/ConstScale

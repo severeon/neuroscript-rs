@@ -125,6 +125,31 @@ class Einsum(nn.Module):
         return f"equation='{self.equation}'"
 
 
+class ConstScale(nn.Module):
+    """
+    Constant (non-learnable) scalar multiplication.
+
+    Multiplies input by a fixed scalar factor.
+
+    Args:
+        factor: The constant multiplier
+
+    Shape:
+        - Input: [*shape]
+        - Output: [*shape]
+    """
+
+    def __init__(self, factor: float) -> None:
+        super().__init__()
+        self.factor = factor
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input * self.factor
+
+    def extra_repr(self) -> str:
+        return f"factor={self.factor}"
+
+
 class Identity(nn.Module):
     """
     Identity operation - returns input unchanged.
@@ -141,4 +166,4 @@ class Identity(nn.Module):
         return input
 
 
-__all__ = ["Bias", "Scale", "MatMul", "Einsum", "Identity"]
+__all__ = ["Bias", "Scale", "ConstScale", "MatMul", "Einsum", "Identity"]
