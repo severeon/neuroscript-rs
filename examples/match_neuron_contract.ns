@@ -16,3 +16,10 @@ neuron SmartStack(block: Neuron, d_model, count=6):
                 in [*, d_model] -> out [*, d_model]:
                     blocks
                     out
+
+# Use SmartStack to stop the validation error
+neuron MyModel(d_model):
+    in: [*, seq, d_model]
+    out: [*, seq, d_model]
+    graph:
+        in -> SmartStack(TransformerBlock, d_model) -> out

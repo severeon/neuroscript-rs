@@ -11,8 +11,8 @@ neuron WaveNetBlock(channels, kernel_size, dilation):
     default: [batch, channels, seq]
   graph:
     in -> (main, skip)
-    main -> Conv1d#0(channels, channels, kernel_size, 1, ((dilation * 0) / 2), dilation)
-    Conv1d#0(channels, channels, kernel_size, 1, ((dilation * 0) / 2), dilation) -> filtered
+    main -> Conv1d#0(channels, channels, kernel_size, 1, ((dilation * (kernel_size - 1)) / 2), dilation)
+    Conv1d#0(channels, channels, kernel_size, 1, ((dilation * (kernel_size - 1)) / 2), dilation) -> filtered
     filtered -> (tanh_path, sigmoid_path)
     tanh_path -> Tanh#1()
     Tanh#1() -> tanh_out
