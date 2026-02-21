@@ -13,7 +13,7 @@ const config = {
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://neuroscript-lang.com',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
@@ -36,9 +36,10 @@ const config = {
   
   plugins: [
     [
-      "docusaurus-plugin-generate-llms-txt",
+      "docusaurus-llms-generator",
       {
-        outputFile: "llms.txt", // defaults to llms.txt if not specified
+        outputFileName: "llms.txt",
+        outputFileNameFull: "llms-full.txt",
       },
     ],
   ],
