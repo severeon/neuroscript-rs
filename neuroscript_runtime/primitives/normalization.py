@@ -335,3 +335,86 @@ class InstanceNorm(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return self.instance_norm(input)
+
+
+class WeightNorm(nn.Module):
+    """
+    Weight Normalization wrapper.
+
+    Reparameterizes weight vectors by decoupling magnitude from direction.
+    Wraps a linear layer and applies weight normalization.
+    Reference: Salimans & Kingma (2016), "Weight Normalization"
+
+    Args:
+        in_features: Input dimension
+        out_features: Output dimension
+        dim: Dimension over which to compute the norm. Default: 0
+
+    Shape:
+        - Input: [*, in_features]
+        - Output: [*, out_features]
+
+    Examples:
+        >>> weight_norm = WeightNorm(512, 256)
+        >>> x = torch.randn(32, 10, 512)
+        >>> out = weight_norm(x)
+        >>> out.shape
+        torch.Size([32, 10, 256])
+
+    Notes:
+        - Decomposes weight W = g * (v / ||v||) where g is magnitude, v is direction
+        - Can improve optimization by reducing ill-conditioning
+        - Applied via torch.nn.utils.weight_norm utility
+        - Unlike BatchNorm, has no dependency on batch statistics
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        dim: int = 0,
+    ) -> None:
+        super().__init__()
+
+        if in_features <= 0:
+            raise ValueError(f"in_features must be positive, got {in_features}")
+
+        if out_features <= 0:
+            raise ValueError(f"out_features must be positive, got {out_features}")
+
+        self.in_features = in_features
+        self.out_features = out_features
+        self.dim = dim
+
+        # Create linear layer and apply weight normalization
+        linear = nn.Linear(in_features, out_features)
+        self.linear = torch.nn.utils.parametrizations.weight_norm(linear, dim=dim)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Apply weight-normalized linear transformation.
+
+        Args:
+            input: Input tensor [*, in_features]
+
+        Returns:
+            Transformed tensor [*, out_features]
+
+        Raises:
+            ValueError: If input's last dimension doesn't match in_features
+        """
+        if input.size(-1) != self.in_features:
+            raise ValueError(
+                f"Input last dimension mismatch: expected {self.in_features}, "
+                f"got {input.size(-1)} (input shape: {list(input.shape)})"
+            )
+
+        return self.linear(input)
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return (
+            f"in_features={self.in_features}, "
+            f"out_features={self.out_features}, "
+            f"dim={self.dim}"
+        )

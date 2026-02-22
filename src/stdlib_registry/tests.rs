@@ -15,7 +15,7 @@ fn test_registry_basics() {
     assert!(!registry.contains("NonExistent"));
 
     // Check we have the expected number of primitives
-    assert_eq!(registry.len(), 57); // 57 primitives registered (added ConstScale)
+    assert_eq!(registry.len(), 65); // 65 primitives registered
 
     // Check lookup works
     let linear = registry.lookup("Linear").unwrap();
@@ -79,7 +79,7 @@ fn test_all_primitives() {
     let primitives = registry.primitives();
 
     // Should be sorted
-    assert_eq!(primitives[0], "AdaptiveAvgPool");
+    assert_eq!(primitives[0], "ALiBi");
     assert!(primitives.contains(&"Linear".to_string()));
     assert!(primitives.contains(&"GELU".to_string()));
 

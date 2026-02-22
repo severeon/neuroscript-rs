@@ -190,3 +190,231 @@ class DropConnect(nn.Module):
     def extra_repr(self) -> str:
         """String representation for debugging."""
         return f"p={self.p}"
+
+
+class Dropblock(nn.Module):
+    """
+    DropBlock: structured dropout for convolutional neural networks.
+
+    Instead of dropping individual elements like standard dropout, drops
+    contiguous square regions (blocks) of feature maps. This is more
+    effective for convolutional layers where spatially correlated features
+    can bypass element-wise dropout.
+
+    Reference: Ghiasi et al. (2018), "DropBlock: A regularization technique
+    for convolutional neural networks"
+
+    Args:
+        block_size: Size of the square block to drop. Default: 7
+        drop_prob: Probability of dropping a block. Default: 0.1
+
+    Shape:
+        - Input: [batch, channels, height, width]
+        - Output: [batch, channels, height, width] same shape as input
+
+    Examples:
+        >>> dropblock = Dropblock(block_size=7, drop_prob=0.1)
+        >>> x = torch.randn(8, 64, 32, 32)
+        >>> dropblock.train()
+        >>> out_train = dropblock(x)  # contiguous regions zeroed
+        >>> dropblock.eval()
+        >>> out_eval = dropblock(x)   # no dropout applied
+
+    Notes:
+        - More effective than standard dropout for convolutional layers
+        - block_size should be smaller than spatial dimensions
+        - Output is rescaled to maintain expected values
+        - Only applies during training
+    """
+
+    def __init__(self, block_size: int = 7, drop_prob: float = 0.1) -> None:
+        super().__init__()
+
+        if block_size < 1:
+            raise ValueError(f"block_size must be >= 1, got {block_size}")
+        if not 0.0 <= drop_prob <= 1.0:
+            raise ValueError(f"drop_prob must be in [0, 1], got {drop_prob}")
+
+        self.block_size = block_size
+        self.drop_prob = drop_prob
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Apply DropBlock.
+
+        Args:
+            input: Input tensor [batch, channels, height, width]
+
+        Returns:
+            Output tensor with contiguous blocks dropped if training
+        """
+        if not self.training or self.drop_prob == 0.0:
+            return input
+
+        if input.ndim != 4:
+            raise ValueError(
+                f"Dropblock expects 4D input [batch, channels, height, width], got {input.ndim}D"
+            )
+
+        _, _, height, width = input.shape
+
+        # Compute gamma: the probability of dropping each element in the
+        # seed mask, adjusted so that the effective drop rate after block
+        # expansion matches drop_prob.
+        feat_area = height * width
+        block_area = self.block_size * self.block_size
+        # Clamp valid region to avoid division by zero for very small inputs
+        valid_h = max(height - self.block_size + 1, 1)
+        valid_w = max(width - self.block_size + 1, 1)
+        gamma = (self.drop_prob * feat_area) / (block_area * valid_h * valid_w)
+
+        # Sample seed mask (1 = keep, 0 = drop seed)
+        mask = (torch.rand_like(input) >= gamma).float()
+
+        # Expand drop regions using max pooling on the inverted mask
+        # Invert: 0 becomes 1 (regions to expand), 1 stays 0
+        block_mask = 1.0 - F.max_pool2d(
+            1.0 - mask,
+            kernel_size=self.block_size,
+            stride=1,
+            padding=self.block_size // 2,
+        )
+
+        # Crop to original spatial size in case padding changed dimensions
+        block_mask = block_mask[:, :, :height, :width]
+
+        # Scale output to maintain expected values
+        count = block_mask.numel()
+        count_ones = block_mask.sum().clamp(min=1.0)
+        output = input * block_mask * (count / count_ones)
+
+        return output
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"block_size={self.block_size}, drop_prob={self.drop_prob}"
+
+
+class SpecAugment(nn.Module):
+    """
+    SpecAugment: frequency and time masking for audio spectrograms.
+
+    Applies random frequency and time masks to spectrogram inputs,
+    zeroing out contiguous bands along frequency and time axes. This
+    is a simple but effective data augmentation for speech recognition.
+
+    Reference: Park et al. (2019), "SpecAugment: A Simple Data Augmentation
+    Method for ASR"
+
+    Args:
+        freq_mask_param: Maximum number of frequency channels to mask. Default: 27
+        time_mask_param: Maximum number of time steps to mask. Default: 100
+        num_freq_masks: Number of frequency masks to apply. Default: 1
+        num_time_masks: Number of time masks to apply. Default: 1
+
+    Shape:
+        - Input: [batch, freq, time] or [batch, channels, freq, time]
+        - Output: same shape as input with masked regions zeroed
+
+    Examples:
+        >>> spec_aug = SpecAugment(freq_mask_param=27, time_mask_param=100)
+        >>> x = torch.randn(8, 80, 300)       # [batch, freq, time]
+        >>> spec_aug.train()
+        >>> out = spec_aug(x)                   # frequency/time bands zeroed
+        >>> spec_aug.eval()
+        >>> out_eval = spec_aug(x)              # no masking applied
+
+    Notes:
+        - Only applies during training
+        - Supports both 3D (batch, freq, time) and 4D (batch, channels, freq, time) inputs
+        - Mask widths are sampled uniformly from [0, param] for each mask
+        - Does not depend on torchaudio; uses pure tensor operations
+    """
+
+    def __init__(
+        self,
+        freq_mask_param: int = 27,
+        time_mask_param: int = 100,
+        num_freq_masks: int = 1,
+        num_time_masks: int = 1,
+    ) -> None:
+        super().__init__()
+
+        if freq_mask_param < 0:
+            raise ValueError(f"freq_mask_param must be >= 0, got {freq_mask_param}")
+        if time_mask_param < 0:
+            raise ValueError(f"time_mask_param must be >= 0, got {time_mask_param}")
+        if num_freq_masks < 0:
+            raise ValueError(f"num_freq_masks must be >= 0, got {num_freq_masks}")
+        if num_time_masks < 0:
+            raise ValueError(f"num_time_masks must be >= 0, got {num_time_masks}")
+
+        self.freq_mask_param = freq_mask_param
+        self.time_mask_param = time_mask_param
+        self.num_freq_masks = num_freq_masks
+        self.num_time_masks = num_time_masks
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Apply SpecAugment masking.
+
+        Args:
+            input: Input tensor [batch, freq, time] or [batch, channels, freq, time]
+
+        Returns:
+            Output tensor with frequency and time masks applied if training
+        """
+        if not self.training:
+            return input
+
+        if input.ndim == 3:
+            # [batch, freq, time]
+            freq_dim = 1
+            time_dim = 2
+        elif input.ndim == 4:
+            # [batch, channels, freq, time]
+            freq_dim = 2
+            time_dim = 3
+        else:
+            raise ValueError(
+                f"SpecAugment expects 3D or 4D input, got {input.ndim}D"
+            )
+
+        output = input.clone()
+        freq_size = output.shape[freq_dim]
+        time_size = output.shape[time_dim]
+
+        # Apply frequency masks
+        for _ in range(self.num_freq_masks):
+            f = int(torch.randint(0, max(self.freq_mask_param, 1), (1,)).item())
+            f = min(f, freq_size)
+            if f == 0:
+                continue
+            f0 = int(torch.randint(0, max(freq_size - f, 1), (1,)).item())
+            if input.ndim == 3:
+                output[:, f0 : f0 + f, :] = 0.0
+            else:
+                output[:, :, f0 : f0 + f, :] = 0.0
+
+        # Apply time masks
+        for _ in range(self.num_time_masks):
+            t = int(torch.randint(0, max(self.time_mask_param, 1), (1,)).item())
+            t = min(t, time_size)
+            if t == 0:
+                continue
+            t0 = int(torch.randint(0, max(time_size - t, 1), (1,)).item())
+            if input.ndim == 3:
+                output[:, :, t0 : t0 + t] = 0.0
+            else:
+                output[:, :, :, t0 : t0 + t] = 0.0
+
+        return output
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return (
+            f"freq_mask_param={self.freq_mask_param}, "
+            f"time_mask_param={self.time_mask_param}, "
+            f"num_freq_masks={self.num_freq_masks}, "
+            f"num_time_masks={self.num_time_masks}"
+        )

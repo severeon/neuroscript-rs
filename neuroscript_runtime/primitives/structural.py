@@ -606,6 +606,183 @@ class Pad(nn.Module):
         return F.pad(input, self.padding, mode=self.mode)
 
 
+class Crop(nn.Module):
+    """
+    Crop tensor to target spatial dimensions.
+
+    Crops the input tensor's spatial dimensions (last N dims) to match
+    specified target sizes, cropping symmetrically from edges.
+    Useful for U-Net skip connections where sizes may not match exactly.
+
+    NeuroScript signature:
+        neuron Crop(target_size):
+            in: [*batch, *spatial]
+            out: [*batch, *target_size]
+            impl: neuroscript_runtime.primitives.Crop
+
+    Args:
+        target_size (tuple of int): Target spatial size as tuple (e.g., (H, W) for 2D)
+
+    Shape:
+        - Input: [batch, channels, *spatial] where spatial dims >= target_size
+        - Output: [batch, channels, *target_size]
+
+    Example:
+        >>> crop = Crop((256, 256))
+        >>> x = torch.randn(1, 64, 260, 260)
+        >>> result = crop(x)
+        >>> assert result.shape == (1, 64, 256, 256)
+    """
+
+    def __init__(self, target_size: Tuple[int, ...]):
+        super().__init__()
+        if not isinstance(target_size, (tuple, list)):
+            raise TypeError(f"target_size must be tuple or list, got {type(target_size)}")
+        self.target_size = tuple(target_size)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Center-crop the input tensor's spatial dimensions.
+
+        Args:
+            input: Input tensor with spatial dims at least as large as target_size
+
+        Returns:
+            Cropped tensor with spatial dims matching target_size
+
+        Raises:
+            ValueError: If input spatial dims are smaller than target_size
+        """
+        n_spatial = len(self.target_size)
+        spatial_dims = input.shape[-n_spatial:]
+
+        slices = [slice(None)] * (input.ndim - n_spatial)
+        for i in range(n_spatial):
+            in_size = spatial_dims[i]
+            out_size = self.target_size[i]
+            if in_size < out_size:
+                raise ValueError(
+                    f"Input spatial dim {i} has size {in_size} but target is {out_size}"
+                )
+            offset = (in_size - out_size) // 2
+            slices.append(slice(offset, offset + out_size))
+
+        return input[tuple(slices)]
+
+
+class Cast(nn.Module):
+    """
+    Convert tensor to specified dtype.
+
+    Useful for mixed-precision training or when connecting layers
+    that expect different dtypes.
+
+    NeuroScript signature:
+        neuron Cast(dtype):
+            in: [*shape]
+            out: [*shape]
+            impl: neuroscript_runtime.primitives.Cast
+
+    Args:
+        dtype (str): Target dtype as string. One of: 'float16', 'float32', 'float64',
+            'bfloat16', 'int32', 'int64', 'bool'
+
+    Shape:
+        - Input: [*shape] any shape
+        - Output: [*shape] same shape, different dtype
+
+    Example:
+        >>> cast = Cast('float16')
+        >>> x = torch.randn(32, 512)  # float32
+        >>> result = cast(x)
+        >>> assert result.dtype == torch.float16
+        >>> assert result.shape == (32, 512)
+    """
+
+    DTYPE_MAP = {
+        "float16": torch.float16,
+        "float32": torch.float32,
+        "float64": torch.float64,
+        "bfloat16": torch.bfloat16,
+        "int32": torch.int32,
+        "int64": torch.int64,
+        "bool": torch.bool,
+    }
+
+    def __init__(self, dtype: str):
+        super().__init__()
+        if dtype not in self.DTYPE_MAP:
+            valid = ", ".join(sorted(self.DTYPE_MAP.keys()))
+            raise ValueError(f"Unsupported dtype '{dtype}'. Valid options: {valid}")
+        self.dtype = self.DTYPE_MAP[dtype]
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Cast the input tensor to the target dtype.
+
+        Args:
+            input: Input tensor of any shape and dtype
+
+        Returns:
+            Tensor with the same shape but target dtype
+        """
+        return input.to(self.dtype)
+
+
+class Clone(nn.Module):
+    """
+    Create a copy of the input tensor.
+
+    Unlike Fork (which returns references to the same tensor),
+    Clone creates an independent copy. Useful when downstream operations
+    modify tensors in-place.
+
+    NeuroScript signature:
+        neuron Clone(detach=False):
+            in: [*shape]
+            out: [*shape]
+            impl: neuroscript_runtime.primitives.Clone
+
+    Args:
+        detach (bool): If True, detaches from computation graph. Default: False
+
+    Shape:
+        - Input: [*shape] any shape
+        - Output: [*shape] same shape (independent copy)
+
+    Example:
+        >>> clone = Clone()
+        >>> x = torch.randn(32, 512, requires_grad=True)
+        >>> y = clone(x)
+        >>> assert y.shape == (32, 512)
+        >>> assert y is not x
+        >>> assert y.requires_grad  # gradients preserved
+
+        >>> clone_detached = Clone(detach=True)
+        >>> z = clone_detached(x)
+        >>> assert not z.requires_grad  # detached from graph
+    """
+
+    def __init__(self, detach: bool = False):
+        super().__init__()
+        self.detach = detach
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Clone the input tensor.
+
+        Args:
+            input: Input tensor of any shape
+
+        Returns:
+            Independent copy of the input tensor
+        """
+        result = input.clone()
+        if self.detach:
+            result = result.detach()
+        return result
+
+
 __all__ = [
     "Fork",
     "Fork3",
@@ -618,4 +795,7 @@ __all__ = [
     "Split",
     "Slice",
     "Pad",
+    "Crop",
+    "Cast",
+    "Clone",
 ]

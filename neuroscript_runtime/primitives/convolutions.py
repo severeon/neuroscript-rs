@@ -189,11 +189,69 @@ class TransposedConv(nn.Module):
         return self.conv(input)
 
 
+class DilatedConv(nn.Module):
+    """Dilated (atrous) convolution for expanded receptive fields.
+
+    A 2D convolution where the kernel is spread out by inserting gaps (dilation)
+    between kernel elements. Increases receptive field without increasing parameters.
+    Reference: Yu & Koltun (2016), "Multi-Scale Context Aggregation by Dilated Convolutions"
+
+    Args:
+        in_channels: Number of input channels
+        out_channels: Number of output channels
+        kernel_size: Size of the convolution kernel
+        dilation: Dilation rate (spacing between kernel elements). Default: 2
+        padding: Input padding. Default: 0
+        stride: Convolution stride. Default: 1
+        bias: If True, adds learnable bias. Default: True
+
+    Shape:
+        - Input: [batch, in_channels, height, width]
+        - Output: [batch, out_channels, height', width']
+
+    Examples:
+        >>> conv = DilatedConv(64, 128, kernel_size=3, dilation=2, padding=2)
+        >>> x = torch.randn(32, 64, 28, 28)
+        >>> out = conv(x)
+        >>> assert out.shape[1] == 128
+
+    Notes:
+        - Dilation=1 is equivalent to standard convolution
+        - Effective kernel size = kernel_size + (kernel_size - 1) * (dilation - 1)
+        - Commonly used in DeepLab, WaveNet, and semantic segmentation
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: _size_2_t,
+        dilation: _size_2_t = 2,
+        padding: _size_2_t = 0,
+        stride: _size_2_t = 1,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            bias=bias,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.conv(input)
+
+
 __all__ = [
     "Conv1d",
     "Conv2d",
     "Conv3d",
     "DepthwiseConv",
+    "DilatedConv",
     "SeparableConv",
     "TransposedConv",
 ]
