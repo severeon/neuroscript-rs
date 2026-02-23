@@ -669,6 +669,10 @@ class Crop(nn.Module):
 
         return input[tuple(slices)]
 
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"target_size={self.target_size}"
+
 
 class Cast(nn.Module):
     """
@@ -714,6 +718,7 @@ class Cast(nn.Module):
         if dtype not in self.DTYPE_MAP:
             valid = ", ".join(sorted(self.DTYPE_MAP.keys()))
             raise ValueError(f"Unsupported dtype '{dtype}'. Valid options: {valid}")
+        self.dtype_str = dtype
         self.dtype = self.DTYPE_MAP[dtype]
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -727,6 +732,10 @@ class Cast(nn.Module):
             Tensor with the same shape but target dtype
         """
         return input.to(self.dtype)
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"dtype='{self.dtype_str}'"
 
 
 class Clone(nn.Module):
@@ -781,6 +790,10 @@ class Clone(nn.Module):
         if self.detach:
             result = result.detach()
         return result
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"detach={self.detach}"
 
 
 __all__ = [

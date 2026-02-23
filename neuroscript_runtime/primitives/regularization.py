@@ -225,6 +225,10 @@ class Dropblock(nn.Module):
         - block_size should be smaller than spatial dimensions
         - Output is rescaled to maintain expected values
         - Only applies during training
+        - Implementation note: each (batch, channel) pair gets an independently
+          sampled mask. The original paper (Ghiasi et al. 2018) drops the same
+          spatial region across all channels for a given sample. This per-channel
+          variant provides finer-grained regularization.
     """
 
     def __init__(self, block_size: int = 7, drop_prob: float = 0.1) -> None:
@@ -327,7 +331,8 @@ class SpecAugment(nn.Module):
     Notes:
         - Only applies during training
         - Supports both 3D (batch, freq, time) and 4D (batch, channels, freq, time) inputs
-        - Mask widths are sampled uniformly from [0, param] for each mask
+        - Mask widths are sampled uniformly from [0, param] (inclusive) for each mask
+        - Each sample in the batch receives independently sampled masks
         - Does not depend on torchaudio; uses pure tensor operations
     """
 
@@ -381,32 +386,35 @@ class SpecAugment(nn.Module):
             )
 
         output = input.clone()
+        batch_size = output.shape[0]
         freq_size = output.shape[freq_dim]
         time_size = output.shape[time_dim]
 
-        # Apply frequency masks
-        for _ in range(self.num_freq_masks):
-            f = int(torch.randint(0, max(self.freq_mask_param, 1), (1,)).item())
-            f = min(f, freq_size)
-            if f == 0:
-                continue
-            f0 = int(torch.randint(0, max(freq_size - f, 1), (1,)).item())
-            if input.ndim == 3:
-                output[:, f0 : f0 + f, :] = 0.0
-            else:
-                output[:, :, f0 : f0 + f, :] = 0.0
+        # Apply masks independently per batch item (per-utterance augmentation)
+        for b in range(batch_size):
+            # Apply frequency masks
+            for _ in range(self.num_freq_masks):
+                f = int(torch.randint(0, self.freq_mask_param + 1, (1,)).item())
+                f = min(f, freq_size)
+                if f == 0:
+                    continue
+                f0 = int(torch.randint(0, max(freq_size - f, 1), (1,)).item())
+                if input.ndim == 3:
+                    output[b, f0 : f0 + f, :] = 0.0
+                else:
+                    output[b, :, f0 : f0 + f, :] = 0.0
 
-        # Apply time masks
-        for _ in range(self.num_time_masks):
-            t = int(torch.randint(0, max(self.time_mask_param, 1), (1,)).item())
-            t = min(t, time_size)
-            if t == 0:
-                continue
-            t0 = int(torch.randint(0, max(time_size - t, 1), (1,)).item())
-            if input.ndim == 3:
-                output[:, :, t0 : t0 + t] = 0.0
-            else:
-                output[:, :, :, t0 : t0 + t] = 0.0
+            # Apply time masks
+            for _ in range(self.num_time_masks):
+                t = int(torch.randint(0, self.time_mask_param + 1, (1,)).item())
+                t = min(t, time_size)
+                if t == 0:
+                    continue
+                t0 = int(torch.randint(0, max(time_size - t, 1), (1,)).item())
+                if input.ndim == 3:
+                    output[b, :, t0 : t0 + t] = 0.0
+                else:
+                    output[b, :, :, t0 : t0 + t] = 0.0
 
         return output
 

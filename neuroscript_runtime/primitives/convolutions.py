@@ -245,6 +245,14 @@ class DilatedConv(nn.Module):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return self.conv(input)
 
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return (
+            f"in_channels={self.conv.in_channels}, out_channels={self.conv.out_channels}, "
+            f"kernel_size={self.conv.kernel_size}, dilation={self.conv.dilation}, "
+            f"stride={self.conv.stride}, padding={self.conv.padding}"
+        )
+
 
 __all__ = [
     "Conv1d",

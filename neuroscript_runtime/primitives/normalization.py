@@ -382,6 +382,12 @@ class WeightNorm(nn.Module):
         if out_features <= 0:
             raise ValueError(f"out_features must be positive, got {out_features}")
 
+        if not (-2 <= dim <= 1):
+            raise ValueError(
+                f"dim must be 0 or 1 for a 2D weight matrix (or negative "
+                f"equivalents), got {dim}"
+            )
+
         self.in_features = in_features
         self.out_features = out_features
         self.dim = dim

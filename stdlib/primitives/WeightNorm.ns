@@ -1,0 +1,26 @@
+/// Weight Normalization
+///
+/// Linear transformation with weight normalization applied. Decouples
+/// the magnitude of weight vectors from their direction, which can
+/// improve optimization by reducing ill-conditioning.
+///
+/// Reference: Salimans & Kingma (2016), "Weight Normalization: A Simple
+/// Reparameterization to Accelerate Training of DNNs"
+///
+/// Parameters:
+/// - in_features: Input dimension
+/// - out_features: Output dimension
+/// - dim: Dimension over which to compute the norm (0 or 1, default: 0)
+///
+/// Shape Contract:
+/// - Input: [*batch, in_features]
+/// - Output: [*batch, out_features]
+///
+/// Notes:
+/// - Decomposes weight W = g * (v / ||v||) where g is magnitude, v is direction
+/// - Unlike BatchNorm, has no dependency on batch statistics
+/// - Uses modern torch.nn.utils.parametrizations.weight_norm API
+neuron WeightNorm(in_features, out_features, dim=0):
+    in: [*batch, in_features]
+    out: [*batch, out_features]
+    impl: core,normalization/WeightNorm

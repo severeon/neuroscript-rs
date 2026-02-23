@@ -471,6 +471,8 @@ class ALiBi(nn.Module):
         >>> biased = alibi(scores)
 
     Notes:
+        - Operates on attention scores, not embeddings — placed in the embeddings
+          module because it serves as a positional encoding mechanism
         - Slopes are geometric: 2^(-8/n * i) for power-of-2 n
         - Non-power-of-2 heads use interpolation between two closest powers
         - Bias is registered as a buffer (no gradients, moves with model)
@@ -558,10 +560,16 @@ class ALiBi(nn.Module):
         Raises:
             ValueError: If input shape doesn't match expected dimensions
         """
-        if input.dim() < 3:
+        if input.dim() != 4:
             raise ValueError(
-                f"Input must have at least 3 dimensions "
-                f"[batch, num_heads, seq_len, seq_len], got shape {list(input.shape)}"
+                f"Input must be 4D [batch, num_heads, seq_len, seq_len], "
+                f"got {input.dim()}D with shape {list(input.shape)}"
+            )
+
+        if input.size(1) != self.num_heads:
+            raise ValueError(
+                f"Input has {input.size(1)} heads but ALiBi was created "
+                f"with {self.num_heads}"
             )
 
         seq_len = input.size(-1)

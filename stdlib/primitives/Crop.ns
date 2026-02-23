@@ -1,0 +1,22 @@
+/// Center Crop
+///
+/// Crops the input tensor's spatial dimensions to match specified target
+/// sizes, cropping symmetrically from edges. Useful for U-Net skip
+/// connections where encoder and decoder sizes may not match exactly.
+///
+/// Parameters:
+/// - target_height: Target spatial height
+/// - target_width: Target spatial width
+///
+/// Shape Contract:
+/// - Input: [batch, channels, height, width] where height >= target_height, width >= target_width
+/// - Output: [batch, channels, target_height, target_width]
+///
+/// Notes:
+/// - Crops from center (symmetric removal from edges)
+/// - Input spatial dims must be >= target dims
+/// - Only affects spatial dimensions (batch and channels preserved)
+neuron Crop(target_height, target_width):
+    in: [batch, channels, height, width]
+    out: [batch, channels, target_height, target_width]
+    impl: core,structural/Crop

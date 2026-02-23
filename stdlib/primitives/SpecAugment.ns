@@ -1,0 +1,27 @@
+/// SpecAugment: Frequency and Time Masking for Audio
+///
+/// Applies random frequency and time masks to spectrogram inputs,
+/// zeroing out contiguous bands. A simple but effective data augmentation
+/// for automatic speech recognition.
+///
+/// Reference: Park et al. (2019), "SpecAugment: A Simple Data Augmentation
+/// Method for ASR"
+///
+/// Parameters:
+/// - freq_mask_param: Maximum number of frequency channels to mask (default: 27)
+/// - time_mask_param: Maximum number of time steps to mask (default: 100)
+/// - num_freq_masks: Number of frequency masks to apply (default: 1)
+/// - num_time_masks: Number of time masks to apply (default: 1)
+///
+/// Shape Contract:
+/// - Input: [batch, freq, time] or [batch, channels, freq, time]
+/// - Output: same shape as input with masked regions zeroed
+///
+/// Notes:
+/// - Only applies during training (identity during eval)
+/// - Mask widths sampled uniformly from [0, param] (inclusive) per utterance
+/// - Each sample in the batch receives independently sampled masks
+neuron SpecAugment(freq_mask_param=27, time_mask_param=100, num_freq_masks=1, num_time_masks=1):
+    in: [batch, freq, time]
+    out: [batch, freq, time]
+    impl: core,regularization/SpecAugment

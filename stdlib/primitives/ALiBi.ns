@@ -1,0 +1,25 @@
+/// Attention with Linear Biases (ALiBi)
+///
+/// Adds linear distance-based bias to attention scores instead of using
+/// positional embeddings. Each attention head gets a different slope,
+/// enabling length extrapolation beyond training sequence lengths.
+///
+/// Reference: Press et al. (2022), "Train Short, Test Long"
+///
+/// Parameters:
+/// - num_heads: Number of attention heads
+/// - max_seq_len: Maximum sequence length for precomputed bias (default: 2048)
+///
+/// Shape Contract:
+/// - Input: [batch, num_heads, seq_len, seq_len] (attention scores)
+/// - Output: [batch, num_heads, seq_len, seq_len] (biased attention scores)
+///
+/// Notes:
+/// - Operates on attention scores, not embeddings
+/// - Slopes are geometric: 2^(-8/n * i) for power-of-2 head counts
+/// - Non-power-of-2 heads use interpolation between closest powers
+/// - Bias is precomputed (no learnable parameters)
+neuron ALiBi(num_heads, max_seq_len=2048):
+    in: [batch, num_heads, seq_len, seq_len]
+    out: [batch, num_heads, seq_len, seq_len]
+    impl: core,embeddings/ALiBi
