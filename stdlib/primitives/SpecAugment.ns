@@ -14,13 +14,15 @@
 /// - num_time_masks: Number of time masks to apply (default: 1)
 ///
 /// Shape Contract:
-/// - Input: [batch, freq, time] or [batch, channels, freq, time]
+/// - Input: [batch, freq, time] (declared below)
 /// - Output: same shape as input with masked regions zeroed
 ///
 /// Notes:
 /// - Only applies during training (identity during eval)
 /// - Mask widths sampled uniformly from [0, param] (inclusive) per utterance
 /// - Each sample in the batch receives independently sampled masks
+/// - The Python runtime also accepts 4D [batch, channels, freq, time] inputs,
+///   but the .ns signature declares 3D only. Use 3D for validated shapes.
 neuron SpecAugment(freq_mask_param=27, time_mask_param=100, num_freq_masks=1, num_time_masks=1):
     in: [batch, freq, time]
     out: [batch, freq, time]

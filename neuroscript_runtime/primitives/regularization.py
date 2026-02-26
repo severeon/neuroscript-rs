@@ -271,6 +271,7 @@ class Dropblock(nn.Module):
         valid_h = max(height - self.block_size + 1, 1)
         valid_w = max(width - self.block_size + 1, 1)
         gamma = (self.drop_prob * feat_area) / (block_area * valid_h * valid_w)
+        gamma = min(gamma, 1.0)
 
         # Sample seed mask (1 = keep, 0 = drop seed)
         mask = (torch.rand_like(input) >= gamma).float()
@@ -391,6 +392,7 @@ class SpecAugment(nn.Module):
         time_size = output.shape[time_dim]
 
         # Apply masks independently per batch item (per-utterance augmentation)
+        # TODO: vectorize with torch.randint over batch dim for large-batch perf
         for b in range(batch_size):
             # Apply frequency masks
             for _ in range(self.num_freq_masks):

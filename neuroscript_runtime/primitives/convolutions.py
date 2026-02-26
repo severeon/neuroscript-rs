@@ -250,7 +250,8 @@ class DilatedConv(nn.Module):
         return (
             f"in_channels={self.conv.in_channels}, out_channels={self.conv.out_channels}, "
             f"kernel_size={self.conv.kernel_size}, dilation={self.conv.dilation}, "
-            f"stride={self.conv.stride}, padding={self.conv.padding}"
+            f"stride={self.conv.stride}, padding={self.conv.padding}, "
+            f"bias={self.conv.bias is not None}"
         )
 
 

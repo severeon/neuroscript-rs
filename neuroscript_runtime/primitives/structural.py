@@ -610,35 +610,34 @@ class Crop(nn.Module):
     """
     Crop tensor to target spatial dimensions.
 
-    Crops the input tensor's spatial dimensions (last N dims) to match
-    specified target sizes, cropping symmetrically from edges.
+    Crops the input tensor's spatial dimensions to match specified target
+    height and width, cropping symmetrically from edges.
     Useful for U-Net skip connections where sizes may not match exactly.
 
     NeuroScript signature:
-        neuron Crop(target_size):
-            in: [*batch, *spatial]
-            out: [*batch, *target_size]
+        neuron Crop(target_height, target_width):
+            in: [batch, channels, height, width]
+            out: [batch, channels, target_height, target_width]
             impl: neuroscript_runtime.primitives.Crop
 
     Args:
-        target_size (tuple of int): Target spatial size as tuple (e.g., (H, W) for 2D)
+        target_height (int): Target spatial height
+        target_width (int): Target spatial width
 
     Shape:
-        - Input: [batch, channels, *spatial] where spatial dims >= target_size
-        - Output: [batch, channels, *target_size]
+        - Input: [batch, channels, height, width] where height >= target_height, width >= target_width
+        - Output: [batch, channels, target_height, target_width]
 
     Example:
-        >>> crop = Crop((256, 256))
+        >>> crop = Crop(256, 256)
         >>> x = torch.randn(1, 64, 260, 260)
         >>> result = crop(x)
         >>> assert result.shape == (1, 64, 256, 256)
     """
 
-    def __init__(self, target_size: Tuple[int, ...]):
+    def __init__(self, target_height: int, target_width: int):
         super().__init__()
-        if not isinstance(target_size, (tuple, list)):
-            raise TypeError(f"target_size must be tuple or list, got {type(target_size)}")
-        self.target_size = tuple(target_size)
+        self.target_size = (target_height, target_width)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """
@@ -774,7 +773,7 @@ class Clone(nn.Module):
 
     def __init__(self, detach: bool = False):
         super().__init__()
-        self.detach = detach
+        self.should_detach = detach
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """
@@ -787,13 +786,13 @@ class Clone(nn.Module):
             Independent copy of the input tensor
         """
         result = input.clone()
-        if self.detach:
+        if self.should_detach:
             result = result.detach()
         return result
 
     def extra_repr(self) -> str:
         """String representation for debugging."""
-        return f"detach={self.detach}"
+        return f"detach={self.should_detach}"
 
 
 __all__ = [
