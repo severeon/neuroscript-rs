@@ -438,3 +438,153 @@ class RotaryEmbedding(nn.Module):
         # x: [..., seq_len, head_dim]
         # cos: [..., seq_len, head_dim]
         return (x * cos) + (self._rotate_half(x) * sin)
+
+
+class ALiBi(nn.Module):
+    """
+    Attention with Linear Biases (ALiBi).
+
+    Adds linear distance-based bias to attention scores instead of using
+    positional embeddings. Each attention head gets a different slope.
+    Enables length extrapolation beyond training sequence lengths.
+
+    Reference: Press et al. (2022), "Train Short, Test Long"
+
+    Args:
+        num_heads: Number of attention heads
+        max_seq_len: Maximum sequence length for precomputed bias matrix. Default: 2048
+
+    Shape:
+        - Input: [batch, num_heads, seq_len, seq_len] (attention scores)
+        - Output: [batch, num_heads, seq_len, seq_len] (biased attention scores)
+
+    Examples:
+        >>> alibi = ALiBi(num_heads=8)
+        >>> scores = torch.randn(2, 8, 128, 128)  # [batch, heads, seq, seq]
+        >>> biased = alibi(scores)
+        >>> biased.shape
+        torch.Size([2, 8, 128, 128])
+
+        >>> # Non-power-of-2 heads
+        >>> alibi = ALiBi(num_heads=12, max_seq_len=512)
+        >>> scores = torch.randn(4, 12, 64, 64)
+        >>> biased = alibi(scores)
+
+    Notes:
+        - Operates on attention scores, not embeddings — placed in the embeddings
+          module because it serves as a positional encoding mechanism
+        - Slopes are geometric: 2^(-8/n * i) for power-of-2 n
+        - Non-power-of-2 heads use interpolation between two closest powers
+        - Bias is registered as a buffer (no gradients, moves with model)
+        - Supports sequences up to max_seq_len without recomputation
+    """
+
+    def __init__(self, num_heads: int, max_seq_len: int = 2048) -> None:
+        super().__init__()
+
+        if num_heads <= 0:
+            raise ValueError(f"num_heads must be positive, got {num_heads}")
+
+        if max_seq_len <= 0:
+            raise ValueError(f"max_seq_len must be positive, got {max_seq_len}")
+
+        self.num_heads = num_heads
+        self.max_seq_len = max_seq_len
+
+        # Compute per-head slopes
+        slopes = self._get_slopes(num_heads)
+        # slopes shape: [num_heads]
+        slopes = torch.tensor(slopes, dtype=torch.float32)
+
+        # Precompute distance matrix [max_seq_len, max_seq_len]
+        # distance[i, j] = |i - j|
+        positions = torch.arange(max_seq_len, dtype=torch.float32)
+        distance = torch.abs(positions.unsqueeze(1) - positions.unsqueeze(0))
+
+        # Compute bias: [1, num_heads, max_seq_len, max_seq_len]
+        # bias[h, i, j] = -slope_h * |i - j|
+        bias = -slopes.view(1, num_heads, 1, 1) * distance.view(
+            1, 1, max_seq_len, max_seq_len
+        )
+
+        self.register_buffer("bias", bias)
+
+    @staticmethod
+    def _get_slopes(num_heads: int) -> list[float]:
+        """
+        Compute ALiBi slopes for each attention head.
+
+        For power-of-2 num_heads: slopes = 2^(-8/n * (i+1)) for i in [0, n).
+        For non-power-of-2: interpolate between two closest powers of 2.
+
+        Args:
+            num_heads: Number of attention heads
+
+        Returns:
+            List of slope values, one per head
+        """
+
+        def _get_slopes_power_of_2(n: int) -> list[float]:
+            start = 2 ** (-(8.0 / n))
+            ratio = start
+            return [start * (ratio ** i) for i in range(n)]
+
+        # Check if num_heads is a power of 2
+        if num_heads & (num_heads - 1) == 0:
+            return _get_slopes_power_of_2(num_heads)
+
+        # Non-power-of-2: use closest power of 2 and interpolate
+        closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
+        slopes = _get_slopes_power_of_2(closest_power_of_2)
+
+        # Get additional slopes by interpolating from 2x the closest power
+        extra_base = 2 ** (-(8.0 / (2 * closest_power_of_2)))
+        extra_slopes = [
+            extra_base * (extra_base ** (2 * i))
+            for i in range(num_heads - closest_power_of_2)
+        ]
+        slopes.extend(extra_slopes)
+
+        return slopes
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Add ALiBi bias to attention scores.
+
+        Args:
+            input: Attention scores [batch, num_heads, seq_len, seq_len]
+
+        Returns:
+            Biased attention scores [batch, num_heads, seq_len, seq_len]
+
+        Raises:
+            ValueError: If input shape doesn't match expected dimensions
+        """
+        if input.dim() != 4:
+            raise ValueError(
+                f"Input must be 4D [batch, num_heads, seq_len, seq_len], "
+                f"got {input.dim()}D with shape {list(input.shape)}"
+            )
+
+        if input.size(1) != self.num_heads:
+            raise ValueError(
+                f"Input has {input.size(1)} heads but ALiBi was created "
+                f"with {self.num_heads}"
+            )
+
+        seq_len = input.size(-1)
+        if seq_len > self.max_seq_len:
+            raise ValueError(
+                f"Sequence length {seq_len} exceeds max_seq_len {self.max_seq_len}. "
+                f"Increase max_seq_len when creating ALiBi."
+            )
+
+        # Slice bias to match input sequence length
+        # self.bias is [1, num_heads, max_seq_len, max_seq_len]
+        bias = self.bias[:, :, :seq_len, :seq_len]
+
+        return input + bias.to(dtype=input.dtype)
+
+    def extra_repr(self) -> str:
+        """String representation for debugging."""
+        return f"num_heads={self.num_heads}, max_seq_len={self.max_seq_len}"

@@ -1,0 +1,26 @@
+/// DropBlock: Structured Dropout for CNNs
+///
+/// Drops contiguous square regions of feature maps instead of individual
+/// elements. More effective than standard dropout for convolutional layers
+/// where spatially correlated features can bypass element-wise dropout.
+///
+/// Reference: Ghiasi et al. (2018), "DropBlock: A regularization technique
+/// for convolutional neural networks"
+///
+/// Parameters:
+/// - block_size: Size of the square block to drop (default: 7)
+/// - drop_prob: Probability of dropping a block (0 to 1, default: 0.1)
+///
+/// Shape Contract:
+/// - Input: [batch, channels, height, width]
+/// - Output: [batch, channels, height, width] same shape as input
+///
+/// Notes:
+/// - Only applies during training (identity during eval)
+/// - block_size should be smaller than spatial dimensions
+/// - Output is rescaled to maintain expected values
+/// - Each (batch, channel) pair gets an independent mask
+neuron Dropblock(block_size=7, drop_prob=0.1):
+    in: [batch, channels, height, width]
+    out: [batch, channels, height, width]
+    impl: core,regularization/Dropblock

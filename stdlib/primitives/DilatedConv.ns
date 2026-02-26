@@ -1,0 +1,30 @@
+/// Dilated (Atrous) Convolution
+///
+/// A 2D convolution where the kernel is spread out by inserting gaps
+/// between kernel elements. Increases receptive field without increasing
+/// parameter count or reducing resolution.
+///
+/// Reference: Yu & Koltun (2016), "Multi-Scale Context Aggregation by
+/// Dilated Convolutions"
+///
+/// Parameters:
+/// - in_channels: Number of input channels
+/// - out_channels: Number of output channels
+/// - kernel_size: Size of the convolving kernel
+/// - dilation: Dilation rate (spacing between kernel elements, default: 2)
+/// - padding: Input padding (default: 0)
+/// - stride: Convolution stride (default: 1)
+/// - bias: If true, adds learnable bias (default: true)
+///
+/// Shape Contract:
+/// - Input: [batch, in_channels, height, width]
+/// - Output: [batch, out_channels, height', width']
+///
+/// Notes:
+/// - Dilation=1 is equivalent to standard convolution
+/// - Effective kernel size = kernel_size + (kernel_size - 1) * (dilation - 1)
+/// - Commonly used in DeepLab, WaveNet, and semantic segmentation
+neuron DilatedConv(in_channels, out_channels, kernel_size, dilation=2, padding=0, stride=1, bias=true):
+    in: [batch, in_channels, height, width]
+    out: [batch, out_channels, *, *]
+    impl: core,convolutions/DilatedConv

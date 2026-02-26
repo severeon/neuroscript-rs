@@ -254,6 +254,15 @@ impl StdlibRegistry {
             ),
         );
 
+        self.register(
+            "WeightNorm",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.normalization",
+                "WeightNorm",
+                "Weight normalization (decouples magnitude from direction)",
+            ),
+        );
+
         // Level 0: Regularization
         self.register(
             "Dropout",
@@ -279,6 +288,24 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.regularization",
                 "DropConnect",
                 "Connection dropout (drops weights)",
+            ),
+        );
+
+        self.register(
+            "Dropblock",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.regularization",
+                "Dropblock",
+                "Structured dropout for CNNs (drops contiguous regions)",
+            ),
+        );
+
+        self.register(
+            "SpecAugment",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.regularization",
+                "SpecAugment",
+                "Frequency/time masking for audio spectrograms",
             ),
         );
 
@@ -334,6 +361,15 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.convolutions",
                 "TransposedConv",
                 "Transposed convolution layer",
+            ),
+        );
+
+        self.register(
+            "DilatedConv",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.convolutions",
+                "DilatedConv",
+                "Dilated (atrous) convolution for expanded receptive fields",
             ),
         );
 
@@ -426,6 +462,15 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.embeddings",
                 "RotaryEmbedding",
                 "Rotary Position Embedding (RoPE)",
+            ),
+        );
+
+        self.register(
+            "ALiBi",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.embeddings",
+                "ALiBi",
+                "Attention with Linear Biases (length extrapolation)",
             ),
         );
 
@@ -562,6 +607,33 @@ impl StdlibRegistry {
                 "neuroscript_runtime.primitives.structural",
                 "Pad",
                 "Pad tensor with value",
+            ),
+        );
+
+        self.register(
+            "Crop",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Crop",
+                "Crop tensor to target spatial dimensions",
+            ),
+        );
+
+        self.register(
+            "Cast",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Cast",
+                "Convert tensor dtype",
+            ),
+        );
+
+        self.register(
+            "Clone",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.structural",
+                "Clone",
+                "Create independent copy of tensor",
             ),
         );
 

@@ -21,12 +21,15 @@ from neuroscript_runtime.primitives.normalization import (
     RMSNorm,
     GroupNorm,
     InstanceNorm,
+    WeightNorm,
 )
 
 from neuroscript_runtime.primitives.regularization import (
     Dropout,
     DropPath,
     DropConnect,
+    Dropblock,
+    SpecAugment,
 )
 
 from neuroscript_runtime.primitives.embeddings import (
@@ -34,6 +37,7 @@ from neuroscript_runtime.primitives.embeddings import (
     PositionalEncoding,
     LearnedPositionalEmbedding,
     RotaryEmbedding,
+    ALiBi,
 )
 
 from neuroscript_runtime.primitives.structural import (
@@ -49,6 +53,9 @@ from neuroscript_runtime.primitives.structural import (
     Split,
     Slice,
     Pad,
+    Crop,
+    Cast,
+    Clone,
 )
 
 from neuroscript_runtime.primitives.attention import (
@@ -69,6 +76,7 @@ from neuroscript_runtime.primitives.convolutions import (
     Conv2d,
     Conv3d,
     DepthwiseConv,
+    DilatedConv,
     SeparableConv,
     TransposedConv,
 )
@@ -99,13 +107,17 @@ __all__ = [
     "RMSNorm",
     "GroupNorm",
     "InstanceNorm",
+    "WeightNorm",
     "Dropout",
     "DropPath",
     "DropConnect",
+    "Dropblock",
+    "SpecAugment",
     "Embedding",
     "PositionalEncoding",
     "LearnedPositionalEmbedding",
     "RotaryEmbedding",
+    "ALiBi",
     "Fork",
     "Fork3",
     "Add",
@@ -118,6 +130,9 @@ __all__ = [
     "Split",
     "Slice",
     "Pad",
+    "Crop",
+    "Cast",
+    "Clone",
     "ScaledDotProductAttention",
     "MultiHeadSelfAttention",
     "Bias",
@@ -129,6 +144,7 @@ __all__ = [
     "Conv2d",
     "Conv3d",
     "DepthwiseConv",
+    "DilatedConv",
     "SeparableConv",
     "TransposedConv",
     "MaxPool",

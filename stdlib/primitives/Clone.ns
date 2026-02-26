@@ -1,0 +1,22 @@
+/// Tensor Clone
+///
+/// Creates an independent copy of the input tensor. Unlike Fork (which
+/// returns references to the same tensor), Clone allocates new memory.
+/// Use when downstream operations modify tensors in-place.
+///
+/// Parameters:
+/// - detach: If true, detaches clone from computation graph (default: false)
+///
+/// Shape Contract:
+/// - Input: [*shape] any shape
+/// - Output: [*shape] same shape (independent copy)
+///
+/// Notes:
+/// - With detach=false, gradients still flow through the clone
+/// - With detach=true, clone is disconnected from autograd graph
+/// - More expensive than Fork (allocates new memory)
+/// - Prefer Fork unless in-place modifications are needed downstream
+neuron Clone(detach=false):
+    in: [*shape]
+    out: [*shape]
+    impl: core,structural/Clone
