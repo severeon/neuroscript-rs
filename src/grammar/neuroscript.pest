@@ -348,9 +348,12 @@ connection = {
   | endpoint ~ fat_arrow_step ~ connection_tail_after_reshape
 }
 
-// After a fat arrow step, continue with more steps or end
+// After a fat arrow step, continue with more steps or end.
+// Unlike connection_tail, this tries indented first because NEWLINE ~ indented_pipeline
+// is more specific — an empty inline match (the * allows zero steps) would greedily
+// consume the NEWLINE before the indented alternative could match.
 connection_tail_after_reshape = {
-    // Indented continuation
+    // Indented continuation (must be tried first; see comment above)
     NEWLINE ~ indented_pipeline
     // More inline steps (may be empty, matching zero or more)
   | ((arrow ~ endpoint) | fat_arrow_step)* ~ NEWLINE*

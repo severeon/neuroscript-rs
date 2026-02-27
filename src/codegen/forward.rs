@@ -1064,6 +1064,10 @@ fn process_destination(
                                     // named source shapes for correct non-trailing reduction.
                                     let src_rank = src_shape.dims.len();
                                     let tgt_rank = reshape.dims.len();
+                                    eprintln!(
+                                        "warning: @reduce fallback assumes trailing dimensions; \
+                                         use fully named source shapes for correct non-trailing reduction"
+                                    );
                                     if src_rank > tgt_rank {
                                         (tgt_rank..src_rank).collect()
                                     } else {

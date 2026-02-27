@@ -870,10 +870,11 @@ impl AstBuilder {
 
                 Ok(connections)
             }
-            _ => {
-                // Fallback: treat as arrow + tail for robustness
-                let tail = inner.next().unwrap();
-                self.build_connection_tail(first_endpoint, tail)
+            rule => {
+                unreachable!(
+                    "build_connection: grammar guarantees second pair is arrow or fat_arrow_step, got {:?}",
+                    rule
+                );
             }
         }
     }
