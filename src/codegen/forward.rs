@@ -1195,8 +1195,11 @@ fn process_destination(
         }
     }
 }
-/// Convert a Value to Python code for dimension arithmetic (uses // for division)
-/// Resolves neuron parameter names to self.{name}
+/// Convert a Value to Python code for dimension arithmetic (uses // for division).
+/// Resolves neuron parameter names to self.{name} and binding_context lookups.
+///
+/// Similar to `value_to_python_impl` in utils.rs but uses `//` for integer division
+/// (required for tensor dimension arithmetic) and resolves binding_context names.
 fn value_to_python_int_div(gen: &CodeGenerator, value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),

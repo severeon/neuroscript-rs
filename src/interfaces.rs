@@ -283,7 +283,16 @@ pub struct ReshapeExpr {
 }
 
 impl ReshapeExpr {
-    /// Convert reshape dims to a Shape for validation/inference purposes
+    /// Convert reshape dims to a Shape for validation/inference purposes.
+    ///
+    /// Known limitations:
+    /// - `Binding { name, expr }` (e.g., `dh=dim/heads`) maps to `Dim::Named(name)`,
+    ///   discarding the expression constraint. Shape inference sees `dh` as unconstrained.
+    ///   TODO: propagate binding constraints for tighter validation.
+    /// - `Others` maps to `Dim::Wildcard`, but semantically `others` means "collapse all
+    ///   remaining dims" (like PyTorch's -1), not "one unknown dim". This means rank
+    ///   validation doesn't catch mismatches through `others`.
+    ///   TODO: add a `Dim::Inferred` variant or track rank separately.
     pub fn to_shape(&self) -> Shape {
         Shape {
             dims: self

@@ -439,7 +439,10 @@ pub(super) fn check_port_compatibility(
     // Reshape endpoints intentionally change shapes — skip port compatibility
     // checking. When source is a Reshape, its output shape is the declared target
     // shape; when destination is a Reshape, it consumes any input shape and produces
-    // a new shape from its dims. Element-preservation is deferred to PyTorch runtime.
+    // a new shape from its dims.
+    // TODO: For bare `=>` (no annotation), validate element-preservation when both
+    // source and target shapes are statically known: prod(source_dims) == prod(target_dims).
+    // Currently deferred to PyTorch runtime (.reshape() will error on mismatch).
     if matches!(source_endpoint, Endpoint::Reshape(_))
         || matches!(dest_endpoint, Endpoint::Reshape(_))
     {
