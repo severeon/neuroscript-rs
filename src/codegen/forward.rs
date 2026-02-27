@@ -768,7 +768,15 @@ fn process_destination(
 
                 let mut current_var = source_var.clone();
 
+                let mut prev_endpoint: Option<&Endpoint> = None;
                 for ep in &arm.pipeline {
+                    // For Reshape endpoints, try to resolve source shape from previous endpoint
+                    let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_endpoint, gen)
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -782,7 +790,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
-                        None,
+                        arm_reshape_src.as_ref(),
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -790,6 +798,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         call_to_result.insert(key, current_var.clone());
                     }
+                    prev_endpoint = Some(ep);
                 }
 
                 writeln!(
@@ -835,7 +844,14 @@ fn process_destination(
                 let saved_var_names = gen.var_names.clone();
                 let mut current_var = source_var.clone();
 
+                let mut prev_ep: Option<&Endpoint> = None;
                 for ep in &branch.pipeline {
+                    let branch_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_ep, gen)
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -849,7 +865,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
-                        None,
+                        branch_reshape_src.as_ref(),
                     )?;
                     // Cache call/match/if results inside branch
                     if let Endpoint::Call { .. } = ep {
@@ -862,6 +878,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         if_to_result.insert(key, current_var.clone());
                     }
+                    prev_ep = Some(ep);
                 }
 
                 writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
@@ -875,7 +892,14 @@ fn process_destination(
                 let saved_var_names = gen.var_names.clone();
                 let mut current_var = source_var.clone();
 
+                let mut prev_ep: Option<&Endpoint> = None;
                 for ep in else_branch {
+                    let else_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_ep, gen)
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -889,7 +913,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
-                        None,
+                        else_reshape_src.as_ref(),
                     )?;
                     if let Endpoint::Call { .. } = ep {
                         let key = endpoint_key_impl(ep);
@@ -901,6 +925,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         if_to_result.insert(key, current_var.clone());
                     }
+                    prev_ep = Some(ep);
                 }
                 writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
                 gen.var_names = saved_var_names;
@@ -1265,6 +1290,34 @@ fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> String {
         Dim::Expr(e) => dim_expr_to_python(gen, e),
         Dim::Wildcard => "-1".to_string(),
         Dim::Variadic(_) => "-1".to_string(),
+    }
+}
+
+/// Resolve the output shape from a previous endpoint in a pipeline.
+///
+/// Used when a Reshape follows another endpoint inside a Match/If arm pipeline,
+/// so the reshape knows its source shape for @reduce/@repeat dim calculations.
+fn resolve_endpoint_source_shape(
+    prev: Option<&Endpoint>,
+    gen: &CodeGenerator,
+) -> Option<Shape> {
+    match prev? {
+        Endpoint::Call { id, .. } => gen
+            .inference_ctx
+            .call_outputs
+            .get(id)
+            .and_then(|shapes| shapes.first().cloned()),
+        Endpoint::Ref(port_ref) => gen
+            .inference_ctx
+            .node_outputs
+            .get(&port_ref.node)
+            .and_then(|shapes| shapes.first().cloned()),
+        Endpoint::Reshape(r) => gen
+            .inference_ctx
+            .call_outputs
+            .get(&r.id)
+            .and_then(|shapes| shapes.first().cloned()),
+        _ => None,
     }
 }
 

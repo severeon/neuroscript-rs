@@ -166,24 +166,11 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // Tuple unpacking doesn't contain calls in current IR
         }
         Endpoint::Ref(_) => {}
-        Endpoint::Reshape(reshape) => {
-            // Reshape with neuron annotation needs the neuron collected
-            if let Some(ref annotation) = reshape.annotation {
-                let strategy = match annotation {
-                    TransformAnnotation::Reduce(s) => s,
-                    TransformAnnotation::Repeat(s) => s,
-                };
-                if let TransformStrategy::Neuron { name, args, kwargs, .. } = strategy {
-                    // Create a synthetic Call endpoint for the neuron
-                    calls.push(Endpoint::Call {
-                        name: name.clone(),
-                        args: args.clone(),
-                        kwargs: kwargs.clone(),
-                        id: reshape.id,
-                        frozen: false,
-                    });
-                }
-            }
+        Endpoint::Reshape(_) => {
+            // Reshape neuron annotations are instantiated separately by
+            // collect_reshape_transforms in instantiation.rs (as self._transform_{id}).
+            // Do NOT create synthetic Call endpoints here — that would cause
+            // duplicate module instantiation.
         }
         // Endpoint::Unroll removed — expanded before codegen
     }
