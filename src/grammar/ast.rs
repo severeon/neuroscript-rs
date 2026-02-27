@@ -1676,11 +1676,9 @@ impl AstBuilder {
             }
         }
 
-        let mut expr = reshape_expr.unwrap_or(ReshapeExpr {
-            dims: vec![],
-            annotation: None,
-            id: self.next_id(),
-        });
+        let mut expr = reshape_expr.expect(
+            "grammar guarantees reshape_expr is present in fat_arrow_step",
+        );
         expr.annotation = annotation;
 
         Ok(Endpoint::Reshape(expr))

@@ -10,6 +10,16 @@ fn build_reshape_program(
     reshape_ep: Endpoint,
     extra_neurons: Vec<(&str, Shape, Shape)>,
 ) -> Program {
+    // Create a second reshape endpoint with a distinct id for the source connection,
+    // so each connection has a unique endpoint (matching real parsed programs).
+    let reshape_ep_source = match &reshape_ep {
+        Endpoint::Reshape(r) => Endpoint::Reshape(ReshapeExpr {
+            dims: r.dims.clone(),
+            annotation: r.annotation.clone(),
+            id: r.id + 1000, // Offset to avoid id collision
+        }),
+        other => other.clone(),
+    };
     let mut builder = ProgramBuilder::new();
     for (n, in_shape, out_shape) in extra_neurons {
         builder = builder.with_simple_neuron(n, in_shape, out_shape);
@@ -20,8 +30,8 @@ fn build_reshape_program(
             vec![default_port(shape_two_wildcard())],
             vec![default_port(shape_two_wildcard())],
             vec![
-                connection(ref_endpoint("in"), reshape_ep.clone()),
-                connection(reshape_ep, ref_endpoint("out")),
+                connection(ref_endpoint("in"), reshape_ep),
+                connection(reshape_ep_source, ref_endpoint("out")),
             ],
             Some(10),
         )
