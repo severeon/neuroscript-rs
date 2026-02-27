@@ -1724,7 +1724,7 @@ impl AstBuilder {
                 let name = first.as_str().to_string();
                 // inner[1] is assign, inner[2] is dim
                 let dim = self.build_dim(inner[2].clone())?;
-                let expr = dim_to_value(dim);
+                let expr = dim_to_value(dim)?;
                 Ok(ReshapeDim::Binding {
                     name,
                     expr: Box::new(expr),
@@ -1810,25 +1810,31 @@ impl Default for AstBuilder {
 }
 
 /// Convert a Dim to a Value for use in reshape bindings (e.g., `h=dim/heads`).
-fn dim_to_value(dim: Dim) -> Value {
+/// Returns Err if the dim contains Wildcard or Variadic (invalid in reshape bindings).
+fn dim_to_value(dim: Dim) -> Result<Value, ParseError> {
     match dim {
-        Dim::Literal(n) => Value::Int(n),
-        Dim::Named(name) => Value::Name(name),
-        Dim::Global(name) => Value::Global(name),
-        Dim::Wildcard | Dim::Variadic(_) => {
-            // Wildcards and variadics should be rejected at the ReshapeDim level
-            // before reaching this function. If they leak through, treat as error.
-            panic!("Wildcard/Variadic dims should not appear in reshape bindings")
-        }
+        Dim::Literal(n) => Ok(Value::Int(n)),
+        Dim::Named(name) => Ok(Value::Name(name)),
+        Dim::Global(name) => Ok(Value::Global(name)),
+        Dim::Wildcard => Err(error::expected(
+            "named dimension or literal in reshape binding expression",
+            "*",
+            0,
+        )),
+        Dim::Variadic(name) => Err(error::expected(
+            "named dimension or literal in reshape binding expression",
+            &format!("*{}", name),
+            0,
+        )),
         Dim::Expr(expr) => {
             let op = expr.op;
-            let left = dim_to_value(expr.left);
-            let right = dim_to_value(expr.right);
-            Value::BinOp {
+            let left = dim_to_value(expr.left)?;
+            let right = dim_to_value(expr.right)?;
+            Ok(Value::BinOp {
                 op,
                 left: Box::new(left),
                 right: Box::new(right),
-            }
+            })
         }
     }
 }

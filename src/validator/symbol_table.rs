@@ -437,8 +437,9 @@ pub(super) fn check_port_compatibility(
     let mut errors = Vec::new();
 
     // Reshape endpoints intentionally change shapes — skip port compatibility
-    // checking when source or destination is a reshape. Element-preservation
-    // is not validated at compile time (deferred to PyTorch runtime, like .reshape()).
+    // checking. When source is a Reshape, its output shape is the declared target
+    // shape; when destination is a Reshape, it consumes any input shape and produces
+    // a new shape from its dims. Element-preservation is deferred to PyTorch runtime.
     if matches!(source_endpoint, Endpoint::Reshape(_))
         || matches!(dest_endpoint, Endpoint::Reshape(_))
     {

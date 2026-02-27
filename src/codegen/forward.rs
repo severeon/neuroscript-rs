@@ -1019,14 +1019,10 @@ fn process_destination(
                             })
                             .collect();
 
-                        // NOTE: This only matches Dim::Named entries in the source shape.
-                        // Wildcard (*) and variadic (*name) dims are skipped, which means
-                        // @reduce on shapes with wildcards may produce incorrect dim indices.
-                        // Source shapes must be fully named for correct reduce codegen.
                         let reduce_dims: Vec<usize> =
                             if let Some(src_shape) = reshape_source_shape {
-                                // Find source dims not present in target
-                                src_shape
+                                // Primary strategy: find source Named dims not present in target
+                                let named_reduce: Vec<usize> = src_shape
                                     .dims
                                     .iter()
                                     .enumerate()
@@ -1038,7 +1034,22 @@ fn process_destination(
                                         }
                                         None
                                     })
-                                    .collect()
+                                    .collect();
+
+                                if !named_reduce.is_empty() {
+                                    named_reduce
+                                } else {
+                                    // Fallback: use trailing dims based on rank delta.
+                                    // Common case: [*, c, h, w] => @reduce(mean) [*, c]
+                                    // reduces the last (src_rank - target_rank) dims.
+                                    let src_rank = src_shape.dims.len();
+                                    let tgt_rank = reshape.dims.len();
+                                    if src_rank > tgt_rank {
+                                        (tgt_rank..src_rank).collect()
+                                    } else {
+                                        vec![]
+                                    }
+                                }
                             } else {
                                 return Err(CodegenError::InvalidConnection(
                                     "cannot determine reduce dimensions: source shape unavailable".to_string(),
@@ -1047,7 +1058,7 @@ fn process_destination(
 
                         if reduce_dims.is_empty() {
                             return Err(CodegenError::InvalidConnection(
-                                "cannot determine reduce dimensions: source shape has no named dims to reduce (may contain wildcards/variadics)".to_string(),
+                                "cannot determine reduce dimensions: no dims identified to reduce".to_string(),
                             ));
                         }
 
@@ -1122,15 +1133,7 @@ fn process_destination(
                         // Emit unsqueeze for each new dimension (in order)
                         let mut current = source_var.clone();
                         for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
-                            let unsqueezed = if offset == unsqueeze_indices.len() - 1
-                                && unsqueeze_indices.len() > 0
-                            {
-                                // Last unsqueeze can write to result_var if no expand needed
-                                // But we always need expand, so use a temp
-                                make_var_name(used_var_names, "x")
-                            } else {
-                                make_var_name(used_var_names, "x")
-                            };
+                            let unsqueezed = make_var_name(used_var_names, "x");
                             writeln!(
                                 output,
                                 "{}{} = {}.unsqueeze({})",
