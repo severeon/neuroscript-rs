@@ -914,8 +914,8 @@ neuron GlobalAvgPool(dim):
     let code = result.unwrap();
     println!("=== REDUCE MEAN ===\n{}", code);
     assert!(
-        code.contains("mean"),
-        "should contain mean reduction"
+        code.contains(".mean(dim="),
+        "should contain .mean(dim= reduction call"
     );
 }
 
@@ -935,8 +935,8 @@ neuron SumPool(dim):
     let code = result.unwrap();
     println!("=== REDUCE SUM ===\n{}", code);
     assert!(
-        code.contains("sum"),
-        "should contain sum reduction"
+        code.contains(".sum(dim="),
+        "should contain .sum(dim= reduction call"
     );
 }
 

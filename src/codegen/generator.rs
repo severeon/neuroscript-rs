@@ -139,7 +139,6 @@ impl<'a> CodeGenerator<'a> {
             binding_to_unroll_group: std::collections::HashMap::new(),
             aggregate_to_group: std::collections::HashMap::new(),
             last_emitted_shape: None,
-            reshape_source_shape: None,
         }
     }
 

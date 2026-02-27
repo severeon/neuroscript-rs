@@ -260,6 +260,7 @@ pub(super) fn generate_forward_body(
 
         // For Reshape destinations, emit dimension bindings from source shape
         // before processing the reshape itself
+        let mut reshape_source_shape_for_dest: Option<Shape> = None;
         if let Endpoint::Reshape(reshape) = &conn.destination {
             // Look up the source shape from inference context
             let source_shape = match &conn.source {
@@ -310,8 +311,8 @@ pub(super) fn generate_forward_body(
                 }
             }
 
-            // Store source shape on gen for use in process_destination (reduce dims)
-            gen.reshape_source_shape = source_shape;
+            // Store source shape for passing to process_destination
+            reshape_source_shape_for_dest = source_shape;
         }
 
         // Process the destination
@@ -328,10 +329,8 @@ pub(super) fn generate_forward_body(
             &mut binding_call_results,
             &mut emitted_unroll_groups,
             source_output_count,
+            reshape_source_shape_for_dest.as_ref(),
         )?;
-
-        // Clear temporary reshape source shape
-        gen.reshape_source_shape = None;
 
         // Track the last result for implicit output
         last_result = Some(result_var.clone());
@@ -380,6 +379,7 @@ fn process_destination(
     binding_call_results: &mut HashMap<String, String>,
     emitted_unroll_groups: &mut HashSet<String>,
     source_output_count: usize,
+    reshape_source_shape: Option<&Shape>,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
@@ -782,6 +782,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        None,
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -848,6 +849,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        None,
                     )?;
                     // Cache call/match/if results inside branch
                     if let Endpoint::Call { .. } = ep {
@@ -887,6 +889,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        None,
                     )?;
                     if let Endpoint::Call { .. } = ep {
                         let key = endpoint_key_impl(ep);
@@ -992,7 +995,7 @@ fn process_destination(
                             .collect();
 
                         let reduce_dims: Vec<usize> =
-                            if let Some(ref src_shape) = gen.reshape_source_shape {
+                            if let Some(src_shape) = reshape_source_shape {
                                 // Find source dims not present in target
                                 src_shape
                                     .dims
@@ -1008,8 +1011,9 @@ fn process_destination(
                                     })
                                     .collect()
                             } else {
-                                // Fallback: reduce trailing dims
-                                (reshape.dims.len()..4).collect()
+                                return Err(CodegenError::InvalidConnection(
+                                    "cannot determine reduce dimensions: source shape unavailable".to_string(),
+                                ));
                             };
 
                         if reduce_dims.len() == 1 {
@@ -1152,7 +1156,10 @@ fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> String {
         BinOp::Add => "+",
         BinOp::Sub => "-",
         BinOp::Mul => "*",
-        _ => "?",
+        other => panic!(
+            "unsupported operator {:?} in reshape dimension expression",
+            other
+        ),
     };
     let left = reshape_dim_ref_to_python(gen, &expr.left);
     let right = reshape_dim_ref_to_python(gen, &expr.right);

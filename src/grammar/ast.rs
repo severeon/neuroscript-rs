@@ -1736,10 +1736,18 @@ impl AstBuilder {
                 match dim {
                     Dim::Named(name) => Ok(ReshapeDim::Named(name)),
                     Dim::Literal(n) => Ok(ReshapeDim::Literal(n)),
-                    Dim::Wildcard => Ok(ReshapeDim::Named("*".to_string())),
-                    Dim::Variadic(name) => Ok(ReshapeDim::Named(format!("*{}", name))),
                     Dim::Expr(expr) => Ok(ReshapeDim::Expr(expr)),
-                    Dim::Global(name) => Ok(ReshapeDim::Named(format!("@global {}", name))),
+                    Dim::Global(name) => Ok(ReshapeDim::Named(name)),
+                    Dim::Wildcard => Err(error::expected(
+                        "named dimension, literal, or 'others'",
+                        "*",
+                        0,
+                    )),
+                    Dim::Variadic(_) => Err(error::expected(
+                        "named dimension, literal, or 'others'",
+                        first.as_str(),
+                        0,
+                    )),
                 }
             }
             _ => Ok(ReshapeDim::Named(first.as_str().to_string())),
@@ -1807,8 +1815,11 @@ fn dim_to_value(dim: Dim) -> Value {
         Dim::Literal(n) => Value::Int(n),
         Dim::Named(name) => Value::Name(name),
         Dim::Global(name) => Value::Global(name),
-        Dim::Wildcard => Value::Name("*".to_string()),
-        Dim::Variadic(name) => Value::Name(format!("*{}", name)),
+        Dim::Wildcard | Dim::Variadic(_) => {
+            // Wildcards and variadics should be rejected at the ReshapeDim level
+            // before reaching this function. If they leak through, treat as error.
+            panic!("Wildcard/Variadic dims should not appear in reshape bindings")
+        }
         Dim::Expr(expr) => {
             let op = expr.op;
             let left = dim_to_value(expr.left);

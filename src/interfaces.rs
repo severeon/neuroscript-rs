@@ -137,10 +137,6 @@ pub struct CodeGenerator<'a> {
 
     /// Last shape comment emitted, used to suppress duplicates
     pub last_emitted_shape: Option<String>,
-
-    /// Temporary: source shape for the current reshape being processed
-    /// Set in generate_forward_body before process_destination, cleared after
-    pub reshape_source_shape: Option<Shape>,
 }
 
 /// An input or output port of a neuron
