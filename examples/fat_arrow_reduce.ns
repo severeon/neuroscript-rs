@@ -1,0 +1,7 @@
+# Fat arrow with @reduce annotation
+
+neuron GlobalAvgPool:
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, c] -> out

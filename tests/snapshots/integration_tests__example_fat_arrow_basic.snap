@@ -1,0 +1,34 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron FlattenTail:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, flat]
+  graph:
+    in => [b, others]
+    [b, others] -> out
+
+neuron MultiHeadReshape(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, heads, seq, (dim / heads)]
+  graph:
+    in => [batch, seq, heads, dh=(dim / heads)]
+    [batch, seq, heads, dh=(dim / heads)] => [batch, heads, seq, dh]
+    [batch, heads, seq, dh] -> out
+
+neuron VitFlatten:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, seq, c]
+  graph:
+    in => [b, c, hw=(h * w)]
+    [b, c, hw=(h * w)] => [b, hw, c]
+    [b, hw, c] -> out

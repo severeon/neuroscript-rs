@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: format_program_ir(&program)
+---
+=== Neurons ===
+
+neuron ExpandDim:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, c, 1, h, w]
+  graph:
+    in => @repeat(copy) [b, c, 1, h, w]
+    @repeat(copy) [b, c, 1, h, w] -> out

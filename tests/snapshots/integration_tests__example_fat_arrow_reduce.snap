@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron GlobalAvgPool:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, c]
+  graph:
+    in => @reduce(mean) [b, c]
+    @reduce(mean) [b, c] -> out
