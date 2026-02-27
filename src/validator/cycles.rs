@@ -99,7 +99,7 @@ pub(super) fn extract_node_names_from_sources(
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
         Endpoint::Match(_) => vec![],
         Endpoint::If(_) => vec![],
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
         // Endpoint::Unroll removed
     }
 }
@@ -220,7 +220,7 @@ pub(super) fn extract_node_names_from_destinations(
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
         Endpoint::Match(_) => vec![],
         Endpoint::If(_) => vec![],
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
         // Endpoint::Unroll removed
     }
 }
@@ -244,7 +244,7 @@ pub(super) fn extract_simple_node_names(endpoint: &Endpoint) -> Vec<String> {
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
         Endpoint::Match(_) => vec![], // Skip Match for cycle detection
         Endpoint::If(_) => vec![],    // Skip If for cycle detection
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
         // Endpoint::Unroll removed // Expanded before validation
     }
 }

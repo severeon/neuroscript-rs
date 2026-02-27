@@ -411,7 +411,28 @@ where
 
             Ok(all_branch_ports[0].clone())
         }
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            // Reshape endpoints are pure shape transforms — they produce a single output
+            // with the shape described by the reshape dims.
+            // Check if annotation references a neuron (for existence checking later in core.rs)
+            if let Some(ref annotation) = reshape.annotation {
+                let strategy = match annotation {
+                    TransformAnnotation::Reduce(s) => s,
+                    TransformAnnotation::Repeat(s) => s,
+                };
+                if let TransformStrategy::Neuron { name, .. } = strategy {
+                    // Neuron existence is checked in core.rs check_neurons_exist
+                    let _ = name;
+                }
+            }
+            // Return a single port with the reshape's output shape
+            let output_shape = reshape_dims_to_shape(&reshape.dims);
+            Ok(vec![Port {
+                name: "default".to_string(),
+                shape: output_shape,
+                variadic: false,
+            }])
+        }
     }
 }
 
@@ -425,6 +446,15 @@ pub(super) fn check_port_compatibility(
     shapes_compatible_fn: impl Fn(&Shape, &Shape) -> bool,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
+
+    // Reshape endpoints intentionally change shapes — skip port compatibility
+    // checking when source or destination is a reshape. Shape validation for
+    // reshapes happens at a higher level (element-preservation checks, etc.).
+    if matches!(source_endpoint, Endpoint::Reshape(_))
+        || matches!(dest_endpoint, Endpoint::Reshape(_))
+    {
+        return errors;
+    }
 
     // For Match and If, we check consistency but typically they are destinations
     // and shape inference does the heavy lifting.
@@ -523,7 +553,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(_) => "Reshape".to_string(),
     }
 }
 
@@ -553,6 +583,32 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match".to_string(),
         Endpoint::If(_) => "if".to_string(),
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            format!(
+                "=> [{}]",
+                reshape
+                    .dims
+                    .iter()
+                    .map(|d| format!("{}", d))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+    }
+}
+
+/// Convert reshape dims to a Shape for validation purposes
+pub(super) fn reshape_dims_to_shape(dims: &[ReshapeDim]) -> Shape {
+    Shape {
+        dims: dims
+            .iter()
+            .map(|d| match d {
+                ReshapeDim::Named(name) => Dim::Named(name.clone()),
+                ReshapeDim::Literal(n) => Dim::Literal(*n),
+                ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
+                ReshapeDim::Others => Dim::Wildcard,
+                ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
+            })
+            .collect(),
     }
 }

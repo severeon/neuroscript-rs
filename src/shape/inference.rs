@@ -541,7 +541,12 @@ impl ShapeInferenceEngine {
                 self.validate_if_destination(if_expr, &source_shapes, ctx, program)?;
             }
 
-            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+            Endpoint::Reshape(reshape) => {
+                // Reshape: compute the output shape from the reshape dims
+                // and store it keyed by the reshape's unique id
+                let output_shape = reshape_dims_to_shape(&reshape.dims);
+                ctx.call_outputs.insert(reshape.id, vec![output_shape]);
+            }
         }
 
         Ok(())
@@ -1005,7 +1010,17 @@ impl ShapeInferenceEngine {
             ),
             Endpoint::Match(_) => "match".to_string(),
             Endpoint::If(_) => "if".to_string(),
-            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+            Endpoint::Reshape(reshape) => {
+                format!(
+                    "=> [{}]",
+                    reshape
+                        .dims
+                        .iter()
+                        .map(|d| format!("{}", d))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             // Endpoint::Unroll removed
         }
     }
@@ -1154,7 +1169,14 @@ fn resolve_match_endpoint(
         Endpoint::If(_) => Err(ShapeError::UnsupportedFeature(
             "Nested if expressions not yet supported in match pipeline".to_string(),
         )),
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            // In a match pipeline, a reshape produces its declared output shape
+            if let Some(shapes) = ctx.call_outputs.get(&reshape.id) {
+                Ok(shapes.clone())
+            } else {
+                Ok(vec![reshape_dims_to_shape(&reshape.dims)])
+            }
+        }
         // Endpoint::Unroll removed — expanded before shape inference
     }
 }
@@ -1182,6 +1204,22 @@ fn format_port_ref(r: &PortRef) -> String {
         format!("{}.{}", r.node, r.port)
     } else {
         r.node.clone()
+    }
+}
+
+/// Convert reshape dims to a Shape for inference purposes
+fn reshape_dims_to_shape(dims: &[ReshapeDim]) -> Shape {
+    Shape {
+        dims: dims
+            .iter()
+            .map(|d| match d {
+                ReshapeDim::Named(name) => Dim::Named(name.clone()),
+                ReshapeDim::Literal(n) => Dim::Literal(*n),
+                ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
+                ReshapeDim::Others => Dim::Wildcard,
+                ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
+            })
+            .collect(),
     }
 }
 
@@ -1232,7 +1270,13 @@ fn resolve_endpoint_shape(
                 Ok(vec![])
             }
         }
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            if let Some(shapes) = ctx.call_outputs.get(&reshape.id) {
+                Ok(shapes.clone())
+            } else {
+                Ok(vec![reshape_dims_to_shape(&reshape.dims)])
+            }
+        }
         // Endpoint::Unroll removed
     }
 }
