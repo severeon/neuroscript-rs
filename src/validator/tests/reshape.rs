@@ -1,5 +1,14 @@
 use super::fixtures::*;
 use crate::interfaces::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// Monotonic counter for generating unique endpoint IDs in test helpers,
+/// mirroring the real AST builder's `next_id()` approach.
+static TEST_ID_COUNTER: AtomicUsize = AtomicUsize::new(10_000);
+
+fn next_test_id() -> usize {
+    TEST_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 // ========== Tests using ProgramBuilder (IR-level) ==========
 
@@ -16,7 +25,7 @@ fn build_reshape_program(
         Endpoint::Reshape(r) => Endpoint::Reshape(ReshapeExpr {
             dims: r.dims.clone(),
             annotation: r.annotation.clone(),
-            id: r.id + 1000, // Offset to avoid id collision
+            id: next_test_id(),
         }),
         other => other.clone(),
     };
@@ -258,7 +267,7 @@ fn build_literal_reshape_program(
         Endpoint::Reshape(r) => Endpoint::Reshape(ReshapeExpr {
             dims: r.dims.clone(),
             annotation: r.annotation.clone(),
-            id: r.id + 1000,
+            id: next_test_id(),
         }),
         other => other.clone(),
     };
