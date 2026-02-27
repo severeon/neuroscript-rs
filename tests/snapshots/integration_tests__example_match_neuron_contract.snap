@@ -4,6 +4,15 @@ expression: formatted
 ---
 === Neurons ===
 
+neuron MyModel(d_model):
+  inputs:
+    default: [*, seq, d_model]
+  outputs:
+    default: [*, seq, d_model]
+  graph:
+    in -> SmartStack#1(TransformerBlock, d_model)
+    SmartStack#1(TransformerBlock, d_model) -> out
+
 neuron SmartStack(block, d_model, count = 6):
   inputs:
     default: [*, seq, d_model]

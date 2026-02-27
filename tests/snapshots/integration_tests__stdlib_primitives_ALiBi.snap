@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ALiBi(num_heads, max_seq_len = 2048):
+  inputs:
+    default: [batch, num_heads, seq_len, seq_len]
+  outputs:
+    default: [batch, num_heads, seq_len, seq_len]
+  impl:
+    Source: core,embeddings/ALiBi

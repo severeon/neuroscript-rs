@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Dropblock(block_size = 7, drop_prob = 0.1):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, height, width]
+  impl:
+    Source: core,regularization/Dropblock

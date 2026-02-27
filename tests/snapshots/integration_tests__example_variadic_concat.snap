@@ -4,14 +4,6 @@ expression: formatted
 ---
 === Neurons ===
 
-neuron Concat(dim):
-  inputs:
-    *inputs: [*shape]
-  outputs:
-    default: [*shape_out]
-  impl:
-    Source: core,structural/Concat
-
 neuron ConcatNorm(dim):
   inputs:
     *inputs: [*shape]
@@ -39,22 +31,6 @@ neuron FourWayConcat(dim):
     Linear#10(dim, dim) -> pd
     (pa, pb, pc, pd) -> Concat#11(1)
     Concat#11(1) -> out
-
-neuron LayerNorm(dim):
-  inputs:
-    default: [*, dim]
-  outputs:
-    default: [*, dim]
-  impl:
-    Source: core,normalization/LayerNorm
-
-neuron Linear(in_dim, out_dim):
-  inputs:
-    default: [*, in_dim]
-  outputs:
-    default: [*, out_dim]
-  impl:
-    Source: core,nn/Linear
 
 neuron ThreeWayConcat(dim):
   inputs:
