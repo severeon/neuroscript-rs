@@ -981,7 +981,7 @@ fn process_destination(
             // Binding dims like `dh=dim/heads` must be assigned before any use.
             for dim in &reshape.dims {
                 if let ReshapeDim::Binding { name, expr } = dim {
-                    let expr_str = value_to_python_int_div(gen, expr);
+                    let expr_str = gen.value_to_python_dim_expr(expr);
                     writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
                 }
             }
@@ -1216,88 +1216,11 @@ fn process_destination(
         }
     }
 }
-/// Convert a Value to Python code for dimension arithmetic (uses // for division).
-/// Resolves neuron parameter names to self.{name} and binding_context lookups.
-///
-/// Similar to `value_to_python_impl` in utils.rs but uses `//` for integer division
-/// (required for tensor dimension arithmetic) and resolves binding_context names.
-fn value_to_python_int_div(gen: &CodeGenerator, value: &Value) -> String {
-    match value {
-        Value::Int(n) => n.to_string(),
-        Value::Float(f) => f.to_string(),
-        Value::String(s) => format!("\"{}\"", s),
-        Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
-        Value::Name(n) => {
-            if gen.current_neuron_params.contains(n) {
-                format!("self.{}", n)
-            } else if let Some(resolved) = gen.binding_context.get(n) {
-                resolved.clone()
-            } else {
-                n.clone()
-            }
-        }
-        Value::Global(n) => n.clone(),
-        Value::BinOp { op, left, right } => {
-            let op_str = match op {
-                BinOp::Div => "//",
-                BinOp::Add => "+",
-                BinOp::Sub => "-",
-                BinOp::Mul => "*",
-                BinOp::Lt => "<",
-                BinOp::Gt => ">",
-                BinOp::Le => "<=",
-                BinOp::Ge => ">=",
-                BinOp::Eq => "==",
-                BinOp::Ne => "!=",
-            };
-            format!(
-                "{} {} {}",
-                value_to_python_int_div(gen, left),
-                op_str,
-                value_to_python_int_div(gen, right)
-            )
-        }
-        Value::Call { name, args, kwargs } => {
-            let args_str = args
-                .iter()
-                .map(|v| value_to_python_int_div(gen, v))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let kwargs_str = if kwargs.is_empty() {
-                String::new()
-            } else {
-                let kw: Vec<String> = kwargs
-                    .iter()
-                    .map(|(k, v)| format!("{}={}", k, value_to_python_int_div(gen, v)))
-                    .collect();
-                if args.is_empty() {
-                    kw.join(", ")
-                } else {
-                    format!(", {}", kw.join(", "))
-                }
-            };
-            format!("{}({}{})", name, args_str, kwargs_str)
-        }
-    }
-}
-
 /// Convert a DimExpr to Python code for dimension arithmetic (uses // for division)
 fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> String {
-    let op_str = match expr.op {
-        BinOp::Div => "//",
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        // Grammar only allows +, -, *, / in dimension expressions.
-        // Comparison operators cannot reach codegen through valid programs.
-        other => unreachable!(
-            "operator {:?} should not appear in reshape dimension expression",
-            other
-        ),
-    };
     let left = reshape_dim_ref_to_python(gen, &expr.left);
     let right = reshape_dim_ref_to_python(gen, &expr.right);
-    format!("{} {} {}", left, op_str, right)
+    format!("{} {} {}", left, binop_to_str(&expr.op, true), right)
 }
 
 /// Convert a Dim (when used as part of a DimExpr in a reshape) to Python
