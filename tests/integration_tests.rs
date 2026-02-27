@@ -238,9 +238,14 @@ fn format_impl_ref(impl_ref: &ImplRef) -> String {
 }
 
 fn format_connection(conn: &Connection) -> String {
+    let arrow = match &conn.destination {
+        Endpoint::Reshape(_) => "=>",
+        _ => "->",
+    };
     format!(
-        "{} -> {}",
+        "{} {} {}",
         format_endpoint(&conn.source),
+        arrow,
         format_endpoint(&conn.destination)
     )
 }
@@ -320,7 +325,17 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
             }
             result.trim_end().to_string()
         }
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            let mut result = String::new();
+            if let Some(ref ann) = reshape.annotation {
+                result.push_str(&format!("{} ", ann));
+            }
+            result.push('[');
+            let dims: Vec<String> = reshape.dims.iter().map(|d| format!("{}", d)).collect();
+            result.push_str(&dims.join(", "));
+            result.push(']');
+            result
+        }
     }
 }
 
