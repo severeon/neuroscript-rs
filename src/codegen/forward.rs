@@ -279,6 +279,9 @@ pub(super) fn generate_forward_body(
                     .call_outputs
                     .get(&r.id)
                     .and_then(|shapes| shapes.first().cloned()),
+                // Known limitation: Match, If, and Tuple sources don't expose
+                // output shapes in inference_ctx, so @reduce falls back to
+                // rank-delta heuristic. Tracking issue for full support.
                 _ => None,
             };
 

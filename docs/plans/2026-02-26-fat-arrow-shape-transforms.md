@@ -1,7 +1,5 @@
 # Fat Arrow (`=>`) Shape Transforms Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add `=>` as a first-class shape transformation operator in NeuroScript, enabling element-preserving reshapes (permute, split, merge, flatten) and annotated transforms (`@reduce`, `@repeat`) directly in pipelines.
 
 **Architecture:** The fat arrow is implemented as a new `Endpoint::Reshape` variant in the IR. In grammar, `=> [shape]` and `=> @annotation [shape]` are parsed as reshape endpoints within pipelines. The AST builder creates `Reshape` endpoints that flow through the existing `Connection` flattening machinery. Validation enforces element preservation for bare `=>` and annotation requirements for non-preserving transforms. Codegen emits `view`/`permute`/`reshape`/`mean`/`sum`/etc. PyTorch calls.
