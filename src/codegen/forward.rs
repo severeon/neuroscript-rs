@@ -773,9 +773,19 @@ fn process_destination(
 
                 let mut prev_endpoint: Option<&Endpoint> = None;
                 for ep in &arm.pipeline {
-                    // For Reshape endpoints, try to resolve source shape from previous endpoint
+                    // For Reshape endpoints, try to resolve source shape from previous endpoint.
+                    // When reshape is the first endpoint in a match arm (prev_endpoint is None),
+                    // use the match arm's pattern shape as the source — the pattern defines
+                    // the shape of the data flowing into the arm pipeline.
                     let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
                         resolve_endpoint_source_shape(prev_endpoint, gen)
+                            .or_else(|| {
+                                if prev_endpoint.is_none() {
+                                    Some(shape.clone())
+                                } else {
+                                    None
+                                }
+                            })
                     } else {
                         None
                     };

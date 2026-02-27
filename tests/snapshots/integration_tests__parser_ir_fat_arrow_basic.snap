@@ -27,7 +27,7 @@ neuron VitFlatten:
   inputs:
     default: [b, c, h, w]
   outputs:
-    default: [b, seq, c]
+    default: [b, hw, c]
   graph:
     in => [b, c, hw=(h * w)]
     [b, c, hw=(h * w)] => [b, hw, c]

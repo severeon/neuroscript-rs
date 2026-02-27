@@ -8,7 +8,7 @@ neuron MultiHeadReshape(dim, heads):
 
 neuron VitFlatten:
   in: [b, c, h, w]
-  out: [b, seq, c]
+  out: [b, hw, c]
   graph:
     in => [b, c, hw=h*w] => [b, hw, c] -> out
 

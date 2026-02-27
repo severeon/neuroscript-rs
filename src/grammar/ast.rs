@@ -1712,7 +1712,11 @@ impl AstBuilder {
         let inner: Vec<_> = pair.into_inner().collect();
 
         if inner.is_empty() {
-            return Ok(ReshapeDim::Others);
+            return Err(error::expected(
+                "reshape dimension (name, literal, binding, or 'others')",
+                "<empty>",
+                0,
+            ));
         }
 
         let first = &inner[0];
