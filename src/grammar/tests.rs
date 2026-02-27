@@ -307,3 +307,213 @@ fn test_unroll_is_not_ident() {
     let result = NeuroScriptParser::parse(Rule::ident, input);
     assert!(result.is_err(), "unroll should not parse as identifier");
 }
+
+// ============================================================================
+// Fat Arrow (=>) reshape tests
+// ============================================================================
+
+#[test]
+fn test_parse_fat_arrow_grammar_rule() {
+    // Test the fat_arrow_step grammar rule directly
+    let input = "=> [batch, seq, heads, dh]";
+    let result = NeuroScriptParser::parse(Rule::fat_arrow_step, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse fat_arrow_step");
+}
+
+#[test]
+fn test_parse_fat_arrow_with_binding_grammar() {
+    // Test fat_arrow_step with a binding dim
+    let input = "=> [batch, seq, heads, dh=dim/heads]";
+    let result = NeuroScriptParser::parse(Rule::fat_arrow_step, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse fat_arrow_step with binding");
+}
+
+#[test]
+fn test_parse_fat_arrow_with_annotation_grammar() {
+    // Test fat_arrow_step with @reduce annotation
+    let input = "=> @reduce(mean) [b, c]";
+    let result = NeuroScriptParser::parse(Rule::fat_arrow_step, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse fat_arrow_step with annotation");
+}
+
+#[test]
+fn test_parse_fat_arrow_with_others_grammar() {
+    // Test fat_arrow_step with 'others' keyword
+    let input = "=> [b, others]";
+    let result = NeuroScriptParser::parse(Rule::fat_arrow_step, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse fat_arrow_step with others");
+}
+
+#[test]
+fn test_parse_reshape_dim_binding() {
+    // Test reshape_dim with binding syntax
+    let input = "hw=h*w";
+    let result = NeuroScriptParser::parse(Rule::reshape_dim, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse reshape_dim binding");
+}
+
+#[test]
+fn test_parse_reshape_expr_with_binding() {
+    let input = "[b, c, hw=h*w]";
+    let result = NeuroScriptParser::parse(Rule::reshape_expr, input);
+    if let Err(e) = &result {
+        eprintln!("Error: {}", e);
+    }
+    assert!(result.is_ok(), "Failed to parse reshape_expr with binding");
+}
+
+#[test]
+fn test_parse_fat_arrow_basic() {
+    // Inline chained fat arrows with binding expression
+    let source = r#"
+neuron Reshape(dim, heads):
+  in: [batch, seq, dim]
+  out: [batch, heads, seq, dim / heads]
+  graph:
+    in => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> out
+"#;
+    let program = crate::parse(source).expect("should parse");
+    let neuron = program.neurons.get("Reshape").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert_eq!(connections.len(), 3, "expected 3 connections: in=>reshape, reshape=>reshape, reshape->out");
+    } else {
+        panic!("expected graph body");
+    }
+}
+
+#[test]
+fn test_parse_fat_arrow_with_annotation() {
+    // Fat arrow with @reduce(mean) annotation
+    let source = r#"
+neuron Pool:
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, c] -> out
+"#;
+    let program = crate::parse(source).expect("should parse");
+    let neuron = program.neurons.get("Pool").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert_eq!(connections.len(), 2, "expected 2 connections: in=>reshape, reshape->out");
+        // Verify the first connection's destination is a Reshape with annotation
+        match &connections[0].destination {
+            crate::interfaces::Endpoint::Reshape(expr) => {
+                assert!(expr.annotation.is_some(), "expected annotation on reshape");
+                match expr.annotation.as_ref().unwrap() {
+                    crate::interfaces::TransformAnnotation::Reduce(strategy) => {
+                        match strategy {
+                            crate::interfaces::TransformStrategy::Intrinsic(name) => {
+                                assert_eq!(name, "mean");
+                            }
+                            _ => panic!("expected intrinsic strategy"),
+                        }
+                    }
+                    _ => panic!("expected Reduce annotation"),
+                }
+            }
+            _ => panic!("expected Reshape endpoint"),
+        }
+    } else {
+        panic!("expected graph body");
+    }
+}
+
+#[test]
+fn test_parse_fat_arrow_indented() {
+    // Fat arrows in indented pipeline with binding expression
+    let source = r#"
+neuron VitFlatten:
+  in: [b, c, h, w]
+  out: [b, seq, c]
+  graph:
+    in ->
+      Linear(512, 256)
+      => [b, c, hw=h*w]
+      => [b, hw, c]
+      out
+"#;
+    let program = crate::parse(source).expect("should parse");
+    let neuron = program.neurons.get("VitFlatten").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert!(connections.len() >= 4, "expected at least 4 connections, got {}", connections.len());
+    } else {
+        panic!("expected graph body");
+    }
+}
+
+#[test]
+fn test_parse_fat_arrow_others() {
+    // Fat arrow with 'others' keyword for flattening
+    let source = r#"
+neuron Flatten:
+  in: [b, c, h, w]
+  out: [b, flat]
+  graph:
+    in => [b, others] -> out
+"#;
+    let program = crate::parse(source).expect("should parse");
+    let neuron = program.neurons.get("Flatten").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert_eq!(connections.len(), 2, "expected 2 connections: in=>reshape, reshape->out");
+        // Verify the reshape has 'others' dim
+        match &connections[0].destination {
+            crate::interfaces::Endpoint::Reshape(expr) => {
+                assert_eq!(expr.dims.len(), 2, "expected 2 dims in reshape");
+                assert_eq!(expr.dims[1], crate::interfaces::ReshapeDim::Others);
+            }
+            _ => panic!("expected Reshape endpoint"),
+        }
+    } else {
+        panic!("expected graph body");
+    }
+}
+
+#[test]
+fn test_parse_fat_arrow_with_neuron_call_annotation() {
+    // Fat arrow with @reduce(NeuronCall(args)) annotation
+    let source = r#"
+neuron CustomPool(dim):
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(AttentionPool(dim)) [b, c] -> out
+"#;
+    let program = crate::parse(source).expect("should parse");
+    let neuron = program.neurons.get("CustomPool").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        match &connections[0].destination {
+            crate::interfaces::Endpoint::Reshape(expr) => {
+                match expr.annotation.as_ref().unwrap() {
+                    crate::interfaces::TransformAnnotation::Reduce(strategy) => {
+                        match strategy {
+                            crate::interfaces::TransformStrategy::Neuron { name, args, .. } => {
+                                assert_eq!(name, "AttentionPool");
+                                assert_eq!(args.len(), 1);
+                            }
+                            _ => panic!("expected Neuron strategy"),
+                        }
+                    }
+                    _ => panic!("expected Reduce annotation"),
+                }
+            }
+            _ => panic!("expected Reshape endpoint"),
+        }
+    } else {
+        panic!("expected graph body");
+    }
+}

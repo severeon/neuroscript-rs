@@ -371,7 +371,7 @@ indented_pipeline = {
 
 indented_pipeline_item = {
     // Fat arrow step on its own line (with optional trailing arrow for continuation)
-    fat_arrow_step ~ (arrow ~ NEWLINE*)?
+    fat_arrow_step ~ (arrow)? ~ NEWLINE*
     // Item with trailing arrow means continue to next line
   | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ arrow ~ NEWLINE*)
     // Item without trailing arrow (may be followed by next connection or end)
