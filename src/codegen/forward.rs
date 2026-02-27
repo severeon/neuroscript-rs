@@ -977,17 +977,18 @@ fn process_destination(
                 }
             };
 
+            // Emit binding assignments for all cases (bare, @reduce, @repeat).
+            // Binding dims like `dh=dim/heads` must be assigned before any use.
+            for dim in &reshape.dims {
+                if let ReshapeDim::Binding { name, expr } = dim {
+                    let expr_str = value_to_python_int_div(gen, expr);
+                    writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
+                }
+            }
+
             match &reshape.annotation {
                 None => {
                     // Bare => : element-preserving reshape
-                    // Emit binding assignments first (e.g., dh = self.dim // self.heads)
-                    for dim in &reshape.dims {
-                        if let ReshapeDim::Binding { name, expr } = dim {
-                            let expr_str = value_to_python_int_div(gen, expr);
-                            writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
-                        }
-                    }
-
                     // Build target shape args
                     let shape_args = reshape
                         .dims
