@@ -320,6 +320,7 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
             }
             result.trim_end().to_string()
         }
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
     }
 }
 

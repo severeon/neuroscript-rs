@@ -540,6 +540,8 @@ impl ShapeInferenceEngine {
             Endpoint::If(if_expr) => {
                 self.validate_if_destination(if_expr, &source_shapes, ctx, program)?;
             }
+
+            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         }
 
         Ok(())
@@ -1003,6 +1005,7 @@ impl ShapeInferenceEngine {
             ),
             Endpoint::Match(_) => "match".to_string(),
             Endpoint::If(_) => "if".to_string(),
+            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
             // Endpoint::Unroll removed
         }
     }
@@ -1151,6 +1154,7 @@ fn resolve_match_endpoint(
         Endpoint::If(_) => Err(ShapeError::UnsupportedFeature(
             "Nested if expressions not yet supported in match pipeline".to_string(),
         )),
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         // Endpoint::Unroll removed — expanded before shape inference
     }
 }
@@ -1228,6 +1232,7 @@ fn resolve_endpoint_shape(
                 Ok(vec![])
             }
         }
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         // Endpoint::Unroll removed
     }
 }

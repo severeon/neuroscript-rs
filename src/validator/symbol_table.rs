@@ -411,6 +411,7 @@ where
 
             Ok(all_branch_ports[0].clone())
         }
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
     }
 }
 
@@ -522,6 +523,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
     }
 }
 
@@ -551,5 +553,6 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match".to_string(),
         Endpoint::If(_) => "if".to_string(),
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
     }
 }

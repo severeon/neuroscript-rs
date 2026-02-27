@@ -230,6 +230,7 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         };
 
         // Determine source output count for implicit fork detection
@@ -842,6 +843,7 @@ fn process_destination(
 
             Ok(result_var)
         }
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
     }
 }
 /// Generate a runtime shape check condition and dimension bindings

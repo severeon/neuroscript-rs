@@ -194,6 +194,8 @@ pub enum Endpoint {
     Match(MatchExpr),
     /// Conditional expression
     If(IfExpr),
+    /// Shape transformation: => [shape] or => @annotation [shape]
+    Reshape(ReshapeExpr),
 }
 
 /// A connection: source -> destination
@@ -270,6 +272,49 @@ pub struct IfExpr {
     pub branches: Vec<IfBranch>,            // if and elifs
     pub else_branch: Option<Vec<Endpoint>>, // optional else
     pub id: usize,
+}
+
+/// A reshape expression: [dim_spec, dim_spec, ...]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReshapeExpr {
+    pub dims: Vec<ReshapeDim>,
+    pub annotation: Option<TransformAnnotation>,
+    pub id: usize,
+}
+
+/// A dimension spec in a reshape expression
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReshapeDim {
+    /// Named dimension reference: b, seq, dim
+    Named(String),
+    /// Literal value: 1, 5, 512
+    Literal(i64),
+    /// Decomposition binding: h=dim/heads
+    Binding { name: String, expr: Box<Value> },
+    /// Others keyword: flattens remaining dims
+    Others,
+    /// Dimension expression: h*w, dim/heads (uses existing DimExpr)
+    Expr(Box<DimExpr>),
+}
+
+/// Transform annotation: @reduce(mean), @repeat(copy)
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransformAnnotation {
+    Reduce(TransformStrategy),
+    Repeat(TransformStrategy),
+}
+
+/// Strategy for a transform: intrinsic name or neuron call
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransformStrategy {
+    /// Built-in: mean, sum, min, max, prod, logsumexp, copy
+    Intrinsic(String),
+    /// Neuron call: AttentionPool(dim)
+    Neuron {
+        name: String,
+        args: Vec<Value>,
+        kwargs: Vec<Kwarg>,
+    },
 }
 
 /// Compile-time unroll block within a context section

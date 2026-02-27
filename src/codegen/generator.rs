@@ -357,6 +357,7 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
         Endpoint::Ref(_) => {
             // Port references don't call neurons
         }
+        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         // Endpoint::Unroll removed — expanded before codegen
     }
 }

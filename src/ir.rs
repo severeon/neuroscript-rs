@@ -181,6 +181,7 @@ impl std::fmt::Display for Endpoint {
             }
             Endpoint::Match(m) => write!(f, "{}", m),
             Endpoint::If(expr) => write!(f, "{}", expr),
+            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
         }
     }
 }
