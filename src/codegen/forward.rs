@@ -994,6 +994,10 @@ fn process_destination(
                             })
                             .collect();
 
+                        // NOTE: This only matches Dim::Named entries in the source shape.
+                        // Wildcard (*) and variadic (*name) dims are skipped, which means
+                        // @reduce on shapes with wildcards may produce incorrect dim indices.
+                        // Source shapes must be fully named for correct reduce codegen.
                         let reduce_dims: Vec<usize> =
                             if let Some(src_shape) = reshape_source_shape {
                                 // Find source dims not present in target
@@ -1055,18 +1059,89 @@ fn process_destination(
                 },
                 Some(TransformAnnotation::Repeat(strategy)) => match strategy {
                     TransformStrategy::Intrinsic(name) if name == "copy" => {
+                        // Determine which target dims are new (not in source shape).
+                        // These require unsqueeze before expand.
+                        let source_dim_names: HashSet<String> =
+                            if let Some(src_shape) = reshape_source_shape {
+                                src_shape
+                                    .dims
+                                    .iter()
+                                    .filter_map(|d| {
+                                        if let Dim::Named(n) = d {
+                                            Some(n.clone())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect()
+                            } else {
+                                HashSet::new()
+                            };
+
+                        // Find indices of new dims in target that need unsqueeze
+                        let mut unsqueeze_indices: Vec<usize> = Vec::new();
+                        for (i, dim) in reshape.dims.iter().enumerate() {
+                            let is_new = match dim {
+                                ReshapeDim::Literal(_) => {
+                                    // Literal dims like `1` are new dimensions
+                                    true
+                                }
+                                ReshapeDim::Named(n) => !source_dim_names.contains(n),
+                                _ => false,
+                            };
+                            if is_new {
+                                unsqueeze_indices.push(i);
+                            }
+                        }
+
+                        // Emit unsqueeze for each new dimension (in order)
+                        let mut current = source_var.clone();
+                        for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
+                            let unsqueezed = if offset == unsqueeze_indices.len() - 1
+                                && unsqueeze_indices.len() > 0
+                            {
+                                // Last unsqueeze can write to result_var if no expand needed
+                                // But we always need expand, so use a temp
+                                make_var_name(used_var_names, "x")
+                            } else {
+                                make_var_name(used_var_names, "x")
+                            };
+                            writeln!(
+                                output,
+                                "{}{} = {}.unsqueeze({})",
+                                indent,
+                                unsqueezed,
+                                current,
+                                idx + offset // Account for previous unsqueezes shifting indices
+                            )
+                            .unwrap();
+                            current = unsqueezed;
+                        }
+
                         let shape_args = reshape
                             .dims
                             .iter()
                             .map(|d| dim_to_py(d))
                             .collect::<Vec<_>>()
                             .join(", ");
-                        writeln!(
-                            output,
-                            "{}{} = {}.expand({})",
-                            indent, result_var, source_var, shape_args
-                        )
-                        .unwrap();
+
+                        if unsqueeze_indices.is_empty() {
+                            // No new dims — just expand existing size-1 dims
+                            writeln!(
+                                output,
+                                "{}{} = {}.expand({})",
+                                indent, result_var, source_var, shape_args
+                            )
+                            .unwrap();
+                        } else {
+                            // Expand after unsqueezing
+                            writeln!(
+                                output,
+                                "{}{} = {}.expand({})",
+                                indent, result_var, current, shape_args
+                            )
+                            .unwrap();
+                        }
                     }
                     TransformStrategy::Neuron { .. } => {
                         let module_name = format!("self._transform_{}", reshape.id);
@@ -1161,8 +1236,10 @@ fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> String {
         BinOp::Add => "+",
         BinOp::Sub => "-",
         BinOp::Mul => "*",
-        other => panic!(
-            "unsupported operator {:?} in reshape dimension expression",
+        // Grammar only allows +, -, *, / in dimension expressions.
+        // Comparison operators cannot reach codegen through valid programs.
+        other => unreachable!(
+            "operator {:?} should not appear in reshape dimension expression",
             other
         ),
     };
