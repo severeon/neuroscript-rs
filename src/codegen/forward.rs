@@ -1178,23 +1178,13 @@ fn process_destination(
                             .collect::<Result<Vec<_>, _>>()?
                             .join(", ");
 
-                        if unsqueeze_indices.is_empty() {
-                            // No new dims — just expand existing size-1 dims
-                            writeln!(
-                                output,
-                                "{}{} = {}.expand({})",
-                                indent, result_var, source_var, shape_args
-                            )
-                            .unwrap();
-                        } else {
-                            // Expand after unsqueezing
-                            writeln!(
-                                output,
-                                "{}{} = {}.expand({})",
-                                indent, result_var, current, shape_args
-                            )
-                            .unwrap();
-                        }
+                        // Expand (current == source_var when no unsqueezes were needed)
+                        writeln!(
+                            output,
+                            "{}{} = {}.expand({})",
+                            indent, result_var, current, shape_args
+                        )
+                        .unwrap();
                     }
                     TransformStrategy::Neuron { .. } => {
                         let module_name = format!("self._transform_{}", reshape.id);
@@ -1223,12 +1213,16 @@ fn process_destination(
 /// Convert a DimExpr to Python code for dimension arithmetic (uses // for division).
 /// Returns an error if the expression contains comparison operators, which are not
 /// valid in dimension arithmetic contexts.
+///
+/// Note: Div maps to `//` (integer division) here because reshape dimensions are
+/// always integers. This differs from `binop_to_str(op, false)` used in general
+/// value expressions, which emits `/` (float division). See `binop_to_str` docs.
 fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> Result<String, CodegenError> {
     let op_str = match expr.op {
         BinOp::Add => "+",
         BinOp::Sub => "-",
         BinOp::Mul => "*",
-        BinOp::Div => "//",
+        BinOp::Div => "//", // Integer division — see doc comment above
         op => {
             return Err(CodegenError::UnsupportedFeature(format!(
                 "comparison operator {:?} is not valid in dimension expressions",

@@ -960,3 +960,151 @@ neuron BroadcastTest(dim):
         "should contain expand call for copy repeat"
     );
 }
+
+#[test]
+fn test_codegen_fat_arrow_reduce_min() {
+    let source = r#"
+neuron MinPool(dim):
+  in: [batch, seq, dim]
+  out: [batch, dim]
+  graph:
+    in => @reduce(min) [batch, dim] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "MinPool");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== REDUCE MIN ===\n{}", code);
+    assert!(
+        code.contains(".amin("),
+        "should contain .amin() call (not .min() which returns (values, indices))"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_reduce_max() {
+    let source = r#"
+neuron MaxPool(dim):
+  in: [batch, seq, dim]
+  out: [batch, dim]
+  graph:
+    in => @reduce(max) [batch, dim] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "MaxPool");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== REDUCE MAX ===\n{}", code);
+    assert!(
+        code.contains(".amax("),
+        "should contain .amax() call (not .max() which returns (values, indices))"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_reshape_in_match_arm() {
+    // Construct IR directly to test reshape inside a match arm pipeline.
+    // This exercises the arm_reshape_src resolution code path in codegen.
+    let mut program = Program::new();
+    let neuron = NeuronDef {
+        name: "MatchReshape".to_string(),
+        params: vec![
+            Param { name: "dim".to_string(), default: None, type_annotation: None },
+            Param { name: "heads".to_string(), default: None, type_annotation: None },
+        ],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
+            variadic: false,
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("heads".to_string()), Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
+            variadic: false,
+        }],
+        max_cycle_depth: Some(10),
+        doc: None,
+        body: NeuronBody::Graph {
+            context_bindings: vec![],
+            context_unrolls: vec![],
+            connections: vec![Connection {
+                source: Endpoint::Ref(PortRef::new("in")),
+                destination: Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
+                    arms: vec![
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                Dim::Named("seq".to_string()),
+                                Dim::Named("d".to_string()),
+                            ])),
+                            guard: Some(Value::BinOp {
+                                op: BinOp::Gt,
+                                left: Box::new(Value::Name("d".to_string())),
+                                right: Box::new(Value::Int(256)),
+                            }),
+                            pipeline: vec![
+                                Endpoint::Reshape(ReshapeExpr {
+                                    dims: vec![
+                                        ReshapeDim::Named("batch".to_string()),
+                                        ReshapeDim::Named("seq".to_string()),
+                                        ReshapeDim::Named("heads".to_string()),
+                                        ReshapeDim::Binding {
+                                            name: "dh".to_string(),
+                                            expr: Box::new(Value::BinOp {
+                                                op: BinOp::Div,
+                                                left: Box::new(Value::Name("dim".to_string())),
+                                                right: Box::new(Value::Name("heads".to_string())),
+                                            }),
+                                        },
+                                    ],
+                                    annotation: None,
+                                    id: 10,
+                                }),
+                                Endpoint::Ref(PortRef::new("out")),
+                            ],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                Dim::Named("seq".to_string()),
+                                Dim::Named("d".to_string()),
+                            ])),
+                            guard: None,
+                            pipeline: vec![
+                                Endpoint::Call {
+                                    name: "Linear".to_string(),
+                                    args: vec![Value::Name("d".to_string()), Value::Name("dim".to_string())],
+                                    kwargs: vec![],
+                                    id: 11,
+                                    frozen: false,
+                                },
+                                Endpoint::Ref(PortRef::new("out")),
+                            ],
+                            is_reachable: true,
+                        },
+                    ],
+                    id: 0,
+                }),
+            }],
+        },
+    };
+
+    program.neurons.insert("MatchReshape".to_string(), neuron);
+
+    let result = generate_pytorch(&program, "MatchReshape");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== RESHAPE IN MATCH ARM ===\n{}", code);
+    assert!(
+        code.contains(".reshape("),
+        "should contain reshape call inside match arm"
+    );
+    assert!(
+        code.contains("class MatchReshape(nn.Module)"),
+        "should have class definition"
+    );
+}

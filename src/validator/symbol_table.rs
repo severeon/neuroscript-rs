@@ -436,12 +436,9 @@ pub(super) fn check_port_compatibility(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // When source is a Reshape, its to_shape() gives the output shape.
-    // Validate that against the destination's input ports normally.
-    if matches!(source_endpoint, Endpoint::Reshape(_)) {
-        // source_ports already contains the reshape's output shape (from resolve_endpoint).
-        // Fall through to normal port compatibility checking below.
-    }
+    // When source is a Reshape, source_ports already contains the reshape's
+    // output shape (from resolve_endpoint). Normal port compatibility checking
+    // below handles this case.
 
     // When destination is a Reshape, the reshape consumes any input shape.
     // For bare reshapes (no annotation), check element-count preservation
@@ -578,27 +575,8 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
     }
 }
 
-/// Compute the product of all dims when all source ports have fully literal shapes.
-/// Returns None if any dim is not a Literal or if there are no ports.
-fn literal_product(ports: &[Port]) -> Option<i64> {
-    if ports.is_empty() {
-        return None;
-    }
-    let mut product: i64 = 1;
-    for port in ports {
-        for dim in &port.shape.dims {
-            match dim {
-                Dim::Literal(n) => {
-                    product = product.checked_mul(*n)?;
-                }
-                _ => return None,
-            }
-        }
-    }
-    Some(product)
-}
-
 /// Compute the product of all dims in a shape when all are Literal.
+/// Returns None if any dim is not a Literal.
 fn shape_literal_product(shape: &Shape) -> Option<i64> {
     let mut product: i64 = 1;
     for dim in &shape.dims {
@@ -608,6 +586,19 @@ fn shape_literal_product(shape: &Shape) -> Option<i64> {
             }
             _ => return None,
         }
+    }
+    Some(product)
+}
+
+/// Compute the product of all dims across all port shapes when all are Literal.
+/// Returns None if any dim is not a Literal or if there are no ports.
+fn literal_product(ports: &[Port]) -> Option<i64> {
+    if ports.is_empty() {
+        return None;
+    }
+    let mut product: i64 = 1;
+    for port in ports {
+        product = product.checked_mul(shape_literal_product(&port.shape)?)?;
     }
     Some(product)
 }

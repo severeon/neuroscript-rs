@@ -8,6 +8,11 @@ use std::collections::HashSet;
 
 /// Map a BinOp to its Python operator string.
 /// When `int_div` is true, `Div` maps to `//` (integer division for dimension arithmetic).
+///
+/// Design note: Dimension expressions (reshape targets, shape computations) use integer
+/// division `//` because tensor dimensions are always integers. General value expressions
+/// (neuron parameter arithmetic) use float division `/` to preserve Python semantics.
+/// The caller chooses via `int_div` depending on context.
 pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
     match op {
         BinOp::Add => "+",
