@@ -15,6 +15,6 @@ class ExpandDim(nn.Module):
         c = x.size(1)
         h = x.size(2)
         w = x.size(3)
-        x_3 = x.unsqueeze(2)
-        x_2 = x_3.expand(b, c, 1, h, w)
+        _unsq = x.unsqueeze(2)
+        x_2 = _unsq.expand(b, c, 1, h, w)
         return x_2

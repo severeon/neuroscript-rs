@@ -1150,10 +1150,11 @@ fn process_destination(
                             }
                         }
 
-                        // Emit unsqueeze for each new dimension (in order)
+                        // Emit unsqueeze for each new dimension (in order).
+                        // Use "_unsq" prefix to avoid confusion with the result_var numbering.
                         let mut current = source_var.clone();
                         for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
-                            let unsqueezed = make_var_name(used_var_names, "x");
+                            let unsqueezed = make_var_name(used_var_names, "_unsq");
                             writeln!(
                                 output,
                                 "{}{} = {}.unsqueeze({})",

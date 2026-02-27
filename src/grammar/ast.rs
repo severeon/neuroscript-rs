@@ -1741,7 +1741,11 @@ impl AstBuilder {
                     Dim::Named(name) => Ok(ReshapeDim::Named(name)),
                     Dim::Literal(n) => Ok(ReshapeDim::Literal(n)),
                     Dim::Expr(expr) => Ok(ReshapeDim::Expr(expr)),
-                    Dim::Global(name) => Ok(ReshapeDim::Named(name)),
+                    Dim::Global(name) => Err(error::expected(
+                        "named dimension or literal in reshape expression (globals not supported in reshape dims)",
+                        &format!("@global {}", name),
+                        0,
+                    )),
                     Dim::Wildcard => Err(error::expected(
                         "named dimension, literal, or 'others'",
                         "*",
