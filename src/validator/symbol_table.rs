@@ -426,7 +426,7 @@ where
                 }
             }
             // Return a single port with the reshape's output shape
-            let output_shape = reshape_dims_to_shape(&reshape.dims);
+            let output_shape = reshape.to_shape();
             Ok(vec![Port {
                 name: "default".to_string(),
                 shape: output_shape,
@@ -597,18 +597,3 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
     }
 }
 
-/// Convert reshape dims to a Shape for validation purposes
-pub(super) fn reshape_dims_to_shape(dims: &[ReshapeDim]) -> Shape {
-    Shape {
-        dims: dims
-            .iter()
-            .map(|d| match d {
-                ReshapeDim::Named(name) => Dim::Named(name.clone()),
-                ReshapeDim::Literal(n) => Dim::Literal(*n),
-                ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
-                ReshapeDim::Others => Dim::Wildcard,
-                ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
-            })
-            .collect(),
-    }
-}

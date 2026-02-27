@@ -1027,7 +1027,7 @@ fn process_destination(
                                 .join(", ");
                             writeln!(
                                 output,
-                                "{}{} = {}.{}(dim=({},))",
+                                "{}{} = {}.{}(dim=({}))",
                                 indent, result_var, source_var, method, dims_str
                             )
                             .unwrap();

@@ -13,5 +13,5 @@ class GlobalAvgPool(nn.Module):
     def forward(self, x):
         b = x.size(0)
         c = x.size(1)
-        x_2 = x.mean(dim=(2, 3,))
+        x_2 = x.mean(dim=(2, 3))
         return x_2

@@ -286,6 +286,25 @@ pub struct ReshapeExpr {
     pub id: usize,
 }
 
+impl ReshapeExpr {
+    /// Convert reshape dims to a Shape for validation/inference purposes
+    pub fn to_shape(&self) -> Shape {
+        Shape {
+            dims: self
+                .dims
+                .iter()
+                .map(|d| match d {
+                    ReshapeDim::Named(name) => Dim::Named(name.clone()),
+                    ReshapeDim::Literal(n) => Dim::Literal(*n),
+                    ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
+                    ReshapeDim::Others => Dim::Wildcard,
+                    ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
+                })
+                .collect(),
+        }
+    }
+}
+
 /// A dimension spec in a reshape expression
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReshapeDim {

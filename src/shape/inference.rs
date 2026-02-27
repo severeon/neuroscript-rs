@@ -544,7 +544,7 @@ impl ShapeInferenceEngine {
             Endpoint::Reshape(reshape) => {
                 // Reshape: compute the output shape from the reshape dims
                 // and store it keyed by the reshape's unique id
-                let output_shape = reshape_dims_to_shape(&reshape.dims);
+                let output_shape = reshape.to_shape();
                 ctx.call_outputs.insert(reshape.id, vec![output_shape]);
             }
         }
@@ -1174,7 +1174,7 @@ fn resolve_match_endpoint(
             if let Some(shapes) = ctx.call_outputs.get(&reshape.id) {
                 Ok(shapes.clone())
             } else {
-                Ok(vec![reshape_dims_to_shape(&reshape.dims)])
+                Ok(vec![reshape.to_shape()])
             }
         }
         // Endpoint::Unroll removed — expanded before shape inference
@@ -1207,21 +1207,6 @@ fn format_port_ref(r: &PortRef) -> String {
     }
 }
 
-/// Convert reshape dims to a Shape for inference purposes
-fn reshape_dims_to_shape(dims: &[ReshapeDim]) -> Shape {
-    Shape {
-        dims: dims
-            .iter()
-            .map(|d| match d {
-                ReshapeDim::Named(name) => Dim::Named(name.clone()),
-                ReshapeDim::Literal(n) => Dim::Literal(*n),
-                ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
-                ReshapeDim::Others => Dim::Wildcard,
-                ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
-            })
-            .collect(),
-    }
-}
 
 fn resolve_endpoint_shape(
     endpoint: &Endpoint,
@@ -1274,7 +1259,7 @@ fn resolve_endpoint_shape(
             if let Some(shapes) = ctx.call_outputs.get(&reshape.id) {
                 Ok(shapes.clone())
             } else {
-                Ok(vec![reshape_dims_to_shape(&reshape.dims)])
+                Ok(vec![reshape.to_shape()])
             }
         }
         // Endpoint::Unroll removed

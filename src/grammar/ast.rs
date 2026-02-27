@@ -1765,10 +1765,7 @@ impl AstBuilder {
         match name.as_str() {
             "reduce" => Ok(TransformAnnotation::Reduce(strategy)),
             "repeat" => Ok(TransformAnnotation::Repeat(strategy)),
-            _ => {
-                // Default to reduce for unknown annotations
-                Ok(TransformAnnotation::Reduce(strategy))
-            }
+            other => Err(error::expected("reduce or repeat", other, 0))
         }
     }
 
