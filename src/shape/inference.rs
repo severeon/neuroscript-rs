@@ -1207,7 +1207,6 @@ fn format_port_ref(r: &PortRef) -> String {
     }
 }
 
-
 fn resolve_endpoint_shape(
     endpoint: &Endpoint,
     ctx: &InferenceContext,

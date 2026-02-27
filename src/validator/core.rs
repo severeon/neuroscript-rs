@@ -267,6 +267,21 @@ impl Validator {
             }
             Endpoint::Reshape(reshape) => {
                 let mut errors = Vec::new();
+                // Validate at most one 'others' dimension (PyTorch allows only one -1)
+                let others_count = reshape
+                    .dims
+                    .iter()
+                    .filter(|d| matches!(d, ReshapeDim::Others))
+                    .count();
+                if others_count > 1 {
+                    errors.push(ValidationError::InvalidReshape {
+                        message: format!(
+                            "reshape expression has {} 'others' dimensions, but only one is allowed",
+                            others_count
+                        ),
+                        context: format!("in {}", context_neuron),
+                    });
+                }
                 if let Some(ref annotation) = reshape.annotation {
                     let strategy = match annotation {
                         TransformAnnotation::Reduce(s) => s,

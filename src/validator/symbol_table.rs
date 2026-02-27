@@ -414,18 +414,7 @@ where
         Endpoint::Reshape(reshape) => {
             // Reshape endpoints are pure shape transforms — they produce a single output
             // with the shape described by the reshape dims.
-            // Check if annotation references a neuron (for existence checking later in core.rs)
-            if let Some(ref annotation) = reshape.annotation {
-                let strategy = match annotation {
-                    TransformAnnotation::Reduce(s) => s,
-                    TransformAnnotation::Repeat(s) => s,
-                };
-                if let TransformStrategy::Neuron { name, .. } = strategy {
-                    // Neuron existence is checked in core.rs check_neurons_exist
-                    let _ = name;
-                }
-            }
-            // Return a single port with the reshape's output shape
+            // Neuron existence for annotation strategies is checked in core.rs.
             let output_shape = reshape.to_shape();
             Ok(vec![Port {
                 name: "default".to_string(),
@@ -448,8 +437,8 @@ pub(super) fn check_port_compatibility(
     let mut errors = Vec::new();
 
     // Reshape endpoints intentionally change shapes — skip port compatibility
-    // checking when source or destination is a reshape. Shape validation for
-    // reshapes happens at a higher level (element-preservation checks, etc.).
+    // checking when source or destination is a reshape. Element-preservation
+    // is not validated at compile time (deferred to PyTorch runtime, like .reshape()).
     if matches!(source_endpoint, Endpoint::Reshape(_))
         || matches!(dest_endpoint, Endpoint::Reshape(_))
     {

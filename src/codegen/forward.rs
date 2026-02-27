@@ -1016,6 +1016,12 @@ fn process_destination(
                                 ));
                             };
 
+                        if reduce_dims.is_empty() {
+                            return Err(CodegenError::InvalidConnection(
+                                "cannot determine reduce dimensions: source shape has no named dims to reduce (may contain wildcards/variadics)".to_string(),
+                            ));
+                        }
+
                         if reduce_dims.len() == 1 {
                             writeln!(
                                 output,
@@ -1072,9 +1078,8 @@ fn process_destination(
                         .unwrap();
                     }
                     _ => {
-                        return Err(CodegenError::UnsupportedFeature(
-                            "unknown repeat strategy".to_string(),
-                        ));
+                        // Validator rejects unknown intrinsics, so this is unreachable
+                        unreachable!("unknown repeat strategy should be caught by validator")
                     }
                 },
             }
