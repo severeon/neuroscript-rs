@@ -436,16 +436,44 @@ pub(super) fn check_port_compatibility(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // Reshape endpoints intentionally change shapes — skip port compatibility
-    // checking. When source is a Reshape, its output shape is the declared target
-    // shape; when destination is a Reshape, it consumes any input shape and produces
-    // a new shape from its dims.
-    // TODO: For bare `=>` (no annotation), validate element-preservation when both
-    // source and target shapes are statically known: prod(source_dims) == prod(target_dims).
-    // Currently deferred to PyTorch runtime (.reshape() will error on mismatch).
-    if matches!(source_endpoint, Endpoint::Reshape(_))
-        || matches!(dest_endpoint, Endpoint::Reshape(_))
-    {
+    // When source is a Reshape, its to_shape() gives the output shape.
+    // Validate that against the destination's input ports normally.
+    if matches!(source_endpoint, Endpoint::Reshape(_)) {
+        // source_ports already contains the reshape's output shape (from resolve_endpoint).
+        // Fall through to normal port compatibility checking below.
+    }
+
+    // When destination is a Reshape, the reshape consumes any input shape.
+    // For bare reshapes (no annotation), check element-count preservation
+    // when both source and target shapes are fully literal.
+    if let Endpoint::Reshape(reshape) = dest_endpoint {
+        if reshape.annotation.is_none() {
+            // Bare reshape: element count must be preserved.
+            // Only check when both sides are fully concrete (all Literal dims).
+            if let Some(source_product) = literal_product(source_ports) {
+                let target_shape = reshape.to_shape();
+                if let Some(target_product) = shape_literal_product(&target_shape) {
+                    if source_product != target_product {
+                        errors.push(ValidationError::PortMismatch {
+                            source_node: extract_node_name(source_endpoint),
+                            source_port: "default".to_string(),
+                            source_shape: source_ports
+                                .first()
+                                .map(|p| p.shape.clone())
+                                .unwrap_or(Shape { dims: vec![] }),
+                            dest_node: "Reshape".to_string(),
+                            dest_port: "default".to_string(),
+                            dest_shape: target_shape,
+                            context: format!(
+                                "{}: element count mismatch in reshape ({} vs {})",
+                                context_neuron, source_product, target_product
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        // Annotated reshapes (@reduce/@repeat) intentionally change element count.
         return errors;
     }
 
@@ -548,6 +576,40 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::If(_) => "If".to_string(),
         Endpoint::Reshape(_) => "Reshape".to_string(),
     }
+}
+
+/// Compute the product of all dims when all source ports have fully literal shapes.
+/// Returns None if any dim is not a Literal or if there are no ports.
+fn literal_product(ports: &[Port]) -> Option<i64> {
+    if ports.is_empty() {
+        return None;
+    }
+    let mut product: i64 = 1;
+    for port in ports {
+        for dim in &port.shape.dims {
+            match dim {
+                Dim::Literal(n) => {
+                    product = product.checked_mul(*n)?;
+                }
+                _ => return None,
+            }
+        }
+    }
+    Some(product)
+}
+
+/// Compute the product of all dims in a shape when all are Literal.
+fn shape_literal_product(shape: &Shape) -> Option<i64> {
+    let mut product: i64 = 1;
+    for dim in &shape.dims {
+        match dim {
+            Dim::Literal(n) => {
+                product = product.checked_mul(*n)?;
+            }
+            _ => return None,
+        }
+    }
+    Some(product)
 }
 
 /// Get a description of an endpoint for error messages

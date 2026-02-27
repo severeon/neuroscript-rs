@@ -244,6 +244,114 @@ fn test_validate_reshape_with_literal_dim() {
     assert_validation_ok(&mut program);
 }
 
+// ========== Element-count preservation tests ==========
+
+/// Build a composite neuron with literal-dimensioned ports so element-count
+/// checks can fire (unlike wildcard shapes used by build_reshape_program).
+fn build_literal_reshape_program(
+    name: &str,
+    in_shape: Shape,
+    out_shape: Shape,
+    reshape_ep: Endpoint,
+) -> Program {
+    let reshape_ep_source = match &reshape_ep {
+        Endpoint::Reshape(r) => Endpoint::Reshape(ReshapeExpr {
+            dims: r.dims.clone(),
+            annotation: r.annotation.clone(),
+            id: r.id + 1000,
+        }),
+        other => other.clone(),
+    };
+    ProgramBuilder::new()
+        .with_composite_ports(
+            name,
+            vec![default_port(in_shape)],
+            vec![default_port(out_shape)],
+            vec![
+                connection(ref_endpoint("in"), reshape_ep.clone()),
+                connection(reshape_ep_source, ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build()
+}
+
+#[test]
+fn test_validate_reshape_element_count_mismatch() {
+    // Source shape [2, 6] (12 elements) reshaped to [3, 5] (15 elements) should fail
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![
+            ReshapeDim::Literal(3),
+            ReshapeDim::Literal(5),
+        ],
+        annotation: None,
+        id: 300,
+    });
+
+    let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
+    let out_shape = Shape::new(vec![Dim::Literal(3), Dim::Literal(5)]);
+    let mut program = build_literal_reshape_program(
+        "ElementMismatchTest",
+        in_shape,
+        out_shape,
+        reshape_ep,
+    );
+    assert_validation_error(&mut program, |e| {
+        matches!(
+            e,
+            ValidationError::PortMismatch {
+                context,
+                ..
+            } if context.contains("element count mismatch")
+        )
+    });
+}
+
+#[test]
+fn test_validate_reshape_element_count_preserved() {
+    // Source shape [2, 6] (12 elements) reshaped to [3, 4] (12 elements) should pass
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![
+            ReshapeDim::Literal(3),
+            ReshapeDim::Literal(4),
+        ],
+        annotation: None,
+        id: 301,
+    });
+
+    let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
+    let out_shape = Shape::new(vec![Dim::Literal(3), Dim::Literal(4)]);
+    let mut program = build_literal_reshape_program(
+        "ElementPreservedTest",
+        in_shape,
+        out_shape,
+        reshape_ep,
+    );
+    assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_validate_reshape_annotated_skips_element_check() {
+    // @reduce(mean) intentionally changes element count, so [2, 6] => [12] should pass
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![ReshapeDim::Literal(12)],
+        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+            "mean".to_string(),
+        ))),
+        id: 302,
+    });
+
+    let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
+    let out_shape = Shape::new(vec![Dim::Literal(12)]);
+    let mut program = build_literal_reshape_program(
+        "AnnotatedSkipTest",
+        in_shape,
+        out_shape,
+        reshape_ep,
+    );
+    assert_validation_ok(&mut program);
+}
+
 // ========== Tests using source parsing ==========
 
 #[test]
