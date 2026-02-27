@@ -967,14 +967,14 @@ fn process_destination(
             };
 
             // Convert a ReshapeDim to Python expression
-            let dim_to_py = |d: &ReshapeDim| -> String {
-                match d {
+            let dim_to_py = |d: &ReshapeDim| -> Result<String, CodegenError> {
+                Ok(match d {
                     ReshapeDim::Named(name) => resolve_dim_name(name),
                     ReshapeDim::Literal(n) => n.to_string(),
                     ReshapeDim::Binding { name, .. } => name.clone(),
                     ReshapeDim::Others => "-1".to_string(),
-                    ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr),
-                }
+                    ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr)?,
+                })
             };
 
             // Emit binding assignments for all cases (bare, @reduce, @repeat).
@@ -994,7 +994,7 @@ fn process_destination(
                         .dims
                         .iter()
                         .map(|d| dim_to_py(d))
-                        .collect::<Vec<_>>()
+                        .collect::<Result<Vec<_>, _>>()?
                         .join(", ");
 
                     writeln!(
@@ -1175,7 +1175,7 @@ fn process_destination(
                             .dims
                             .iter()
                             .map(|d| dim_to_py(d))
-                            .collect::<Vec<_>>()
+                            .collect::<Result<Vec<_>, _>>()?
                             .join(", ");
 
                         if unsqueeze_indices.is_empty() {
@@ -1220,16 +1220,30 @@ fn process_destination(
         }
     }
 }
-/// Convert a DimExpr to Python code for dimension arithmetic (uses // for division)
-fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> String {
-    let left = reshape_dim_ref_to_python(gen, &expr.left);
-    let right = reshape_dim_ref_to_python(gen, &expr.right);
-    format!("{} {} {}", left, binop_to_str(&expr.op, true), right)
+/// Convert a DimExpr to Python code for dimension arithmetic (uses // for division).
+/// Returns an error if the expression contains comparison operators, which are not
+/// valid in dimension arithmetic contexts.
+fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> Result<String, CodegenError> {
+    let op_str = match expr.op {
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => "//",
+        op => {
+            return Err(CodegenError::UnsupportedFeature(format!(
+                "comparison operator {:?} is not valid in dimension expressions",
+                op
+            )));
+        }
+    };
+    let left = reshape_dim_ref_to_python(gen, &expr.left)?;
+    let right = reshape_dim_ref_to_python(gen, &expr.right)?;
+    Ok(format!("{} {} {}", left, op_str, right))
 }
 
 /// Convert a Dim (when used as part of a DimExpr in a reshape) to Python
-fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> String {
-    match dim {
+fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, CodegenError> {
+    Ok(match dim {
         Dim::Literal(n) => n.to_string(),
         Dim::Named(n) => {
             if gen.current_neuron_params.contains(n) {
@@ -1241,10 +1255,10 @@ fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> String {
             }
         }
         Dim::Global(n) => n.clone(),
-        Dim::Expr(e) => dim_expr_to_python(gen, e),
+        Dim::Expr(e) => dim_expr_to_python(gen, e)?,
         Dim::Wildcard => "-1".to_string(),
         Dim::Variadic(_) => "-1".to_string(),
-    }
+    })
 }
 
 /// Resolve the output shape from a previous endpoint in a pipeline.
