@@ -238,9 +238,14 @@ fn format_impl_ref(impl_ref: &ImplRef) -> String {
 }
 
 fn format_connection(conn: &Connection) -> String {
+    let arrow = match &conn.destination {
+        Endpoint::Reshape(_) => "=>",
+        _ => "->",
+    };
     format!(
-        "{} -> {}",
+        "{} {} {}",
         format_endpoint(&conn.source),
+        arrow,
         format_endpoint(&conn.destination)
     )
 }
@@ -319,6 +324,17 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
                 result.push('\n');
             }
             result.trim_end().to_string()
+        }
+        Endpoint::Reshape(reshape) => {
+            let mut result = String::new();
+            if let Some(ref ann) = reshape.annotation {
+                result.push_str(&format!("{} ", ann));
+            }
+            result.push('[');
+            let dims: Vec<String> = reshape.dims.iter().map(|d| format!("{}", d)).collect();
+            result.push_str(&dims.join(", "));
+            result.push(']');
+            result
         }
     }
 }
@@ -656,6 +672,64 @@ fn snapshot_codegen_unroll_threaded() {
     let code = generate_pytorch(&program, "TransformerStack").expect("Codegen failed");
 
     insta::assert_snapshot!("codegen_unroll_threaded", code);
+}
+
+// ============================================================================
+// Fat Arrow Reshape Snapshot Tests
+// ============================================================================
+
+#[test]
+fn snapshot_fat_arrow_basic() {
+    let source = fs::read_to_string("examples/fat_arrow_basic.ns")
+        .expect("Failed to read fat_arrow_basic.ns");
+    let program = parse(&source).expect("should parse");
+    insta::assert_snapshot!("parser_ir_fat_arrow_basic", format_program_ir(&program));
+}
+
+#[test]
+fn snapshot_fat_arrow_reduce() {
+    let source = fs::read_to_string("examples/fat_arrow_reduce.ns")
+        .expect("Failed to read fat_arrow_reduce.ns");
+    let program = parse(&source).expect("should parse");
+    insta::assert_snapshot!("parser_ir_fat_arrow_reduce", format_program_ir(&program));
+}
+
+#[test]
+fn snapshot_fat_arrow_repeat() {
+    let source = fs::read_to_string("examples/fat_arrow_repeat.ns")
+        .expect("Failed to read fat_arrow_repeat.ns");
+    let program = parse(&source).expect("should parse");
+    insta::assert_snapshot!("parser_ir_fat_arrow_repeat", format_program_ir(&program));
+}
+
+#[test]
+fn snapshot_codegen_fat_arrow_basic() {
+    let source = fs::read_to_string("examples/fat_arrow_basic.ns")
+        .expect("Failed to read fat_arrow_basic.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "MultiHeadReshape").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_basic", code);
+}
+
+#[test]
+fn snapshot_codegen_fat_arrow_reduce() {
+    let source = fs::read_to_string("examples/fat_arrow_reduce.ns")
+        .expect("Failed to read fat_arrow_reduce.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "GlobalAvgPool").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_reduce", code);
+}
+
+#[test]
+fn snapshot_codegen_fat_arrow_repeat() {
+    let source = fs::read_to_string("examples/fat_arrow_repeat.ns")
+        .expect("Failed to read fat_arrow_repeat.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "ExpandDim").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_repeat", code);
 }
 
 // ============================================================================

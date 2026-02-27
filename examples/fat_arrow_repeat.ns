@@ -1,0 +1,7 @@
+# Fat arrow with @repeat annotation
+
+neuron ExpandDim:
+  in: [b, c, h, w]
+  out: [b, c, 1, h, w]
+  graph:
+    in => @repeat(copy) [b, c, 1, h, w] -> out

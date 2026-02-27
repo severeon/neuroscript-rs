@@ -189,7 +189,7 @@ fn endpoint_has_named_match(endpoint: &Endpoint, depth: usize) -> bool {
             }
             false
         }
-        Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Tuple(_) => false,
+        Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Tuple(_) | Endpoint::Reshape(_) => false,
     }
 }
 

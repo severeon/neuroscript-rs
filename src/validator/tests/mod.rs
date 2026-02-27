@@ -6,5 +6,6 @@ mod arity_mismatch;
 mod cycle_detection;
 mod match_expressions;
 mod missing_neuron;
+mod reshape;
 mod shape_mismatch;
 mod valid_cases;

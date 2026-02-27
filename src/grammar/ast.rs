@@ -11,7 +11,8 @@ use crate::grammar::Rule;
 use crate::interfaces::{
     BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Documentation, Endpoint,
     GlobalBinding, ImplRef, MatchArm, MatchExpr, MatchPattern, MatchSubject, NeuronBody, NeuronDef,
-    NeuronPortContract, Param, ParseError, Port, PortRef, Program, Shape, UseStmt, Value,
+    NeuronPortContract, Param, ParseError, Port, PortRef, Program, ReshapeDim, ReshapeExpr, Shape,
+    TransformAnnotation, TransformStrategy, UseStmt, Value,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -844,12 +845,38 @@ impl AstBuilder {
         // First endpoint
         let first_endpoint = self.build_endpoint(inner.next().unwrap())?;
 
-        // Skip arrow
-        inner.next();
+        // Second pair is either arrow (for connection_tail) or fat_arrow_step
+        let second = inner.next().unwrap();
+        match second.as_rule() {
+            Rule::arrow => {
+                // connection_tail
+                let tail = inner.next().unwrap();
+                self.build_connection_tail(first_endpoint, tail)
+            }
+            Rule::fat_arrow_step => {
+                // fat_arrow_step ~ connection_tail_after_reshape
+                let reshape = self.build_fat_arrow_step(second)?;
+                let mut connections = vec![Connection {
+                    source: first_endpoint,
+                    destination: reshape.clone(),
+                }];
 
-        // connection_tail
-        let tail = inner.next().unwrap();
-        self.build_connection_tail(first_endpoint, tail)
+                // connection_tail_after_reshape
+                if let Some(tail) = inner.next() {
+                    let tail_conns =
+                        self.build_connection_tail_after_reshape(reshape, tail)?;
+                    connections.extend(tail_conns);
+                }
+
+                Ok(connections)
+            }
+            rule => {
+                unreachable!(
+                    "build_connection: grammar guarantees second pair is arrow or fat_arrow_step, got {:?}",
+                    rule
+                );
+            }
+        }
     }
 
     /// Build the tail of a connection (inline or indented pipeline)
@@ -871,6 +898,55 @@ impl AstBuilder {
             match inner.as_rule() {
                 Rule::endpoint => {
                     let next = self.build_endpoint(inner)?;
+                    connections.push(Connection {
+                        source: prev,
+                        destination: next.clone(),
+                    });
+                    prev = next;
+                }
+                Rule::fat_arrow_step => {
+                    let next = self.build_fat_arrow_step(inner)?;
+                    connections.push(Connection {
+                        source: prev,
+                        destination: next.clone(),
+                    });
+                    prev = next;
+                }
+                Rule::indented_pipeline => {
+                    let pipeline_conns = self.build_indented_pipeline(prev, inner)?;
+                    connections.extend(pipeline_conns);
+                    return Ok(connections);
+                }
+                _ => {}
+            }
+        }
+
+        Ok(connections)
+    }
+
+    /// Build the tail after a reshape step (connection_tail_after_reshape)
+    fn build_connection_tail_after_reshape(
+        &mut self,
+        first: Endpoint,
+        pair: Pair<Rule>,
+    ) -> Result<Vec<Connection>, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::connection_tail_after_reshape);
+
+        let mut connections = vec![];
+        let mut prev = first;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::endpoint => {
+                    let next = self.build_endpoint(inner)?;
+                    connections.push(Connection {
+                        source: prev,
+                        destination: next.clone(),
+                    });
+                    prev = next;
+                }
+                Rule::fat_arrow_step => {
+                    let next = self.build_fat_arrow_step(inner)?;
                     connections.push(Connection {
                         source: prev,
                         destination: next.clone(),
@@ -903,13 +979,24 @@ impl AstBuilder {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::indented_pipeline_item {
                 for item_inner in inner.into_inner() {
-                    if item_inner.as_rule() == Rule::endpoint {
-                        let next = self.build_endpoint(item_inner)?;
-                        connections.push(Connection {
-                            source: prev,
-                            destination: next.clone(),
-                        });
-                        prev = next;
+                    match item_inner.as_rule() {
+                        Rule::endpoint => {
+                            let next = self.build_endpoint(item_inner)?;
+                            connections.push(Connection {
+                                source: prev,
+                                destination: next.clone(),
+                            });
+                            prev = next;
+                        }
+                        Rule::fat_arrow_step => {
+                            let next = self.build_fat_arrow_step(item_inner)?;
+                            connections.push(Connection {
+                                source: prev,
+                                destination: next.clone(),
+                            });
+                            prev = next;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1022,12 +1109,18 @@ impl AstBuilder {
         }
     }
 
-    /// Build an inline pipeline: a -> b -> c
+    /// Build an inline pipeline: a -> b -> c or a -> b => [shape] -> c
     fn build_inline_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
         let mut endpoints = vec![];
         for inner in pair.into_inner() {
-            if inner.as_rule() == Rule::endpoint {
-                endpoints.push(self.build_endpoint(inner)?);
+            match inner.as_rule() {
+                Rule::endpoint => {
+                    endpoints.push(self.build_endpoint(inner)?);
+                }
+                Rule::fat_arrow_step => {
+                    endpoints.push(self.build_fat_arrow_step(inner)?);
+                }
+                _ => {}
             }
         }
         Ok(endpoints)
@@ -1043,8 +1136,14 @@ impl AstBuilder {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::indented_pipeline_item {
                 for item_inner in inner.into_inner() {
-                    if item_inner.as_rule() == Rule::endpoint {
-                        endpoints.push(self.build_endpoint(item_inner)?);
+                    match item_inner.as_rule() {
+                        Rule::endpoint => {
+                            endpoints.push(self.build_endpoint(item_inner)?);
+                        }
+                        Rule::fat_arrow_step => {
+                            endpoints.push(self.build_fat_arrow_step(item_inner)?);
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1324,13 +1423,22 @@ impl AstBuilder {
                 Rule::endpoint => {
                     endpoints.push(self.build_endpoint(inner)?);
                 }
+                Rule::fat_arrow_step => {
+                    endpoints.push(self.build_fat_arrow_step(inner)?);
+                }
                 Rule::indented_pipeline | Rule::neuron_match_indented_pipeline => {
                     // Handle indented multi-line pipelines
                     for item in inner.into_inner() {
                         if item.as_rule() == Rule::indented_pipeline_item {
                             for endpoint_pair in item.into_inner() {
-                                if endpoint_pair.as_rule() == Rule::endpoint {
-                                    endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                match endpoint_pair.as_rule() {
+                                    Rule::endpoint => {
+                                        endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                    }
+                                    Rule::fat_arrow_step => {
+                                        endpoints.push(self.build_fat_arrow_step(endpoint_pair)?);
+                                    }
+                                    _ => {}
                                 }
                             }
                         } else if item.as_rule() == Rule::neuron_match_indented_item {
@@ -1338,8 +1446,14 @@ impl AstBuilder {
                             for pipeline_item in item.into_inner() {
                                 if pipeline_item.as_rule() == Rule::indented_pipeline_item {
                                     for endpoint_pair in pipeline_item.into_inner() {
-                                        if endpoint_pair.as_rule() == Rule::endpoint {
-                                            endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                        match endpoint_pair.as_rule() {
+                                            Rule::endpoint => {
+                                                endpoints.push(self.build_endpoint(endpoint_pair)?);
+                                            }
+                                            Rule::fat_arrow_step => {
+                                                endpoints.push(self.build_fat_arrow_step(endpoint_pair)?);
+                                            }
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -1537,6 +1651,158 @@ impl AstBuilder {
         }
     }
 
+    // ========================================================================
+    // Fat Arrow / Reshape builders
+    // ========================================================================
+
+    /// Build a fat_arrow_step: `=> [reshape_expr]` or `=> @annotation [reshape_expr]`
+    fn build_fat_arrow_step(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::fat_arrow_step);
+
+        let mut annotation = None;
+        let mut reshape_expr = None;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::transform_annotation => {
+                    annotation = Some(self.build_transform_annotation(inner)?);
+                }
+                Rule::reshape_expr => {
+                    reshape_expr = Some(self.build_reshape_expr(inner)?);
+                }
+                Rule::fat_arrow => {
+                    // Skip the `=>` token itself
+                }
+                _ => {}
+            }
+        }
+
+        let mut expr = reshape_expr.expect(
+            "grammar guarantees reshape_expr is present in fat_arrow_step",
+        );
+        expr.annotation = annotation;
+
+        Ok(Endpoint::Reshape(expr))
+    }
+
+    /// Build a reshape_expr: `[dim_spec, dim_spec, ...]`
+    fn build_reshape_expr(&mut self, pair: Pair<Rule>) -> Result<ReshapeExpr, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::reshape_expr);
+
+        let mut dims = vec![];
+
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::reshape_dim {
+                dims.push(self.build_reshape_dim(inner)?);
+            }
+        }
+
+        Ok(ReshapeExpr {
+            dims,
+            annotation: None,
+            id: self.next_id(),
+        })
+    }
+
+    /// Build a reshape_dim: named, literal, binding, others, or expression
+    fn build_reshape_dim(&mut self, pair: Pair<Rule>) -> Result<ReshapeDim, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::reshape_dim);
+
+        let inner: Vec<_> = pair.into_inner().collect();
+
+        if inner.is_empty() {
+            return Err(error::expected(
+                "reshape dimension (name, literal, binding, or 'others')",
+                "<empty>",
+                0,
+            ));
+        }
+
+        let first = &inner[0];
+
+        match first.as_rule() {
+            Rule::keyword_others => Ok(ReshapeDim::Others),
+            Rule::ident if inner.len() >= 3 && inner[1].as_rule() == Rule::assign => {
+                // Binding: name = dim_expr
+                let name = first.as_str().to_string();
+                // inner[1] is assign, inner[2] is dim
+                let dim = self.build_dim(inner[2].clone())?;
+                let expr = dim_to_value(dim)?;
+                Ok(ReshapeDim::Binding {
+                    name,
+                    expr: Box::new(expr),
+                })
+            }
+            Rule::dim => {
+                // Plain dimension: named, literal, expr, wildcard, variadic
+                let dim = self.build_dim(first.clone())?;
+                match dim {
+                    Dim::Named(name) => Ok(ReshapeDim::Named(name)),
+                    Dim::Literal(n) => Ok(ReshapeDim::Literal(n)),
+                    Dim::Expr(expr) => Ok(ReshapeDim::Expr(expr)),
+                    Dim::Global(name) => Err(error::expected(
+                        "named dimension or literal in reshape expression (globals not supported in reshape dims)",
+                        &format!("@global {}", name),
+                        0,
+                    )),
+                    Dim::Wildcard => Err(error::expected(
+                        "named dimension, literal, or 'others'",
+                        "*",
+                        0,
+                    )),
+                    Dim::Variadic(_) => Err(error::expected(
+                        "named dimension, literal, or 'others'",
+                        first.as_str(),
+                        0,
+                    )),
+                }
+            }
+            _ => Ok(ReshapeDim::Named(first.as_str().to_string())),
+        }
+    }
+
+    /// Build a transform_annotation: `@reduce(mean)` or `@repeat(copy)` or `@reduce(AttentionPool(dim))`
+    fn build_transform_annotation(
+        &mut self,
+        pair: Pair<Rule>,
+    ) -> Result<TransformAnnotation, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::transform_annotation);
+
+        let mut inner = pair.into_inner();
+        inner.next(); // Skip '@'
+        let annotation_name = inner.next().unwrap(); // ident: "reduce" or "repeat"
+        let name = annotation_name.as_str().to_string();
+        inner.next(); // Skip '('
+        let arg = inner.next().unwrap(); // annotation_arg
+        let strategy = self.build_annotation_arg(arg)?;
+        // Skip ')' (if present)
+
+        match name.as_str() {
+            "reduce" => Ok(TransformAnnotation::Reduce(strategy)),
+            "repeat" => Ok(TransformAnnotation::Repeat(strategy)),
+            other => Err(error::expected("reduce or repeat", other, 0))
+        }
+    }
+
+    /// Build an annotation_arg: either a call_expr or a simple ident
+    fn build_annotation_arg(&mut self, pair: Pair<Rule>) -> Result<TransformStrategy, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::annotation_arg);
+
+        let inner = pair.into_inner().next().unwrap();
+
+        match inner.as_rule() {
+            Rule::call_expr => {
+                let (name, args, kwargs) = self.build_call_expr(inner)?;
+                Ok(TransformStrategy::Neuron { name, args, kwargs })
+            }
+            Rule::ident => {
+                let name = inner.as_str().to_string();
+                Ok(TransformStrategy::Intrinsic(name))
+            }
+            _ => Ok(TransformStrategy::Intrinsic(inner.as_str().to_string())),
+        }
+    }
+
     /// Extract identifier string from an ident pair
     fn extract_ident(&mut self, pair: Pair<Rule>) -> Result<String, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::ident);
@@ -1547,6 +1813,36 @@ impl AstBuilder {
 impl Default for AstBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Convert a Dim to a Value for use in reshape bindings (e.g., `h=dim/heads`).
+/// Returns Err if the dim contains Wildcard or Variadic (invalid in reshape bindings).
+fn dim_to_value(dim: Dim) -> Result<Value, ParseError> {
+    match dim {
+        Dim::Literal(n) => Ok(Value::Int(n)),
+        Dim::Named(name) => Ok(Value::Name(name)),
+        Dim::Global(name) => Ok(Value::Global(name)),
+        Dim::Wildcard => Err(error::expected(
+            "named dimension or literal in reshape binding expression",
+            "*",
+            0,
+        )),
+        Dim::Variadic(name) => Err(error::expected(
+            "named dimension or literal in reshape binding expression",
+            &format!("*{}", name),
+            0,
+        )),
+        Dim::Expr(expr) => {
+            let op = expr.op;
+            let left = dim_to_value(expr.left)?;
+            let right = dim_to_value(expr.right)?;
+            Ok(Value::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            })
+        }
     }
 }
 

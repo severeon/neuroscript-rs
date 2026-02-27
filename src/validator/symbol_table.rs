@@ -411,6 +411,17 @@ where
 
             Ok(all_branch_ports[0].clone())
         }
+        Endpoint::Reshape(reshape) => {
+            // Reshape endpoints are pure shape transforms — they produce a single output
+            // with the shape described by the reshape dims.
+            // Neuron existence for annotation strategies is checked in core.rs.
+            let output_shape = reshape.to_shape();
+            Ok(vec![Port {
+                name: "default".to_string(),
+                shape: output_shape,
+                variadic: false,
+            }])
+        }
     }
 }
 
@@ -424,6 +435,47 @@ pub(super) fn check_port_compatibility(
     shapes_compatible_fn: impl Fn(&Shape, &Shape) -> bool,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
+
+    // When source is a Reshape, its to_shape() gives the output shape.
+    // Validate that against the destination's input ports normally.
+    if matches!(source_endpoint, Endpoint::Reshape(_)) {
+        // source_ports already contains the reshape's output shape (from resolve_endpoint).
+        // Fall through to normal port compatibility checking below.
+    }
+
+    // When destination is a Reshape, the reshape consumes any input shape.
+    // For bare reshapes (no annotation), check element-count preservation
+    // when both source and target shapes are fully literal.
+    if let Endpoint::Reshape(reshape) = dest_endpoint {
+        if reshape.annotation.is_none() {
+            // Bare reshape: element count must be preserved.
+            // Only check when both sides are fully concrete (all Literal dims).
+            if let Some(source_product) = literal_product(source_ports) {
+                let target_shape = reshape.to_shape();
+                if let Some(target_product) = shape_literal_product(&target_shape) {
+                    if source_product != target_product {
+                        errors.push(ValidationError::PortMismatch {
+                            source_node: extract_node_name(source_endpoint),
+                            source_port: "default".to_string(),
+                            source_shape: source_ports
+                                .first()
+                                .map(|p| p.shape.clone())
+                                .unwrap_or(Shape { dims: vec![] }),
+                            dest_node: "Reshape".to_string(),
+                            dest_port: "default".to_string(),
+                            dest_shape: target_shape,
+                            context: format!(
+                                "{}: element count mismatch in reshape ({} vs {})",
+                                context_neuron, source_product, target_product
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        // Annotated reshapes (@reduce/@repeat) intentionally change element count.
+        return errors;
+    }
 
     // For Match and If, we check consistency but typically they are destinations
     // and shape inference does the heavy lifting.
@@ -522,7 +574,42 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Tuple(_) => "Tuple".to_string(), // Simplification for now
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
+        Endpoint::Reshape(_) => "Reshape".to_string(),
     }
+}
+
+/// Compute the product of all dims when all source ports have fully literal shapes.
+/// Returns None if any dim is not a Literal or if there are no ports.
+fn literal_product(ports: &[Port]) -> Option<i64> {
+    if ports.is_empty() {
+        return None;
+    }
+    let mut product: i64 = 1;
+    for port in ports {
+        for dim in &port.shape.dims {
+            match dim {
+                Dim::Literal(n) => {
+                    product = product.checked_mul(*n)?;
+                }
+                _ => return None,
+            }
+        }
+    }
+    Some(product)
+}
+
+/// Compute the product of all dims in a shape when all are Literal.
+fn shape_literal_product(shape: &Shape) -> Option<i64> {
+    let mut product: i64 = 1;
+    for dim in &shape.dims {
+        match dim {
+            Dim::Literal(n) => {
+                product = product.checked_mul(*n)?;
+            }
+            _ => return None,
+        }
+    }
+    Some(product)
 }
 
 /// Get a description of an endpoint for error messages
@@ -551,5 +638,17 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
         }
         Endpoint::Match(_) => "match".to_string(),
         Endpoint::If(_) => "if".to_string(),
+        Endpoint::Reshape(reshape) => {
+            format!(
+                "=> [{}]",
+                reshape
+                    .dims
+                    .iter()
+                    .map(|d| format!("{}", d))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
     }
 }
+

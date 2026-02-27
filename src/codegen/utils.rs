@@ -6,6 +6,23 @@
 use crate::interfaces::*;
 use std::collections::HashSet;
 
+/// Map a BinOp to its Python operator string.
+/// When `int_div` is true, `Div` maps to `//` (integer division for dimension arithmetic).
+pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
+    match op {
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => if int_div { "//" } else { "/" },
+        BinOp::Lt => "<",
+        BinOp::Gt => ">",
+        BinOp::Le => "<=",
+        BinOp::Ge => ">=",
+        BinOp::Eq => "==",
+        BinOp::Ne => "!=",
+    }
+}
+
 /// Convert a Value to Python code
 pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
@@ -16,22 +33,10 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
         Value::Name(n) => n.clone(),
         Value::Global(n) => n.clone(),
         Value::BinOp { op, left, right } => {
-            let op_str = match op {
-                BinOp::Add => "+",
-                BinOp::Sub => "-",
-                BinOp::Mul => "*",
-                BinOp::Div => "/",
-                BinOp::Lt => "<",
-                BinOp::Gt => ">",
-                BinOp::Le => "<=",
-                BinOp::Ge => ">=",
-                BinOp::Eq => "==",
-                BinOp::Ne => "!=",
-            };
             format!(
                 "{} {} {}",
                 value_to_python_impl(left),
-                op_str,
+                binop_to_str(op, false),
                 value_to_python_impl(right)
             )
         }
@@ -107,6 +112,7 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
             format!("{}({};{})@{}", name, args_str, kwargs_str, id)
         }
         Endpoint::If(if_expr) => format!("if@{}", if_expr.id),
+        Endpoint::Reshape(r) => format!("reshape@{}", r.id),
         _ => format!("{:?}", endpoint),
     }
 }
@@ -165,6 +171,12 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // Tuple unpacking doesn't contain calls in current IR
         }
         Endpoint::Ref(_) => {}
+        Endpoint::Reshape(_) => {
+            // Reshape neuron annotations are instantiated separately by
+            // collect_reshape_transforms in instantiation.rs (as self._transform_{id}).
+            // Do NOT create synthetic Call endpoints here — that would cause
+            // duplicate module instantiation.
+        }
         // Endpoint::Unroll removed — expanded before codegen
     }
 }
@@ -187,26 +199,40 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             Value::BinOp { op, left, right } => {
-                let op_str = match op {
-                    BinOp::Add => "+",
-                    BinOp::Sub => "-",
-                    BinOp::Mul => "*",
-                    BinOp::Div => "/",
-                    BinOp::Lt => "<",
-                    BinOp::Gt => ">",
-                    BinOp::Le => "<=",
-                    BinOp::Ge => ">=",
-                    BinOp::Eq => "==",
-                    BinOp::Ne => "!=",
-                };
                 format!(
                     "{} {} {}",
                     self.value_to_python_with_self(left),
-                    op_str,
+                    binop_to_str(op, false),
                     self.value_to_python_with_self(right)
                 )
             }
             _ => self.value_to_python(value),
+        }
+    }
+
+    /// Convert a Value to Python for dimension arithmetic in reshape bindings.
+    /// Uses `//` for integer division and resolves names via neuron params
+    /// and binding_context.
+    pub(super) fn value_to_python_dim_expr(&self, value: &Value) -> String {
+        match value {
+            Value::Name(n) => {
+                if self.current_neuron_params.contains(n) {
+                    format!("self.{}", n)
+                } else if let Some(resolved) = self.binding_context.get(n) {
+                    resolved.clone()
+                } else {
+                    n.clone()
+                }
+            }
+            Value::BinOp { op, left, right } => {
+                format!(
+                    "{} {} {}",
+                    self.value_to_python_dim_expr(left),
+                    binop_to_str(op, true),
+                    self.value_to_python_dim_expr(right)
+                )
+            }
+            _ => value_to_python_impl(value),
         }
     }
 

@@ -1,0 +1,20 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+
+class ExpandDim(nn.Module):
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def forward(self, x):
+        b = x.size(0)
+        c = x.size(1)
+        h = x.size(2)
+        w = x.size(3)
+        _unsq = x.unsqueeze(2)
+        x_2 = _unsq.expand(b, c, 1, h, w)
+        return x_2

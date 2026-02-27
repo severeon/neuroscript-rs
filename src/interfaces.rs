@@ -194,6 +194,8 @@ pub enum Endpoint {
     Match(MatchExpr),
     /// Conditional expression
     If(IfExpr),
+    /// Shape transformation: => [shape] or => @annotation [shape]
+    Reshape(ReshapeExpr),
 }
 
 /// A connection: source -> destination
@@ -270,6 +272,77 @@ pub struct IfExpr {
     pub branches: Vec<IfBranch>,            // if and elifs
     pub else_branch: Option<Vec<Endpoint>>, // optional else
     pub id: usize,
+}
+
+/// A reshape expression: [dim_spec, dim_spec, ...]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReshapeExpr {
+    pub dims: Vec<ReshapeDim>,
+    pub annotation: Option<TransformAnnotation>,
+    pub id: usize,
+}
+
+impl ReshapeExpr {
+    /// Convert reshape dims to a Shape for validation/inference purposes.
+    ///
+    /// Known limitations:
+    /// - `Binding { name, expr }` (e.g., `dh=dim/heads`) maps to `Dim::Named(name)`,
+    ///   discarding the expression constraint. Shape inference sees `dh` as unconstrained.
+    ///   TODO: propagate binding constraints for tighter validation.
+    /// - `Others` maps to `Dim::Wildcard`, but semantically `others` means "collapse all
+    ///   remaining dims" (like PyTorch's -1), not "one unknown dim". This means rank
+    ///   validation doesn't catch mismatches through `others`.
+    ///   TODO: add a `Dim::Inferred` variant or track rank separately.
+    pub fn to_shape(&self) -> Shape {
+        Shape {
+            dims: self
+                .dims
+                .iter()
+                .map(|d| match d {
+                    ReshapeDim::Named(name) => Dim::Named(name.clone()),
+                    ReshapeDim::Literal(n) => Dim::Literal(*n),
+                    ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
+                    ReshapeDim::Others => Dim::Wildcard,
+                    ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A dimension spec in a reshape expression
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReshapeDim {
+    /// Named dimension reference: b, seq, dim
+    Named(String),
+    /// Literal value: 1, 5, 512
+    Literal(i64),
+    /// Decomposition binding: h=dim/heads
+    Binding { name: String, expr: Box<Value> },
+    /// Others keyword: flattens remaining dims
+    Others,
+    /// Dimension expression: h*w, dim/heads (uses existing DimExpr)
+    Expr(Box<DimExpr>),
+}
+
+/// Transform annotation: @reduce(mean), @repeat(copy)
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransformAnnotation {
+    Reduce(TransformStrategy),
+    Repeat(TransformStrategy),
+}
+
+/// Strategy for a transform: intrinsic name or neuron call
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransformStrategy {
+    /// Built-in: mean, sum, min, max, prod, logsumexp, copy
+    Intrinsic(String),
+    /// Neuron call: AttentionPool(dim)
+    Neuron {
+        name: String,
+        args: Vec<Value>,
+        kwargs: Vec<Kwarg>,
+    },
 }
 
 /// Compile-time unroll block within a context section
@@ -574,6 +647,15 @@ pub enum ValidationError {
         neuron: String,
         reason: String,
     },
+    InvalidReshape {
+        message: String,
+        context: String,
+    },
+    InvalidAnnotation {
+        annotation: String,
+        reason: String,
+        context: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -669,6 +751,20 @@ impl std::fmt::Display for ValidationError {
                     f,
                     "Invalid unroll count in neuron '{}': {}",
                     neuron, reason
+                )
+            }
+            ValidationError::InvalidReshape { message, context } => {
+                write!(f, "Invalid reshape: {} (in {})", message, context)
+            }
+            ValidationError::InvalidAnnotation {
+                annotation,
+                reason,
+                context,
+            } => {
+                write!(
+                    f,
+                    "Invalid annotation {}: {} ({})",
+                    annotation, reason, context
                 )
             }
             ValidationError::Custom(msg) => {

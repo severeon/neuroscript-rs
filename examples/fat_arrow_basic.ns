@@ -1,0 +1,19 @@
+# Basic fat arrow reshape examples
+
+neuron MultiHeadReshape(dim, heads):
+  in: [batch, seq, dim]
+  out: [batch, heads, seq, dim / heads]
+  graph:
+    in => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> out
+
+neuron VitFlatten:
+  in: [b, c, h, w]
+  out: [b, hw, c]
+  graph:
+    in => [b, c, hw=h*w] => [b, hw, c] -> out
+
+neuron FlattenTail:
+  in: [b, c, h, w]
+  out: [b, flat]
+  graph:
+    in => [b, others] -> out

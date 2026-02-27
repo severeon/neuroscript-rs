@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron WeightNorm(in_features, out_features, dim = 0):
+  inputs:
+    default: [*batch, in_features]
+  outputs:
+    default: [*batch, out_features]
+  impl:
+    Source: core,normalization/WeightNorm

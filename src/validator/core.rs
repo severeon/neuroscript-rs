@@ -265,6 +265,73 @@ impl Validator {
                 }
                 errors
             }
+            Endpoint::Reshape(reshape) => {
+                let mut errors = Vec::new();
+                // Reject empty reshape expressions (=> [])
+                if reshape.dims.is_empty() {
+                    errors.push(ValidationError::InvalidReshape {
+                        message: "reshape expression must have at least one dimension".to_string(),
+                        context: format!("in {}", context_neuron),
+                    });
+                }
+                // Validate at most one 'others' dimension (PyTorch allows only one -1)
+                let others_count = reshape
+                    .dims
+                    .iter()
+                    .filter(|d| matches!(d, ReshapeDim::Others))
+                    .count();
+                if others_count > 1 {
+                    errors.push(ValidationError::InvalidReshape {
+                        message: format!(
+                            "reshape expression has {} 'others' dimensions, but only one is allowed",
+                            others_count
+                        ),
+                        context: format!("in {}", context_neuron),
+                    });
+                }
+                if let Some(ref annotation) = reshape.annotation {
+                    let strategy = match annotation {
+                        TransformAnnotation::Reduce(s) => s,
+                        TransformAnnotation::Repeat(s) => s,
+                    };
+                    match strategy {
+                        TransformStrategy::Neuron { name, .. } => {
+                            // Skip check if the name is a neuron-typed parameter
+                            if !neuron_param_names.contains(name.as_str())
+                                && !Self::neuron_exists(name, program, registry)
+                            {
+                                errors.push(ValidationError::MissingNeuron {
+                                    name: name.clone(),
+                                    context: format!(
+                                        "transform annotation in {}",
+                                        context_neuron
+                                    ),
+                                });
+                            }
+                        }
+                        TransformStrategy::Intrinsic(name) => {
+                            let valid_intrinsics: &[&str] = match annotation {
+                                TransformAnnotation::Reduce(_) => {
+                                    &["mean", "sum", "min", "max", "prod", "logsumexp"]
+                                }
+                                TransformAnnotation::Repeat(_) => &["copy"],
+                            };
+                            if !valid_intrinsics.contains(&name.as_str()) {
+                                errors.push(ValidationError::InvalidAnnotation {
+                                    annotation: format!("{}", annotation),
+                                    reason: format!(
+                                        "unknown intrinsic '{}', expected one of: {}",
+                                        name,
+                                        valid_intrinsics.join(", ")
+                                    ),
+                                    context: format!("in {}", context_neuron),
+                                });
+                            }
+                        }
+                    }
+                }
+                errors
+            }
             _ => vec![],
         }
     }

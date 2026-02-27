@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron DilatedConv(in_channels, out_channels, kernel_size, dilation = 2, padding = 0, stride = 1, bias = true):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, out_channels, *, *]
+  impl:
+    Source: core,convolutions/DilatedConv

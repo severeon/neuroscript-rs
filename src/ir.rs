@@ -181,6 +181,7 @@ impl std::fmt::Display for Endpoint {
             }
             Endpoint::Match(m) => write!(f, "{}", m),
             Endpoint::If(expr) => write!(f, "{}", expr),
+            Endpoint::Reshape(r) => write!(f, "{}", r),
         }
     }
 }
@@ -298,7 +299,72 @@ impl std::fmt::Display for ContextUnroll {
 
 impl std::fmt::Display for Connection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} -> {}", self.source, self.destination)
+        let arrow = match &self.destination {
+            Endpoint::Reshape(_) => "=>",
+            _ => "->",
+        };
+        write!(f, "{} {} {}", self.source, arrow, self.destination)
+    }
+}
+
+impl std::fmt::Display for ReshapeDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReshapeDim::Named(name) => write!(f, "{}", name),
+            ReshapeDim::Literal(n) => write!(f, "{}", n),
+            ReshapeDim::Binding { name, expr } => write!(f, "{}={}", name, expr),
+            ReshapeDim::Others => write!(f, "others"),
+            ReshapeDim::Expr(expr) => write!(f, "({} {} {})", expr.left, expr.op, expr.right),
+        }
+    }
+}
+
+impl std::fmt::Display for ReshapeExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref ann) = self.annotation {
+            write!(f, "{} ", ann)?;
+        }
+        write!(f, "[")?;
+        for (i, dim) in self.dims.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", dim)?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl std::fmt::Display for TransformAnnotation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformAnnotation::Reduce(s) => write!(f, "@reduce({})", s),
+            TransformAnnotation::Repeat(s) => write!(f, "@repeat({})", s),
+        }
+    }
+}
+
+impl std::fmt::Display for TransformStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformStrategy::Intrinsic(name) => write!(f, "{}", name),
+            TransformStrategy::Neuron { name, args, kwargs } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                for (i, (k, v)) in kwargs.iter().enumerate() {
+                    if !args.is_empty() || i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", k, v)?;
+                }
+                write!(f, ")")
+            }
+        }
     }
 }
 

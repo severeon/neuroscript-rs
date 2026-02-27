@@ -10,30 +10,45 @@ neuron Conformer(dim, num_heads, ff_expansion, conv_kernel, dropout_rate):
   outputs:
     default: [batch, seq, dim]
   graph:
-    in -> (attn_path, skip1)
-    attn_path -> LayerNorm#0(dim)
-    LayerNorm#0(dim) -> MultiHeadSelfAttention#1(dim, num_heads)
-    MultiHeadSelfAttention#1(dim, num_heads) -> Dropout#2(dropout_rate)
-    Dropout#2(dropout_rate) -> attn_out
-    (attn_out, skip1) -> Add#3()
-    Add#3() -> attn_residual
-    attn_residual -> (conv_path, skip2)
-    conv_path -> LayerNorm#4(dim)
-    LayerNorm#4(dim) -> Transpose#5(1, 2)
-    Transpose#5(1, 2) -> Conv1d#6(dim, dim, conv_kernel, 1, (conv_kernel / 2))
-    Conv1d#6(dim, dim, conv_kernel, 1, (conv_kernel / 2)) -> BatchNorm#7(dim)
-    BatchNorm#7(dim) -> SiLU#8()
-    SiLU#8() -> Transpose#9(1, 2)
-    Transpose#9(1, 2) -> Dropout#10(dropout_rate)
-    Dropout#10(dropout_rate) -> conv_out
-    (conv_out, skip2) -> Add#11()
-    Add#11() -> conv_residual
-    conv_residual -> (ffn_path, skip3)
-    ffn_path -> LayerNorm#12(dim)
-    LayerNorm#12(dim) -> FFN#13(dim, ff_expansion)
-    FFN#13(dim, ff_expansion) -> Dropout#14(dropout_rate)
-    Dropout#14(dropout_rate) -> ffn_out
-    (ffn_out, skip3) -> Add#15()
-    Add#15() -> ffn_residual
-    ffn_residual -> LayerNorm#16(dim)
-    LayerNorm#16(dim) -> out
+    in -> (ffn1_path, skip1)
+    ffn1_path -> LayerNorm#0(dim)
+    LayerNorm#0(dim) -> Linear#1(dim, ff_expansion)
+    Linear#1(dim, ff_expansion) -> SiLU#2()
+    SiLU#2() -> Dropout#3(dropout_rate)
+    Dropout#3(dropout_rate) -> Linear#4(ff_expansion, dim)
+    Linear#4(ff_expansion, dim) -> Dropout#5(dropout_rate)
+    Dropout#5(dropout_rate) -> ConstScale#6(0.5)
+    ConstScale#6(0.5) -> ffn1_out
+    (ffn1_out, skip1) -> Add#7()
+    Add#7() -> ffn1_residual
+    ffn1_residual -> (attn_path, skip2)
+    attn_path -> LayerNorm#8(dim)
+    LayerNorm#8(dim) -> MultiHeadSelfAttention#9(dim, num_heads)
+    MultiHeadSelfAttention#9(dim, num_heads) -> Dropout#10(dropout_rate)
+    Dropout#10(dropout_rate) -> attn_out
+    (attn_out, skip2) -> Add#11()
+    Add#11() -> attn_residual
+    attn_residual -> (conv_path, skip3)
+    conv_path -> LayerNorm#12(dim)
+    LayerNorm#12(dim) -> Transpose#13(1, 2)
+    Transpose#13(1, 2) -> Conv1d#14(dim, dim, conv_kernel, 1, (conv_kernel / 2))
+    Conv1d#14(dim, dim, conv_kernel, 1, (conv_kernel / 2)) -> BatchNorm#15(dim)
+    BatchNorm#15(dim) -> SiLU#16()
+    SiLU#16() -> Transpose#17(1, 2)
+    Transpose#17(1, 2) -> Dropout#18(dropout_rate)
+    Dropout#18(dropout_rate) -> conv_out
+    (conv_out, skip3) -> Add#19()
+    Add#19() -> conv_residual
+    conv_residual -> (ffn2_path, skip4)
+    ffn2_path -> LayerNorm#20(dim)
+    LayerNorm#20(dim) -> Linear#21(dim, ff_expansion)
+    Linear#21(dim, ff_expansion) -> SiLU#22()
+    SiLU#22() -> Dropout#23(dropout_rate)
+    Dropout#23(dropout_rate) -> Linear#24(ff_expansion, dim)
+    Linear#24(ff_expansion, dim) -> Dropout#25(dropout_rate)
+    Dropout#25(dropout_rate) -> ConstScale#26(0.5)
+    ConstScale#26(0.5) -> ffn2_out
+    (ffn2_out, skip4) -> Add#27()
+    Add#27() -> ffn2_residual
+    ffn2_residual -> LayerNorm#28(dim)
+    LayerNorm#28(dim) -> out

@@ -230,6 +230,14 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::Reshape(_) => {
+                let key = endpoint_key_impl(&conn.source);
+                call_to_result.get(&key).cloned().ok_or_else(|| {
+                    CodegenError::InvalidConnection(format!(
+                        "Reshape used as source before being processed"
+                    ))
+                })?
+            }
         };
 
         // Determine source output count for implicit fork detection
@@ -250,6 +258,66 @@ pub(super) fn generate_forward_body(
             _ => 1,
         };
 
+        // For Reshape destinations, emit dimension bindings from source shape
+        // before processing the reshape itself
+        let mut reshape_source_shape_for_dest: Option<Shape> = None;
+        if let Endpoint::Reshape(reshape) = &conn.destination {
+            // Look up the source shape from inference context
+            let source_shape = match &conn.source {
+                Endpoint::Ref(port_ref) => gen
+                    .inference_ctx
+                    .node_outputs
+                    .get(&port_ref.node)
+                    .and_then(|shapes| shapes.first().cloned()),
+                Endpoint::Call { id, .. } => gen
+                    .inference_ctx
+                    .call_outputs
+                    .get(id)
+                    .and_then(|shapes| shapes.first().cloned()),
+                Endpoint::Reshape(r) => gen
+                    .inference_ctx
+                    .call_outputs
+                    .get(&r.id)
+                    .and_then(|shapes| shapes.first().cloned()),
+                // Known limitation: Match, If, and Tuple sources don't expose
+                // output shapes in inference_ctx, so @reduce falls back to
+                // rank-delta heuristic. Tracking issue for full support.
+                _ => None,
+            };
+
+            if let Some(ref src_shape) = source_shape {
+                // Build a map of dim_name -> source_index from the source shape
+                let mut src_dim_indices: HashMap<String, usize> = HashMap::new();
+                for (i, dim) in src_shape.dims.iter().enumerate() {
+                    if let Dim::Named(name) = dim {
+                        src_dim_indices.insert(name.clone(), i);
+                    }
+                }
+
+                // Emit bindings for Named dims in reshape target that aren't params
+                // and aren't Binding expressions (those are handled in process_destination)
+                for dim in &reshape.dims {
+                    if let ReshapeDim::Named(name) = dim {
+                        if !gen.current_neuron_params.contains(name)
+                            && !gen.binding_context.contains_key(name)
+                        {
+                            if let Some(&idx) = src_dim_indices.get(name) {
+                                writeln!(
+                                    output,
+                                    "{}{} = {}.size({})",
+                                    indent, name, source_var, idx
+                                )
+                                .unwrap();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Store source shape for passing to process_destination
+            reshape_source_shape_for_dest = source_shape;
+        }
+
         // Process the destination
         let result_var = process_destination(
             output,
@@ -264,6 +332,7 @@ pub(super) fn generate_forward_body(
             &mut binding_call_results,
             &mut emitted_unroll_groups,
             source_output_count,
+            reshape_source_shape_for_dest.as_ref(),
         )?;
 
         // Track the last result for implicit output
@@ -313,6 +382,7 @@ fn process_destination(
     binding_call_results: &mut HashMap<String, String>,
     emitted_unroll_groups: &mut HashSet<String>,
     source_output_count: usize,
+    reshape_source_shape: Option<&Shape>,
 ) -> Result<String, CodegenError> {
     match endpoint {
         Endpoint::Ref(port_ref) => {
@@ -701,7 +771,25 @@ fn process_destination(
 
                 let mut current_var = source_var.clone();
 
+                let mut prev_endpoint: Option<&Endpoint> = None;
                 for ep in &arm.pipeline {
+                    // For Reshape endpoints, try to resolve source shape from previous endpoint.
+                    // When reshape is the first endpoint in a match arm (prev_endpoint is None),
+                    // use the match arm's pattern shape as the source — the pattern defines
+                    // the shape of the data flowing into the arm pipeline.
+                    let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_endpoint, gen)
+                            .or_else(|| {
+                                if prev_endpoint.is_none() {
+                                    Some(shape.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -715,6 +803,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        arm_reshape_src.as_ref(),
                     )?;
 
                     // If endpoint was a Call, store result in call_to_result
@@ -722,6 +811,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         call_to_result.insert(key, current_var.clone());
                     }
+                    prev_endpoint = Some(ep);
                 }
 
                 writeln!(
@@ -767,7 +857,14 @@ fn process_destination(
                 let saved_var_names = gen.var_names.clone();
                 let mut current_var = source_var.clone();
 
+                let mut prev_ep: Option<&Endpoint> = None;
                 for ep in &branch.pipeline {
+                    let branch_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_ep, gen)
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -781,6 +878,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        branch_reshape_src.as_ref(),
                     )?;
                     // Cache call/match/if results inside branch
                     if let Endpoint::Call { .. } = ep {
@@ -793,6 +891,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         if_to_result.insert(key, current_var.clone());
                     }
+                    prev_ep = Some(ep);
                 }
 
                 writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
@@ -806,7 +905,14 @@ fn process_destination(
                 let saved_var_names = gen.var_names.clone();
                 let mut current_var = source_var.clone();
 
+                let mut prev_ep: Option<&Endpoint> = None;
                 for ep in else_branch {
+                    let else_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                        resolve_endpoint_source_shape(prev_ep, gen)
+                    } else {
+                        None
+                    };
+
                     current_var = process_destination(
                         output,
                         gen,
@@ -820,6 +926,7 @@ fn process_destination(
                         binding_call_results,
                         emitted_unroll_groups,
                         1,
+                        else_reshape_src.as_ref(),
                     )?;
                     if let Endpoint::Call { .. } = ep {
                         let key = endpoint_key_impl(ep);
@@ -831,6 +938,7 @@ fn process_destination(
                         let key = endpoint_key_impl(ep);
                         if_to_result.insert(key, current_var.clone());
                     }
+                    prev_ep = Some(ep);
                 }
                 writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
                 gen.var_names = saved_var_names;
@@ -842,8 +950,345 @@ fn process_destination(
 
             Ok(result_var)
         }
+        Endpoint::Reshape(reshape) => {
+            let result_var = make_var_name(used_var_names, "x");
+
+            // Helper closure: resolve a ReshapeDim name to a Python expression.
+            // Priority: neuron param -> self.param, binding_context, else use as-is
+            let resolve_dim_name = |name: &str| -> String {
+                if gen.current_neuron_params.contains(name) {
+                    format!("self.{}", name)
+                } else if let Some(resolved) = gen.binding_context.get(name) {
+                    resolved.clone()
+                } else {
+                    // Assume it's already in scope (from match capture, prior reshape, etc.)
+                    name.to_string()
+                }
+            };
+
+            // Convert a ReshapeDim to Python expression
+            let dim_to_py = |d: &ReshapeDim| -> Result<String, CodegenError> {
+                Ok(match d {
+                    ReshapeDim::Named(name) => resolve_dim_name(name),
+                    ReshapeDim::Literal(n) => n.to_string(),
+                    ReshapeDim::Binding { name, .. } => name.clone(),
+                    ReshapeDim::Others => "-1".to_string(),
+                    ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr)?,
+                })
+            };
+
+            // Emit binding assignments for all cases (bare, @reduce, @repeat).
+            // Binding dims like `dh=dim/heads` must be assigned before any use.
+            for dim in &reshape.dims {
+                if let ReshapeDim::Binding { name, expr } = dim {
+                    let expr_str = gen.value_to_python_dim_expr(expr);
+                    writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
+                }
+            }
+
+            match &reshape.annotation {
+                None => {
+                    // Bare => : element-preserving reshape
+                    // Build target shape args
+                    let shape_args = reshape
+                        .dims
+                        .iter()
+                        .map(|d| dim_to_py(d))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join(", ");
+
+                    writeln!(
+                        output,
+                        "{}{} = {}.reshape({})",
+                        indent, result_var, source_var, shape_args
+                    )
+                    .unwrap();
+                }
+                Some(TransformAnnotation::Reduce(strategy)) => match strategy {
+                    TransformStrategy::Intrinsic(name) => {
+                        let method = match name.as_str() {
+                            "mean" => "mean",
+                            "sum" => "sum",
+                            "min" => "amin",
+                            "max" => "amax",
+                            "prod" => "prod",
+                            "logsumexp" => "logsumexp",
+                            _ => {
+                                return Err(CodegenError::UnsupportedFeature(format!(
+                                    "unknown reduce intrinsic: {}",
+                                    name
+                                )))
+                            }
+                        };
+
+                        // Determine which source dims to reduce by comparing
+                        // source shape dim names with target dim names
+                        let target_dim_names: HashSet<String> = reshape
+                            .dims
+                            .iter()
+                            .filter_map(|d| match d {
+                                ReshapeDim::Named(n) => Some(n.clone()),
+                                ReshapeDim::Binding { name, .. } => Some(name.clone()),
+                                _ => None,
+                            })
+                            .collect();
+
+                        let reduce_dims: Vec<usize> =
+                            if let Some(src_shape) = reshape_source_shape {
+                                // Primary strategy: find source Named dims not present in target
+                                let named_reduce: Vec<usize> = src_shape
+                                    .dims
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(i, dim)| {
+                                        if let Dim::Named(name) = dim {
+                                            if !target_dim_names.contains(name) {
+                                                return Some(i);
+                                            }
+                                        }
+                                        None
+                                    })
+                                    .collect();
+
+                                if !named_reduce.is_empty() {
+                                    named_reduce
+                                } else {
+                                    // Fallback: use trailing dims based on rank delta.
+                                    // Common case: [*, c, h, w] => @reduce(mean) [*, c]
+                                    // reduces the last (src_rank - target_rank) dims.
+                                    //
+                                    // LIMITATION: This assumes the reduced dims are trailing.
+                                    // If the reduction target is non-trailing (e.g., reducing
+                                    // dim index 1 from [*, heads, seq, dh] to [*, seq, dh]),
+                                    // this fallback will select the wrong indices. Use fully
+                                    // named source shapes for correct non-trailing reduction.
+                                    let src_rank = src_shape.dims.len();
+                                    let tgt_rank = reshape.dims.len();
+                                    eprintln!(
+                                        "warning: @reduce fallback assumes trailing dimensions; \
+                                         use fully named source shapes for correct non-trailing reduction"
+                                    );
+                                    if src_rank > tgt_rank {
+                                        (tgt_rank..src_rank).collect()
+                                    } else {
+                                        vec![]
+                                    }
+                                }
+                            } else {
+                                return Err(CodegenError::InvalidConnection(
+                                    "cannot determine reduce dimensions: source shape unavailable".to_string(),
+                                ));
+                            };
+
+                        if reduce_dims.is_empty() {
+                            return Err(CodegenError::InvalidConnection(
+                                "cannot determine reduce dimensions: no dims identified to reduce".to_string(),
+                            ));
+                        }
+
+                        if reduce_dims.len() == 1 {
+                            writeln!(
+                                output,
+                                "{}{} = {}.{}(dim={})",
+                                indent, result_var, source_var, method, reduce_dims[0]
+                            )
+                            .unwrap();
+                        } else {
+                            let dims_str = reduce_dims
+                                .iter()
+                                .map(|d| d.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            writeln!(
+                                output,
+                                "{}{} = {}.{}(dim=({}))",
+                                indent, result_var, source_var, method, dims_str
+                            )
+                            .unwrap();
+                        }
+                    }
+                    TransformStrategy::Neuron { .. } => {
+                        let module_name = format!("self._transform_{}", reshape.id);
+                        writeln!(
+                            output,
+                            "{}{} = {}({})",
+                            indent, result_var, module_name, source_var
+                        )
+                        .unwrap();
+                    }
+                },
+                Some(TransformAnnotation::Repeat(strategy)) => match strategy {
+                    TransformStrategy::Intrinsic(name) if name == "copy" => {
+                        // Determine which target dims are new (not in source shape).
+                        // These require unsqueeze before expand.
+                        let source_dim_names: HashSet<String> =
+                            if let Some(src_shape) = reshape_source_shape {
+                                src_shape
+                                    .dims
+                                    .iter()
+                                    .filter_map(|d| {
+                                        if let Dim::Named(n) = d {
+                                            Some(n.clone())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect()
+                            } else {
+                                HashSet::new()
+                            };
+
+                        // Find indices of new dims in target that need unsqueeze
+                        let mut unsqueeze_indices: Vec<usize> = Vec::new();
+                        for (i, dim) in reshape.dims.iter().enumerate() {
+                            let is_new = match dim {
+                                ReshapeDim::Literal(_) => {
+                                    // Literal dims like `1` are new dimensions
+                                    true
+                                }
+                                ReshapeDim::Named(n) => !source_dim_names.contains(n),
+                                _ => false,
+                            };
+                            if is_new {
+                                unsqueeze_indices.push(i);
+                            }
+                        }
+
+                        // Emit unsqueeze for each new dimension (in order).
+                        // Use "_unsq" prefix to avoid confusion with the result_var numbering.
+                        let mut current = source_var.clone();
+                        for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
+                            let unsqueezed = make_var_name(used_var_names, "_unsq");
+                            writeln!(
+                                output,
+                                "{}{} = {}.unsqueeze({})",
+                                indent,
+                                unsqueezed,
+                                current,
+                                idx + offset // Account for previous unsqueezes shifting indices
+                            )
+                            .unwrap();
+                            current = unsqueezed;
+                        }
+
+                        let shape_args = reshape
+                            .dims
+                            .iter()
+                            .map(|d| dim_to_py(d))
+                            .collect::<Result<Vec<_>, _>>()?
+                            .join(", ");
+
+                        if unsqueeze_indices.is_empty() {
+                            // No new dims — just expand existing size-1 dims
+                            writeln!(
+                                output,
+                                "{}{} = {}.expand({})",
+                                indent, result_var, source_var, shape_args
+                            )
+                            .unwrap();
+                        } else {
+                            // Expand after unsqueezing
+                            writeln!(
+                                output,
+                                "{}{} = {}.expand({})",
+                                indent, result_var, current, shape_args
+                            )
+                            .unwrap();
+                        }
+                    }
+                    TransformStrategy::Neuron { .. } => {
+                        let module_name = format!("self._transform_{}", reshape.id);
+                        writeln!(
+                            output,
+                            "{}{} = {}({})",
+                            indent, result_var, module_name, source_var
+                        )
+                        .unwrap();
+                    }
+                    _ => {
+                        // Validator rejects unknown intrinsics, so this is unreachable
+                        unreachable!("unknown repeat strategy should be caught by validator")
+                    }
+                },
+            }
+
+            // Store result for when this reshape is used as a source
+            let key = endpoint_key_impl(endpoint);
+            call_to_result.insert(key, result_var.clone());
+
+            Ok(result_var)
+        }
     }
 }
+/// Convert a DimExpr to Python code for dimension arithmetic (uses // for division).
+/// Returns an error if the expression contains comparison operators, which are not
+/// valid in dimension arithmetic contexts.
+fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> Result<String, CodegenError> {
+    let op_str = match expr.op {
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => "//",
+        op => {
+            return Err(CodegenError::UnsupportedFeature(format!(
+                "comparison operator {:?} is not valid in dimension expressions",
+                op
+            )));
+        }
+    };
+    let left = reshape_dim_ref_to_python(gen, &expr.left)?;
+    let right = reshape_dim_ref_to_python(gen, &expr.right)?;
+    Ok(format!("{} {} {}", left, op_str, right))
+}
+
+/// Convert a Dim (when used as part of a DimExpr in a reshape) to Python
+fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, CodegenError> {
+    Ok(match dim {
+        Dim::Literal(n) => n.to_string(),
+        Dim::Named(n) => {
+            if gen.current_neuron_params.contains(n) {
+                format!("self.{}", n)
+            } else if let Some(resolved) = gen.binding_context.get(n) {
+                resolved.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Dim::Global(n) => n.clone(),
+        Dim::Expr(e) => dim_expr_to_python(gen, e)?,
+        Dim::Wildcard => "-1".to_string(),
+        Dim::Variadic(_) => "-1".to_string(),
+    })
+}
+
+/// Resolve the output shape from a previous endpoint in a pipeline.
+///
+/// Used when a Reshape follows another endpoint inside a Match/If arm pipeline,
+/// so the reshape knows its source shape for @reduce/@repeat dim calculations.
+fn resolve_endpoint_source_shape(
+    prev: Option<&Endpoint>,
+    gen: &CodeGenerator,
+) -> Option<Shape> {
+    match prev? {
+        Endpoint::Call { id, .. } => gen
+            .inference_ctx
+            .call_outputs
+            .get(id)
+            .and_then(|shapes| shapes.first().cloned()),
+        Endpoint::Ref(port_ref) => gen
+            .inference_ctx
+            .node_outputs
+            .get(&port_ref.node)
+            .and_then(|shapes| shapes.first().cloned()),
+        Endpoint::Reshape(r) => gen
+            .inference_ctx
+            .call_outputs
+            .get(&r.id)
+            .and_then(|shapes| shapes.first().cloned()),
+        _ => None,
+    }
+}
+
 /// Generate a runtime shape check condition and dimension bindings
 ///
 /// Returns a ShapeCheckResult containing:

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron Crop(target_height, target_width):
+  inputs:
+    default: [batch, channels, height, width]
+  outputs:
+    default: [batch, channels, target_height, target_width]
+  impl:
+    Source: core,structural/Crop

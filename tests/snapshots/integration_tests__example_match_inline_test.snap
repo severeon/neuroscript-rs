@@ -18,11 +18,3 @@ neuron DimensionRouterInline(out_dim):
       [batch, d] where (d > 1024): Linear#0(d, 512) -> Linear#1(512, out_dim)
       [batch, d] where (d > 256): Linear#2(d, out_dim)
       [batch, d]: Linear#3(d, out_dim) -> out
-
-neuron Linear(in_dim, out_dim):
-  inputs:
-    default: [*, in_dim]
-  outputs:
-    default: [*, out_dim]
-  impl:
-    Source: core,nn/Linear

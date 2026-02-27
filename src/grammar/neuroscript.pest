@@ -39,12 +39,14 @@ keyword_if = @{ "if" ~ !ident_cont }
 keyword_elif = @{ "elif" ~ !ident_cont }
 keyword_else = @{ "else" ~ !ident_cont }
 keyword_unroll = @{ "unroll" ~ !ident_cont }
+keyword_others = @{ "others" ~ !ident_cont }
 
 // ============================================================================
 // Operators
 // ============================================================================
 
 arrow = { "->" }
+fat_arrow = { "=>" }
 assign = { "=" }
 colon = { ":" }
 comma = { "," }
@@ -100,6 +102,7 @@ keyword = _{
   | keyword_context | keyword_static | keyword_global | keyword_lazy
   | keyword_if | keyword_elif | keyword_else
   | keyword_unroll
+  | keyword_others
 }
 
 // Identifiers: foo, _bar, baz123
@@ -133,6 +136,38 @@ dim_op = {
 // Shape: [batch, seq, dim], [*, 512], []
 shape = {
     lbracket ~ (dim ~ (comma ~ dim)*)? ~ rbracket
+}
+
+// ============================================================================
+// Fat Arrow Reshape
+// ============================================================================
+
+// Transform annotation: @reduce(mean), @repeat(copy), @reduce(AttentionPool(dim))
+transform_annotation = {
+    at ~ ident ~ lparen ~ annotation_arg ~ rparen
+}
+
+annotation_arg = {
+    call_expr
+  | ident
+}
+
+// Reshape expression: [dim_spec, dim_spec, ...]
+reshape_expr = {
+    lbracket ~ (reshape_dim ~ (comma ~ reshape_dim)*)? ~ rbracket
+}
+
+// Individual dimension in a reshape
+// Order matters: binding must come before plain dim to avoid ident consuming the name
+reshape_dim = {
+    ident ~ assign ~ dim           // h=dim/heads (decomposition binding)
+  | keyword_others                 // others
+  | dim                            // named, literal, expr, wildcard, variadic
+}
+
+// Fat arrow step: => [shape] or => @reduce(mean) [shape]
+fat_arrow_step = {
+    fat_arrow ~ transform_annotation? ~ reshape_expr
 }
 
 // ============================================================================
@@ -304,17 +339,29 @@ graph_section = {
     keyword_graph ~ colon ~ (NEWLINE* ~ connection)+
 }
 
-// Connection: source -> dest or pipeline
+// Connection: source -> dest or pipeline, supporting both -> and =>
 // Two styles:
-// Inline: a -> b -> c -> d
-// Indented: a ->\n  b\n  c\n  d  (implicit arrows between lines)
+// Inline: a -> b -> c => [shape] -> d
+// Indented: a ->\n  b\n  => [shape]\n  d
 connection = {
     endpoint ~ arrow ~ connection_tail
+  | endpoint ~ fat_arrow_step ~ connection_tail_after_reshape
+}
+
+// After a fat arrow step, continue with more steps or end.
+// Unlike connection_tail, this tries indented first because NEWLINE ~ indented_pipeline
+// is more specific — an empty inline match (the * allows zero steps) would greedily
+// consume the NEWLINE before the indented alternative could match.
+connection_tail_after_reshape = {
+    // Indented continuation (must be tried first; see comment above)
+    NEWLINE ~ indented_pipeline
+    // More inline steps (may be empty, matching zero or more)
+  | ((arrow ~ endpoint) | fat_arrow_step)* ~ NEWLINE*
 }
 
 connection_tail = {
-    // Inline: endpoints separated by arrows, all on one line
-    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
+    // Inline: endpoints separated by arrows or fat arrow steps, all on one line
+    (endpoint ~ ((arrow ~ endpoint) | fat_arrow_step)* ~ NEWLINE*)
     // Indented: newline, then one of:
   | (NEWLINE ~ indented_pipeline)
 }
@@ -326,8 +373,10 @@ indented_pipeline = {
 }
 
 indented_pipeline_item = {
+    // Fat arrow step on its own line (with optional trailing arrow for continuation)
+    fat_arrow_step ~ (arrow)? ~ NEWLINE*
     // Item with trailing arrow means continue to next line
-    (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ arrow ~ NEWLINE*)
+  | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ arrow ~ NEWLINE*)
     // Item without trailing arrow (may be followed by next connection or end)
   | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ NEWLINE*)
 }
@@ -386,9 +435,9 @@ neuron_match_arm = {
 
 // Pipeline in neuron match arm: must not consume the next arm's port contract
 neuron_match_pipeline = {
-    // Inline: endpoints separated by arrows on one line
-    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
-    // Indented: newline, then indented pipeline items (stops before next port contract)
+    // Inline with fat arrow support
+    (endpoint ~ ((arrow ~ endpoint) | fat_arrow_step)* ~ NEWLINE*)
+    // Indented: newline, then neuron match indented pipeline
   | (NEWLINE ~ neuron_match_indented_pipeline)
 }
 
@@ -406,10 +455,10 @@ match_arm = {
     shape ~ (keyword_where ~ value)? ~ colon ~ match_pipeline
 }
 
-// Pipeline in match arm (supports both inline and indented)
+// Pipeline in match arm (supports both inline and indented, with fat arrows)
 match_pipeline = {
-    // Inline: endpoints separated by arrows on one line
-    (endpoint ~ (arrow ~ endpoint)* ~ NEWLINE*)
+    // Inline: endpoints/fat-arrow-steps separated by arrows on one line
+    (endpoint ~ ((arrow ~ endpoint) | fat_arrow_step)* ~ NEWLINE*)
     // Indented: newline, then indented pipeline items
   | (NEWLINE ~ indented_pipeline)
 }
@@ -427,8 +476,8 @@ if_expr = {
 branch_pipeline = {
     // Indented pipeline
     (NEWLINE ~ indented_pipeline)
-    // Inline pipeline
-  | (endpoint ~ (arrow ~ endpoint)*)
+    // Inline pipeline with fat arrow support
+  | (endpoint ~ ((arrow ~ endpoint) | fat_arrow_step)*)
 }
 
 // ============================================================================
