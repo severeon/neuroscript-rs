@@ -267,6 +267,13 @@ impl Validator {
             }
             Endpoint::Reshape(reshape) => {
                 let mut errors = Vec::new();
+                // Reject empty reshape expressions (=> [])
+                if reshape.dims.is_empty() {
+                    errors.push(ValidationError::InvalidReshape {
+                        message: "reshape expression must have at least one dimension".to_string(),
+                        context: format!("in {}", context_neuron),
+                    });
+                }
                 // Validate at most one 'others' dimension (PyTorch allows only one -1)
                 let others_count = reshape
                     .dims

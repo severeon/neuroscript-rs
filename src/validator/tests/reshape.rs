@@ -314,3 +314,24 @@ neuron Pool(dim):
         );
     }
 }
+
+#[test]
+fn test_validate_reshape_empty_dims() {
+    // Reshape with empty dims (=> []) should be rejected
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![],
+        annotation: None,
+        id: 200,
+    });
+
+    let mut program = build_reshape_program("EmptyReshapeTest", reshape_ep, vec![]);
+    assert_validation_error(&mut program, |e| {
+        matches!(
+            e,
+            ValidationError::InvalidReshape {
+                message,
+                ..
+            } if message.contains("at least one dimension")
+        )
+    });
+}

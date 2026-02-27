@@ -1056,6 +1056,12 @@ fn process_destination(
                                     // Fallback: use trailing dims based on rank delta.
                                     // Common case: [*, c, h, w] => @reduce(mean) [*, c]
                                     // reduces the last (src_rank - target_rank) dims.
+                                    //
+                                    // LIMITATION: This assumes the reduced dims are trailing.
+                                    // If the reduction target is non-trailing (e.g., reducing
+                                    // dim index 1 from [*, heads, seq, dh] to [*, seq, dh]),
+                                    // this fallback will select the wrong indices. Use fully
+                                    // named source shapes for correct non-trailing reduction.
                                     let src_rank = src_shape.dims.len();
                                     let tgt_rank = reshape.dims.len();
                                     if src_rank > tgt_rank {
