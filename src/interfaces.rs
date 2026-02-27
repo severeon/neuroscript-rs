@@ -137,6 +137,10 @@ pub struct CodeGenerator<'a> {
 
     /// Last shape comment emitted, used to suppress duplicates
     pub last_emitted_shape: Option<String>,
+
+    /// Temporary: source shape for the current reshape being processed
+    /// Set in generate_forward_body before process_destination, cleared after
+    pub reshape_source_shape: Option<Shape>,
 }
 
 /// An input or output port of a neuron
@@ -619,6 +623,15 @@ pub enum ValidationError {
         neuron: String,
         reason: String,
     },
+    InvalidReshape {
+        message: String,
+        context: String,
+    },
+    InvalidAnnotation {
+        annotation: String,
+        reason: String,
+        context: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -714,6 +727,20 @@ impl std::fmt::Display for ValidationError {
                     f,
                     "Invalid unroll count in neuron '{}': {}",
                     neuron, reason
+                )
+            }
+            ValidationError::InvalidReshape { message, context } => {
+                write!(f, "Invalid reshape: {} (in {})", message, context)
+            }
+            ValidationError::InvalidAnnotation {
+                annotation,
+                reason,
+                context,
+            } => {
+                write!(
+                    f,
+                    "Invalid annotation {}: {} ({})",
+                    annotation, reason, context
                 )
             }
             ValidationError::Custom(msg) => {

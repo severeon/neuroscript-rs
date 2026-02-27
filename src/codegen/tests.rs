@@ -819,3 +819,144 @@ fn test_codegen_unroll_gpt2() {
     assert!(code.contains("self.ln_f(embed)"), "Should include ln_f after blocks");
     assert!(code.contains("self.head(ln_f)"), "Should include head after ln_f");
 }
+
+// ============================================================================
+// Fat arrow reshape codegen tests
+// ============================================================================
+
+#[test]
+fn test_codegen_fat_arrow_reshape_basic() {
+    let source = r#"
+neuron ReshapeTest(dim, heads):
+  in: [batch, seq, dim]
+  out: [batch, heads, seq, dim]
+  graph:
+    in => [batch, seq, heads, dh] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "ReshapeTest");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== RESHAPE BASIC ===\n{}", code);
+    assert!(
+        code.contains(".reshape("),
+        "should contain reshape call"
+    );
+    assert!(
+        code.contains("class ReshapeTest(nn.Module)"),
+        "should have class definition"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_reshape_with_binding() {
+    let source = r#"
+neuron MultiHeadReshape(dim, heads):
+  in: [batch, seq, dim]
+  out: [batch, heads, seq, dim]
+  graph:
+    in => [batch, seq, heads, dh=dim/heads] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "MultiHeadReshape");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== RESHAPE WITH BINDING ===\n{}", code);
+    assert!(
+        code.contains(".reshape("),
+        "should contain reshape call"
+    );
+    assert!(
+        code.contains("dh = self.dim // self.heads"),
+        "should contain binding assignment with integer division and self-prefixed params"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_chained() {
+    let source = r#"
+neuron TransposeHeads(dim, heads):
+  in: [batch, seq, dim]
+  out: [batch, heads, seq, dh]
+  graph:
+    in => [batch, seq, heads, dh] => [batch, heads, seq, dh] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "TransposeHeads");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== CHAINED RESHAPE ===\n{}", code);
+    // Should have two reshape calls (one for each =>)
+    let reshape_count = code.matches(".reshape(").count();
+    assert!(
+        reshape_count >= 2,
+        "should have at least 2 reshape calls for chained fat arrows, got {}",
+        reshape_count
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_reduce() {
+    let source = r#"
+neuron GlobalAvgPool(dim):
+  in: [batch, seq, dim]
+  out: [batch, dim]
+  graph:
+    in => @reduce(mean) [batch, dim] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "GlobalAvgPool");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== REDUCE MEAN ===\n{}", code);
+    assert!(
+        code.contains("mean"),
+        "should contain mean reduction"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_reduce_sum() {
+    let source = r#"
+neuron SumPool(dim):
+  in: [batch, seq, dim]
+  out: [batch, dim]
+  graph:
+    in => @reduce(sum) [batch, dim] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "SumPool");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== REDUCE SUM ===\n{}", code);
+    assert!(
+        code.contains("sum"),
+        "should contain sum reduction"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_repeat_copy() {
+    let source = r#"
+neuron BroadcastTest(dim):
+  in: [batch, dim]
+  out: [batch, seq, dim]
+  graph:
+    in => @repeat(copy) [batch, seq, dim] -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let result = generate_pytorch(&program, "BroadcastTest");
+    assert!(result.is_ok(), "codegen should succeed: {:?}", result);
+    let code = result.unwrap();
+    println!("=== REPEAT COPY ===\n{}", code);
+    assert!(
+        code.contains(".expand("),
+        "should contain expand call for copy repeat"
+    );
+}

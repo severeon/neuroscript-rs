@@ -7,7 +7,7 @@
 use super::utils::*;
 use crate::interfaces::Kwarg;
 use crate::interfaces::*;
-use std::collections::{hash_map, HashMap};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt::Write;
 
 /// Generate module instantiations in __init__
@@ -283,11 +283,95 @@ pub(super) fn generate_module_instantiations(
         instantiated_count += 1;
     }
 
+    // 4. Collect and instantiate neuron-based transform strategies from Reshape endpoints
+    let mut seen_transforms: HashSet<usize> = HashSet::new();
+    collect_reshape_transforms(connections, &mut seen_transforms, gen, output, &mut instantiated_count);
+
     if instantiated_count == 0 {
         writeln!(output, "        pass").unwrap();
     }
 
     Ok(())
+}
+
+/// Recursively collect Reshape endpoints with Neuron strategies and instantiate them
+fn collect_reshape_transforms(
+    connections: &[Connection],
+    seen: &mut HashSet<usize>,
+    gen: &mut CodeGenerator,
+    output: &mut String,
+    instantiated_count: &mut usize,
+) {
+    for conn in connections {
+        collect_reshape_transforms_from_endpoint(&conn.source, seen, gen, output, instantiated_count);
+        collect_reshape_transforms_from_endpoint(&conn.destination, seen, gen, output, instantiated_count);
+    }
+}
+
+fn collect_reshape_transforms_from_endpoint(
+    endpoint: &Endpoint,
+    seen: &mut HashSet<usize>,
+    gen: &mut CodeGenerator,
+    output: &mut String,
+    instantiated_count: &mut usize,
+) {
+    match endpoint {
+        Endpoint::Reshape(reshape) => {
+            if seen.contains(&reshape.id) {
+                return;
+            }
+            if let Some(ref annotation) = reshape.annotation {
+                let strategy = match annotation {
+                    TransformAnnotation::Reduce(s) => s,
+                    TransformAnnotation::Repeat(s) => s,
+                };
+                if let TransformStrategy::Neuron { name, args, kwargs } = strategy {
+                    seen.insert(reshape.id);
+
+                    let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
+                        neuron.is_primitive()
+                    } else {
+                        true
+                    };
+
+                    if is_primitive {
+                        gen.used_primitives.insert(name.clone());
+                    }
+
+                    let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
+                    let module_name = format!("_transform_{}", reshape.id);
+
+                    writeln!(
+                        output,
+                        "        self.{} = {}({}{})",
+                        module_name, name, args_str, kwargs_str
+                    )
+                    .unwrap();
+                    *instantiated_count += 1;
+                }
+            }
+        }
+        Endpoint::Match(match_expr) => {
+            for arm in &match_expr.arms {
+                for ep in &arm.pipeline {
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                }
+            }
+        }
+        Endpoint::If(if_expr) => {
+            for branch in &if_expr.branches {
+                for ep in &branch.pipeline {
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                }
+            }
+            if let Some(else_branch) = &if_expr.else_branch {
+                for ep in else_branch {
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 fn extract_kwargs(args: &[Value], kwargs: &[(String, Value)]) -> (String, String) {

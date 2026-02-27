@@ -139,6 +139,7 @@ impl<'a> CodeGenerator<'a> {
             binding_to_unroll_group: std::collections::HashMap::new(),
             aggregate_to_group: std::collections::HashMap::new(),
             last_emitted_shape: None,
+            reshape_source_shape: None,
         }
     }
 
@@ -357,7 +358,18 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
         Endpoint::Ref(_) => {
             // Port references don't call neurons
         }
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            // Collect neuron names from annotation strategies
+            if let Some(ref annotation) = reshape.annotation {
+                let strategy = match annotation {
+                    TransformAnnotation::Reduce(s) => s,
+                    TransformAnnotation::Repeat(s) => s,
+                };
+                if let TransformStrategy::Neuron { name, .. } = strategy {
+                    result.insert(name.clone());
+                }
+            }
+        }
         // Endpoint::Unroll removed — expanded before codegen
     }
 }

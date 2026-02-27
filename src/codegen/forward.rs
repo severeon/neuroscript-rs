@@ -230,7 +230,14 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
-            Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+            Endpoint::Reshape(_) => {
+                let key = endpoint_key_impl(&conn.source);
+                call_to_result.get(&key).cloned().ok_or_else(|| {
+                    CodegenError::InvalidConnection(format!(
+                        "Reshape used as source before being processed"
+                    ))
+                })?
+            }
         };
 
         // Determine source output count for implicit fork detection
@@ -251,6 +258,62 @@ pub(super) fn generate_forward_body(
             _ => 1,
         };
 
+        // For Reshape destinations, emit dimension bindings from source shape
+        // before processing the reshape itself
+        if let Endpoint::Reshape(reshape) = &conn.destination {
+            // Look up the source shape from inference context
+            let source_shape = match &conn.source {
+                Endpoint::Ref(port_ref) => gen
+                    .inference_ctx
+                    .node_outputs
+                    .get(&port_ref.node)
+                    .and_then(|shapes| shapes.first().cloned()),
+                Endpoint::Call { id, .. } => gen
+                    .inference_ctx
+                    .call_outputs
+                    .get(id)
+                    .and_then(|shapes| shapes.first().cloned()),
+                Endpoint::Reshape(r) => gen
+                    .inference_ctx
+                    .call_outputs
+                    .get(&r.id)
+                    .and_then(|shapes| shapes.first().cloned()),
+                _ => None,
+            };
+
+            if let Some(ref src_shape) = source_shape {
+                // Build a map of dim_name -> source_index from the source shape
+                let mut src_dim_indices: HashMap<String, usize> = HashMap::new();
+                for (i, dim) in src_shape.dims.iter().enumerate() {
+                    if let Dim::Named(name) = dim {
+                        src_dim_indices.insert(name.clone(), i);
+                    }
+                }
+
+                // Emit bindings for Named dims in reshape target that aren't params
+                // and aren't Binding expressions (those are handled in process_destination)
+                for dim in &reshape.dims {
+                    if let ReshapeDim::Named(name) = dim {
+                        if !gen.current_neuron_params.contains(name)
+                            && !gen.binding_context.contains_key(name)
+                        {
+                            if let Some(&idx) = src_dim_indices.get(name) {
+                                writeln!(
+                                    output,
+                                    "{}{} = {}.size({})",
+                                    indent, name, source_var, idx
+                                )
+                                .unwrap();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Store source shape on gen for use in process_destination (reduce dims)
+            gen.reshape_source_shape = source_shape;
+        }
+
         // Process the destination
         let result_var = process_destination(
             output,
@@ -266,6 +329,9 @@ pub(super) fn generate_forward_body(
             &mut emitted_unroll_groups,
             source_output_count,
         )?;
+
+        // Clear temporary reshape source shape
+        gen.reshape_source_shape = None;
 
         // Track the last result for implicit output
         last_result = Some(result_var.clone());
@@ -843,9 +909,276 @@ fn process_destination(
 
             Ok(result_var)
         }
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            let result_var = make_var_name(used_var_names, "x");
+
+            // Helper closure: resolve a ReshapeDim name to a Python expression.
+            // Priority: neuron param -> self.param, binding_context, else use as-is
+            let resolve_dim_name = |name: &str| -> String {
+                if gen.current_neuron_params.contains(name) {
+                    format!("self.{}", name)
+                } else if let Some(resolved) = gen.binding_context.get(name) {
+                    resolved.clone()
+                } else {
+                    // Assume it's already in scope (from match capture, prior reshape, etc.)
+                    name.to_string()
+                }
+            };
+
+            // Convert a ReshapeDim to Python expression
+            let dim_to_py = |d: &ReshapeDim| -> String {
+                match d {
+                    ReshapeDim::Named(name) => resolve_dim_name(name),
+                    ReshapeDim::Literal(n) => n.to_string(),
+                    ReshapeDim::Binding { name, .. } => name.clone(),
+                    ReshapeDim::Others => "-1".to_string(),
+                    ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr),
+                }
+            };
+
+            match &reshape.annotation {
+                None => {
+                    // Bare => : element-preserving reshape
+                    // Emit binding assignments first (e.g., dh = self.dim // self.heads)
+                    for dim in &reshape.dims {
+                        if let ReshapeDim::Binding { name, expr } = dim {
+                            let expr_str = value_to_python_int_div(gen, expr);
+                            writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
+                        }
+                    }
+
+                    // Build target shape args
+                    let shape_args = reshape
+                        .dims
+                        .iter()
+                        .map(|d| dim_to_py(d))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    writeln!(
+                        output,
+                        "{}{} = {}.reshape({})",
+                        indent, result_var, source_var, shape_args
+                    )
+                    .unwrap();
+                }
+                Some(TransformAnnotation::Reduce(strategy)) => match strategy {
+                    TransformStrategy::Intrinsic(name) => {
+                        let method = match name.as_str() {
+                            "mean" => "mean",
+                            "sum" => "sum",
+                            "min" => "amin",
+                            "max" => "amax",
+                            "prod" => "prod",
+                            "logsumexp" => "logsumexp",
+                            _ => {
+                                return Err(CodegenError::UnsupportedFeature(format!(
+                                    "unknown reduce intrinsic: {}",
+                                    name
+                                )))
+                            }
+                        };
+
+                        // Determine which source dims to reduce by comparing
+                        // source shape dim names with target dim names
+                        let target_dim_names: HashSet<String> = reshape
+                            .dims
+                            .iter()
+                            .filter_map(|d| match d {
+                                ReshapeDim::Named(n) => Some(n.clone()),
+                                ReshapeDim::Binding { name, .. } => Some(name.clone()),
+                                _ => None,
+                            })
+                            .collect();
+
+                        let reduce_dims: Vec<usize> =
+                            if let Some(ref src_shape) = gen.reshape_source_shape {
+                                // Find source dims not present in target
+                                src_shape
+                                    .dims
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(i, dim)| {
+                                        if let Dim::Named(name) = dim {
+                                            if !target_dim_names.contains(name) {
+                                                return Some(i);
+                                            }
+                                        }
+                                        None
+                                    })
+                                    .collect()
+                            } else {
+                                // Fallback: reduce trailing dims
+                                (reshape.dims.len()..4).collect()
+                            };
+
+                        if reduce_dims.len() == 1 {
+                            writeln!(
+                                output,
+                                "{}{} = {}.{}(dim={})",
+                                indent, result_var, source_var, method, reduce_dims[0]
+                            )
+                            .unwrap();
+                        } else {
+                            let dims_str = reduce_dims
+                                .iter()
+                                .map(|d| d.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            writeln!(
+                                output,
+                                "{}{} = {}.{}(dim=({},))",
+                                indent, result_var, source_var, method, dims_str
+                            )
+                            .unwrap();
+                        }
+                    }
+                    TransformStrategy::Neuron { .. } => {
+                        let module_name = format!("self._transform_{}", reshape.id);
+                        writeln!(
+                            output,
+                            "{}{} = {}({})",
+                            indent, result_var, module_name, source_var
+                        )
+                        .unwrap();
+                    }
+                },
+                Some(TransformAnnotation::Repeat(strategy)) => match strategy {
+                    TransformStrategy::Intrinsic(name) if name == "copy" => {
+                        let shape_args = reshape
+                            .dims
+                            .iter()
+                            .map(|d| dim_to_py(d))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        writeln!(
+                            output,
+                            "{}{} = {}.expand({})",
+                            indent, result_var, source_var, shape_args
+                        )
+                        .unwrap();
+                    }
+                    TransformStrategy::Neuron { .. } => {
+                        let module_name = format!("self._transform_{}", reshape.id);
+                        writeln!(
+                            output,
+                            "{}{} = {}({})",
+                            indent, result_var, module_name, source_var
+                        )
+                        .unwrap();
+                    }
+                    _ => {
+                        return Err(CodegenError::UnsupportedFeature(
+                            "unknown repeat strategy".to_string(),
+                        ));
+                    }
+                },
+            }
+
+            // Store result for when this reshape is used as a source
+            let key = endpoint_key_impl(endpoint);
+            call_to_result.insert(key, result_var.clone());
+
+            Ok(result_var)
+        }
     }
 }
+/// Convert a Value to Python code for dimension arithmetic (uses // for division)
+/// Resolves neuron parameter names to self.{name}
+fn value_to_python_int_div(gen: &CodeGenerator, value: &Value) -> String {
+    match value {
+        Value::Int(n) => n.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::String(s) => format!("\"{}\"", s),
+        Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
+        Value::Name(n) => {
+            if gen.current_neuron_params.contains(n) {
+                format!("self.{}", n)
+            } else if let Some(resolved) = gen.binding_context.get(n) {
+                resolved.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Value::Global(n) => n.clone(),
+        Value::BinOp { op, left, right } => {
+            let op_str = match op {
+                BinOp::Div => "//",
+                BinOp::Add => "+",
+                BinOp::Sub => "-",
+                BinOp::Mul => "*",
+                BinOp::Lt => "<",
+                BinOp::Gt => ">",
+                BinOp::Le => "<=",
+                BinOp::Ge => ">=",
+                BinOp::Eq => "==",
+                BinOp::Ne => "!=",
+            };
+            format!(
+                "{} {} {}",
+                value_to_python_int_div(gen, left),
+                op_str,
+                value_to_python_int_div(gen, right)
+            )
+        }
+        Value::Call { name, args, kwargs } => {
+            let args_str = args
+                .iter()
+                .map(|v| value_to_python_int_div(gen, v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let kwargs_str = if kwargs.is_empty() {
+                String::new()
+            } else {
+                let kw: Vec<String> = kwargs
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, value_to_python_int_div(gen, v)))
+                    .collect();
+                if args.is_empty() {
+                    kw.join(", ")
+                } else {
+                    format!(", {}", kw.join(", "))
+                }
+            };
+            format!("{}({}{})", name, args_str, kwargs_str)
+        }
+    }
+}
+
+/// Convert a DimExpr to Python code for dimension arithmetic (uses // for division)
+fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> String {
+    let op_str = match expr.op {
+        BinOp::Div => "//",
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        _ => "?",
+    };
+    let left = reshape_dim_ref_to_python(gen, &expr.left);
+    let right = reshape_dim_ref_to_python(gen, &expr.right);
+    format!("{} {} {}", left, op_str, right)
+}
+
+/// Convert a Dim (when used as part of a DimExpr in a reshape) to Python
+fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> String {
+    match dim {
+        Dim::Literal(n) => n.to_string(),
+        Dim::Named(n) => {
+            if gen.current_neuron_params.contains(n) {
+                format!("self.{}", n)
+            } else if let Some(resolved) = gen.binding_context.get(n) {
+                resolved.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Dim::Global(n) => n.clone(),
+        Dim::Expr(e) => dim_expr_to_python(gen, e),
+        Dim::Wildcard => "-1".to_string(),
+        Dim::Variadic(_) => "-1".to_string(),
+    }
+}
+
 /// Generate a runtime shape check condition and dimension bindings
 ///
 /// Returns a ShapeCheckResult containing:

@@ -107,6 +107,7 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
             format!("{}({};{})@{}", name, args_str, kwargs_str, id)
         }
         Endpoint::If(if_expr) => format!("if@{}", if_expr.id),
+        Endpoint::Reshape(r) => format!("reshape@{}", r.id),
         _ => format!("{:?}", endpoint),
     }
 }
@@ -165,7 +166,25 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // Tuple unpacking doesn't contain calls in current IR
         }
         Endpoint::Ref(_) => {}
-        Endpoint::Reshape(_) => todo!("fat arrow reshape"),
+        Endpoint::Reshape(reshape) => {
+            // Reshape with neuron annotation needs the neuron collected
+            if let Some(ref annotation) = reshape.annotation {
+                let strategy = match annotation {
+                    TransformAnnotation::Reduce(s) => s,
+                    TransformAnnotation::Repeat(s) => s,
+                };
+                if let TransformStrategy::Neuron { name, args, kwargs, .. } = strategy {
+                    // Create a synthetic Call endpoint for the neuron
+                    calls.push(Endpoint::Call {
+                        name: name.clone(),
+                        args: args.clone(),
+                        kwargs: kwargs.clone(),
+                        id: reshape.id,
+                        frozen: false,
+                    });
+                }
+            }
+        }
         // Endpoint::Unroll removed — expanded before codegen
     }
 }
