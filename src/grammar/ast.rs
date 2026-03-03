@@ -1163,7 +1163,9 @@ impl AstBuilder {
         inner.next(); // lparen
 
         // Parse call_args (contains wrapper name + extra args)
-        let call_args_pair = inner.next().unwrap();
+        let call_args_pair = inner.next().ok_or_else(|| {
+            crate::grammar::error::expected("call arguments after @wrap(", "end of input", 0)
+        })?;
         let (all_args, kwargs) = self.build_call_args(call_args_pair)?;
 
         // First arg must be the wrapper neuron name
@@ -1185,7 +1187,13 @@ impl AstBuilder {
         inner.next(); // colon
 
         // Now determine content: either ident (ref) or arrow (pipeline)
-        let next = inner.next().unwrap();
+        let next = inner.next().ok_or_else(|| {
+            crate::grammar::error::expected(
+                "identifier or '->' after @wrap colon",
+                "end of input",
+                0,
+            )
+        })?;
         let content = match next.as_rule() {
             Rule::ident => WrapContent::Ref(next.as_str().to_string()),
             Rule::arrow => {

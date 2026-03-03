@@ -63,7 +63,7 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Desugar @wrap annotations into standard Call endpoints
     // Must run before validation so validator only sees standard IR
-    desugar::desugar_wraps(program);
+    desugar::desugar_wraps(program)?;
 
     // Expand unroll constructs before any validation
     unroll::expand_unrolls(program)?;

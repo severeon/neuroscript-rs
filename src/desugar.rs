@@ -8,16 +8,24 @@ use crate::interfaces::*;
 
 /// Desugar all @wrap annotations in a program.
 /// Must be called after parsing but before validation.
-pub fn desugar_wraps(program: &mut Program) {
+pub fn desugar_wraps(program: &mut Program) -> Result<(), Vec<ValidationError>> {
+    let mut errors = Vec::new();
     let neuron_names: Vec<String> = program.neurons.keys().cloned().collect();
     for name in &neuron_names {
         if let Some(neuron) = program.neurons.get_mut(name) {
-            desugar_neuron_wraps(neuron);
+            if let Err(mut errs) = desugar_neuron_wraps(neuron) {
+                errors.append(&mut errs);
+            }
         }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
     }
 }
 
-fn desugar_neuron_wraps(neuron: &mut NeuronDef) {
+fn desugar_neuron_wraps(neuron: &mut NeuronDef) -> Result<(), Vec<ValidationError>> {
     if let NeuronBody::Graph {
         ref mut context_bindings,
         ref mut connections,
@@ -26,32 +34,42 @@ fn desugar_neuron_wraps(neuron: &mut NeuronDef) {
     {
         let mut new_bindings = Vec::new();
         let mut wrap_counter = 0;
+        let mut errors = Vec::new();
 
         for conn in connections.iter_mut() {
-            desugar_endpoint_wraps(
+            if let Err(e) = desugar_endpoint_wraps(
                 &mut conn.source,
                 &mut new_bindings,
                 &mut wrap_counter,
-            );
-            desugar_endpoint_wraps(
+            ) {
+                errors.push(e);
+            }
+            if let Err(e) = desugar_endpoint_wraps(
                 &mut conn.destination,
                 &mut new_bindings,
                 &mut wrap_counter,
-            );
+            ) {
+                errors.push(e);
+            }
         }
 
         // Prepend synthesized bindings to context
         if !new_bindings.is_empty() {
             context_bindings.splice(0..0, new_bindings);
         }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
     }
+    Ok(())
 }
 
 fn desugar_endpoint_wraps(
     endpoint: &mut Endpoint,
     new_bindings: &mut Vec<Binding>,
     counter: &mut usize,
-) {
+) -> Result<(), ValidationError> {
     match endpoint {
         Endpoint::Wrap(wrap_expr) => {
             let wrap_id = *counter;
@@ -85,35 +103,37 @@ fn desugar_endpoint_wraps(
                     // for the __sequential__ pseudo-neuron.
                     // Filter out port references (in/out) that the parser may have
                     // captured from the surrounding pipeline context.
-                    let seq_args: Vec<Value> = pipeline_endpoints
-                        .iter()
-                        .filter_map(|ep| match ep {
+                    let mut seq_args: Vec<Value> = Vec::new();
+                    for ep in pipeline_endpoints {
+                        match ep {
                             Endpoint::Call {
                                 name,
                                 args,
                                 kwargs,
                                 ..
-                            } => Some(Value::Call {
-                                name: name.clone(),
-                                args: args.clone(),
-                                kwargs: kwargs.clone(),
-                            }),
+                            } => {
+                                seq_args.push(Value::Call {
+                                    name: name.clone(),
+                                    args: args.clone(),
+                                    kwargs: kwargs.clone(),
+                                });
+                            }
                             Endpoint::Ref(port_ref) => {
                                 // Skip port references (in/out) -- they are
                                 // pipeline routing, not sequential members
-                                if port_ref.node == "in" || port_ref.node == "out" {
-                                    None
-                                } else {
-                                    Some(Value::Name(port_ref.node.clone()))
+                                if port_ref.node != "in" && port_ref.node != "out" {
+                                    seq_args.push(Value::Name(port_ref.node.clone()));
                                 }
                             }
-                            other => panic!(
-                                "@wrap pipeline form only supports Call and Ref endpoints, \
-                                 got: {:?}",
-                                other
-                            ),
-                        })
-                        .collect();
+                            other => {
+                                return Err(ValidationError::Custom(format!(
+                                    "@wrap pipeline form only supports Call and Ref endpoints, \
+                                     got: {:?}",
+                                    other
+                                )));
+                            }
+                        }
+                    }
 
                     new_bindings.push(Binding {
                         name: anon_name.clone(),
@@ -142,24 +162,25 @@ fn desugar_endpoint_wraps(
         Endpoint::Match(match_expr) => {
             for arm in &mut match_expr.arms {
                 for ep in &mut arm.pipeline {
-                    desugar_endpoint_wraps(ep, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &mut if_expr.branches {
                 for ep in &mut branch.pipeline {
-                    desugar_endpoint_wraps(ep, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
                 }
             }
             if let Some(else_branch) = &mut if_expr.else_branch {
                 for ep in else_branch {
-                    desugar_endpoint_wraps(ep, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
                 }
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -217,7 +238,7 @@ mod tests {
         };
         program.neurons.insert("Test".to_string(), neuron);
 
-        desugar_wraps(&mut program);
+        desugar_wraps(&mut program).unwrap();
 
         let test_neuron = program.neurons.get("Test").unwrap();
         if let NeuronBody::Graph { connections, .. } = &test_neuron.body {
@@ -303,7 +324,7 @@ mod tests {
         };
         program.neurons.insert("Test".to_string(), neuron);
 
-        desugar_wraps(&mut program);
+        desugar_wraps(&mut program).unwrap();
 
         let test_neuron = program.neurons.get("Test").unwrap();
         if let NeuronBody::Graph {

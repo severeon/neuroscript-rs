@@ -122,7 +122,7 @@ class HCWidth(nn.Module):
         layer_in = torch.einsum('...jd, ...j -> ...d', x, alpha[..., 0, :])
 
         # state[i] = sum_j(alpha[i+1, j] * x[..., j, :])
-        state = torch.einsum('...jd, ...ij -> ...id', x, alpha[..., 1:, :].transpose(-2, -1))
+        state = torch.einsum('...jd, ...ij -> ...id', x, alpha[..., 1:, :])
 
         return layer_in, state
 
