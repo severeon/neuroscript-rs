@@ -6,7 +6,7 @@ module.exports = function neuronDocsPlugin(context) {
     name: 'neuron-docs-plugin',
 
     async contentLoaded({ actions }) {
-      const { createData } = actions;
+      const { createData, setGlobalData } = actions;
       const stdlibDir = path.resolve(context.siteDir, '..', 'stdlib');
 
       let files;
@@ -46,7 +46,9 @@ module.exports = function neuronDocsPlugin(context) {
         }
       }
 
-      await createData('neuron-docs.json', JSON.stringify({ neurons: docs, sources }));
+      const data = { neurons: docs, sources };
+      await createData('neuron-docs.json', JSON.stringify(data));
+      setGlobalData(data);
     },
   };
 };

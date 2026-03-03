@@ -1,23 +1,19 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
+import { usePluginData } from '@docusaurus/useGlobalData';
 import { NEURONS } from '../neuron-genealogy-data';
 import NeuronControls from './NeuronControls';
 import NeuronList from './NeuronList';
 import NeuronDetail from './NeuronDetail';
+import { LEVEL_NAMES } from './constants';
 import '../../css/neuron-genealogy.css';
 
-// Try to import build-time docs data (may not exist during dev)
-let neuronDocsData = { neurons: {}, sources: {} };
-try {
-  neuronDocsData = require('@site/.docusaurus/neuron-docs-plugin/default/neuron-docs.json');
-} catch (e) {
-  // Plugin data not available yet
-}
-
 function NeuronGenealogyInner() {
+  const neuronDocsData = usePluginData('neuron-docs-plugin') ?? { neurons: {}, sources: {} };
+
   // ---- State ----
   const [selectedNeuron, setSelectedNeuron] = useState(null);
-  const [activeLevels, setActiveLevels] = useState(() => new Set([0, 1, 2, 3, 4, 5]));
+  const [activeLevels, setActiveLevels] = useState(() => new Set(LEVEL_NAMES.map((_, i) => i)));
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -128,7 +124,7 @@ function NeuronGenealogyInner() {
       ...entry,
       source: neuronDocsData.sources?.[entry.sourceFile] || null,
     };
-  }, [selectedNeuron]);
+  }, [selectedNeuron, neuronDocsData]);
   const selectedRequiredBy = selectedNeuron ? (requiredByMap.get(selectedNeuron) || []) : [];
 
   // ---- Render ----

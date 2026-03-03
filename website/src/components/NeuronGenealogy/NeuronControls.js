@@ -23,9 +23,9 @@ export default function NeuronControls({
     return () => clearTimeout(timer);
   }, [localSearch, onSearchChange]);
 
-  // Sync external changes back to local
+  // Sync external changes back to local (guard prevents redundant setState)
   useEffect(() => {
-    setLocalSearch(searchQuery);
+    if (searchQuery !== localSearch) setLocalSearch(searchQuery);
   }, [searchQuery]);
 
   return (

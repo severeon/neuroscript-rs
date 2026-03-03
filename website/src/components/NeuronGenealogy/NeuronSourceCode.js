@@ -1,26 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import CodeBlock from '@theme/CodeBlock';
 
 export default function NeuronSourceCode({ source, sourceFile }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!source) return null;
 
   return (
-    <div className="ng-source-section">
-      <h3
-        role="button"
-        tabIndex={0}
-        onClick={() => setExpanded(!expanded)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-      >
-        {expanded ? '\u25BE' : '\u25B8'} Source Code
-      </h3>
+    <details className="ng-source-section">
+      <summary className="ng-source-toggle">Source Code</summary>
       {sourceFile && <div className="ng-source-path">{sourceFile}</div>}
-      {expanded && (
-        <CodeBlock language="text">{source}</CodeBlock>
-      )}
-    </div>
+      <CodeBlock language="python">{source}</CodeBlock>
+    </details>
   );
 }

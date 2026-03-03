@@ -28,7 +28,7 @@ export default function NeuronList({ neurons, selectedNeuron, onSelectNeuron }) 
 
   return (
     <div className="ng-list-panel" ref={listRef}>
-      {[0, 1, 2, 3, 4, 5].map((level) => {
+      {Array.from({ length: LEVEL_NAMES.length }, (_, i) => i).map((level) => {
         const items = groups.get(level);
         if (!items || items.length === 0) return null;
         return (

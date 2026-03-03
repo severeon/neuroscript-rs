@@ -417,12 +417,13 @@
   margin-top: 20px;
   margin-bottom: 16px;
 }
-.neuron-genealogy .ng-source-section h3 {
+.neuron-genealogy .ng-source-toggle {
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
-  margin-top: 0;
   color: var(--ng-text);
+  cursor: pointer;
+  user-select: none;
 }
 .neuron-genealogy .ng-source-path {
   display: inline-block;

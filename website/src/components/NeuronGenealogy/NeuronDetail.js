@@ -22,8 +22,8 @@ export default function NeuronDetail({
   }
 
   const deps = neuron.dependencies || [];
-  const depNeurons = deps.map(d => neuronMap.get(d) || { name: d, level: 0, status: 'planned' });
-  const reqByNeurons = requiredBy.map(d => neuronMap.get(d) || { name: d, level: 0, status: 'planned' });
+  const depNeurons = deps.map(d => neuronMap.get(d) || { name: d, level: 0, status: 'planned', category: 'unknown' });
+  const reqByNeurons = requiredBy.map(d => neuronMap.get(d) || { name: d, level: 0, status: 'planned', category: 'unknown' });
 
   return (
     <div className="ng-detail-panel">
@@ -56,12 +56,15 @@ export default function NeuronDetail({
         <div className="ng-doc-section">
           <h3>Documentation</h3>
           <div className="ng-detail-desc">
-            {neuronDocs.docComment.split('\n').map((line, i) => (
-              <React.Fragment key={i}>
-                {line}
-                {i < neuronDocs.docComment.split('\n').length - 1 && <br />}
-              </React.Fragment>
-            ))}
+            {(() => {
+              const lines = neuronDocs.docComment.split('\n');
+              return lines.map((line, i) => (
+                <React.Fragment key={i}>
+                  {line}
+                  {i < lines.length - 1 && <br />}
+                </React.Fragment>
+              ));
+            })()}
           </div>
         </div>
       )}
