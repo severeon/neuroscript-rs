@@ -1,0 +1,15 @@
+# Hyper-Connected Transformer Block
+# Uses learnable hyper-connections instead of fixed residual connections.
+# Reference: Zhu et al., "Hyper-Connections" (ICLR 2025)
+
+neuron HCTransformerBlock(dim, heads, d_ff, n=4, layer_idx=0):
+    in: [*batch, n, dim]
+    out: [*batch, n, dim]
+    context:
+        attn = MultiHeadSelfAttention(dim, heads)
+        ffn_block = FFN(dim, d_ff)
+    graph:
+        in ->
+            HyperConnect(attn, n, dim, layer_idx * 2)
+            HyperConnect(ffn_block, n, dim, layer_idx * 2 + 1)
+            out

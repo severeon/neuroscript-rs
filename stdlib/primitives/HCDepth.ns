@@ -1,0 +1,25 @@
+/// Depth Connection (Hyper-Connections)
+///
+/// Merges the output of a wrapped layer back into the hyper hidden state.
+/// Part of the Hyper-Connections framework (Zhu et al., ICLR 2025 --
+/// arXiv:2409.19606v3).
+///
+/// Parameters:
+/// - n: Number of hidden copies (expansion factor)
+/// - dim: Model dimension
+/// - dynamic: If true, use input-dependent mixing weights (default: true)
+///
+/// Shape Contract:
+/// - Input layer_out: [*batch, dim] output from the wrapped layer
+/// - Input state: [*batch, n, dim] current hidden state
+/// - Output: [*batch, n, dim] updated hidden state after depth merge
+///
+/// Notes:
+/// - Concatenates layer_out with state to form (n+1) vectors
+/// - Applies learnable depth mixing matrix to produce n output vectors
+/// - Replaces the simple addition in standard residual connections
+neuron HCDepth(n, dim, dynamic=true):
+    in layer_out: [*batch, dim]
+    in state: [*batch, n, dim]
+    out: [*batch, n, dim]
+    impl: core,connections/HCDepth

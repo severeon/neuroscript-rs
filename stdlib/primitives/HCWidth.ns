@@ -1,0 +1,27 @@
+/// Width Connection (Hyper-Connections)
+///
+/// Mixes n hidden vectors via a learnable linear combination, then extracts
+/// the layer input and updated hidden state.  Part of the Hyper-Connections
+/// framework (Zhu et al., ICLR 2025 -- arXiv:2409.19606v3).
+///
+/// Parameters:
+/// - n: Number of hidden copies (expansion factor)
+/// - dim: Model dimension
+/// - layer_idx: Index of the current layer (for per-layer parameters)
+/// - dynamic: If true, use input-dependent mixing weights (default: true)
+///
+/// Shape Contract:
+/// - Input: [*batch, n, dim] stacked hidden vectors
+/// - Output layer_in: [*batch, dim] extracted input for the wrapped layer
+/// - Output state: [*batch, n, dim] updated hidden state
+///
+/// Notes:
+/// - Learns a (n+1) x n mixing matrix (width connection)
+/// - First row of the mixed output becomes layer_in
+/// - Remaining n rows become the new hidden state
+/// - Replaces fixed residual skip connections with learnable ones
+neuron HCWidth(n, dim, layer_idx, dynamic=true):
+    in: [*batch, n, dim]
+    out layer_in: [*batch, dim]
+    out state: [*batch, n, dim]
+    impl: core,connections/HCWidth

@@ -247,6 +247,17 @@ impl<'a> CodeGenerator<'a> {
 
         writeln!(output, "    def forward(self, {}):", input_params).unwrap();
 
+        // Register Neuron-typed params as callable modules so that bare
+        // references in the graph (e.g., `layer_in -> layer -> layer_out`)
+        // generate proper `self.layer(...)` calls in the forward pass.
+        for param in &neuron.params {
+            if param.type_annotation.as_ref() == Some(&ParamType::Neuron) {
+                self.var_names
+                    .entry(param.name.clone())
+                    .or_insert_with(|| format!("self.{}", param.name));
+            }
+        }
+
         match &neuron.body {
             NeuronBody::Primitive(_impl_ref) => {
                 // Primitive neurons just pass through
