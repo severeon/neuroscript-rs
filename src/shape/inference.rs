@@ -547,6 +547,10 @@ impl ShapeInferenceEngine {
                 let output_shape = reshape.to_shape();
                 ctx.call_outputs.insert(reshape.id, vec![output_shape]);
             }
+
+            Endpoint::Wrap(_) => {
+                // @wrap is desugared before shape inference
+            }
         }
 
         Ok(())
@@ -1021,6 +1025,7 @@ impl ShapeInferenceEngine {
                         .join(", ")
                 )
             }
+            Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
             // Endpoint::Unroll removed
         }
     }
@@ -1177,6 +1182,10 @@ fn resolve_match_endpoint(
                 Ok(vec![reshape.to_shape()])
             }
         }
+        Endpoint::Wrap(_) => {
+            // @wrap is desugared before shape inference
+            Ok(vec![])
+        }
         // Endpoint::Unroll removed — expanded before shape inference
     }
 }
@@ -1260,6 +1269,10 @@ fn resolve_endpoint_shape(
             } else {
                 Ok(vec![reshape.to_shape()])
             }
+        }
+        Endpoint::Wrap(_) => {
+            // @wrap is desugared before shape inference
+            Ok(vec![])
         }
         // Endpoint::Unroll removed
     }

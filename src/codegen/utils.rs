@@ -118,6 +118,7 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
         }
         Endpoint::If(if_expr) => format!("if@{}", if_expr.id),
         Endpoint::Reshape(r) => format!("reshape@{}", r.id),
+        Endpoint::Wrap(w) => format!("wrap@{}", w.id),
         _ => format!("{:?}", endpoint),
     }
 }
@@ -181,6 +182,9 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // collect_reshape_transforms in instantiation.rs (as self._transform_{id}).
             // Do NOT create synthetic Call endpoints here — that would cause
             // duplicate module instantiation.
+        }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before codegen
         }
         // Endpoint::Unroll removed — expanded before codegen
     }

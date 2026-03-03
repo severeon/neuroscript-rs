@@ -203,6 +203,7 @@ fn collect_calls(endpoint: &Endpoint, called: &mut HashSet<String>) {
         }
         Endpoint::Ref(_) => {}
         Endpoint::Reshape(_) => {} // Reshape is a pure data transform — no neuron calls
+        Endpoint::Wrap(_) => {}    // @wrap is desugared before analysis
     }
 }
 
@@ -413,6 +414,7 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
         Endpoint::Match(_) => "match { ... }".to_string(),
         Endpoint::If(_) => "if { ... }".to_string(),
         Endpoint::Reshape(r) => format!("=> {}", r),
+        Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
     }
 }
 
@@ -453,6 +455,6 @@ fn collect_match_exprs(neuron_name: &str, endpoint: &Endpoint, result: &mut Vec<
                 }
             }
         }
-        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Reshape(_) => {}
+        Endpoint::Tuple(_) | Endpoint::Call { .. } | Endpoint::Ref(_) | Endpoint::Reshape(_) | Endpoint::Wrap(_) => {}
     }
 }

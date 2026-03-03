@@ -376,6 +376,10 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
                 }
             }
         }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before codegen
+            todo!("@wrap should be desugared before codegen")
+        }
         // Endpoint::Unroll removed — expanded before codegen
     }
 }

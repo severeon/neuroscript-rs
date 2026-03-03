@@ -238,6 +238,9 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::Wrap(_) => {
+                todo!("@wrap should be desugared before codegen")
+            }
         };
 
         // Determine source output count for implicit fork detection
@@ -1207,6 +1210,9 @@ fn process_destination(
             call_to_result.insert(key, result_var.clone());
 
             Ok(result_var)
+        }
+        Endpoint::Wrap(_) => {
+            todo!("@wrap should be desugared before codegen")
         }
     }
 }

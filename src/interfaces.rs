@@ -199,6 +199,8 @@ pub enum Endpoint {
     If(IfExpr),
     /// Shape transformation: => [shape] or => @annotation [shape]
     Reshape(ReshapeExpr),
+    /// Wrap annotation: @wrap(Wrapper, args): content
+    Wrap(WrapExpr),
 }
 
 /// A connection: source -> destination
@@ -275,6 +277,30 @@ pub struct IfExpr {
     pub branches: Vec<IfBranch>,            // if and elifs
     pub else_branch: Option<Vec<Endpoint>>, // optional else
     pub id: usize,
+}
+
+/// A @wrap annotation expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrapExpr {
+    /// The higher-order neuron to wrap with
+    pub wrapper_name: String,
+    /// Arguments to the wrapper (excluding the first Neuron-typed param)
+    pub wrapper_args: Vec<Value>,
+    /// Keyword arguments to the wrapper
+    pub wrapper_kwargs: Vec<Kwarg>,
+    /// The wrapped content: either a reference to an existing binding or an anonymous pipeline
+    pub content: WrapContent,
+    /// Unique ID for deduplication
+    pub id: usize,
+}
+
+/// What @wrap wraps
+#[derive(Debug, Clone, PartialEq)]
+pub enum WrapContent {
+    /// Reference form: @wrap(Wrapper, args): existing_binding
+    Ref(String),
+    /// Pipeline form: @wrap(Wrapper, args): -> X -> Y -> Z
+    Pipeline(Vec<Endpoint>),
 }
 
 /// A reshape expression: [dim_spec, dim_spec, ...]

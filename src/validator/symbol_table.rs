@@ -423,6 +423,10 @@ where
                 variadic: false,
             }])
         }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before validation
+            Ok(vec![])
+        }
     }
 }
 
@@ -573,6 +577,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
         Endpoint::Reshape(_) => "Reshape".to_string(),
+        Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
     }
 }
 
@@ -641,6 +646,7 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
                     .join(", ")
             )
         }
+        Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
     }
 }
 
