@@ -307,10 +307,11 @@ where
                 p.name == *name && p.type_annotation.as_ref() == Some(&ParamType::Neuron)
             });
             if is_neuron_param {
-                // Neuron-typed param: return a dummy port to allow validation to continue
+                // Neuron-typed param: return a variadic wildcard port to allow validation
+                // A variadic shape [*_] is compatible with any other shape
                 return Ok(vec![Port {
                     name: "default".to_string(),
-                    shape: Shape { dims: vec![] },
+                    shape: Shape { dims: vec![Dim::Variadic("_".to_string())] },
                     variadic: false,
                 }]);
             }

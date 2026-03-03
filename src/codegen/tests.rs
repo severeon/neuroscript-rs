@@ -1108,3 +1108,55 @@ fn test_codegen_fat_arrow_reshape_in_match_arm() {
         "should have class definition"
     );
 }
+
+#[test]
+fn test_higher_order_neuron_passthrough() {
+    let source = r#"
+neuron Wrapper(layer: Neuron, dim):
+    in: [*, dim]
+    out: [*, dim]
+    context:
+        inner = layer
+    graph:
+        in -> inner -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let code = generate_pytorch(&program, "Wrapper").unwrap();
+    assert!(
+        code.contains("self.inner = layer"),
+        "Expected pass-through assignment, got:\n{}",
+        code
+    );
+    assert!(
+        !code.contains("from neuroscript_runtime"),
+        "Should not generate import for neuron param:\n{}",
+        code
+    );
+}
+
+#[test]
+fn test_higher_order_neuron_construct() {
+    let source = r#"
+neuron Wrapper(layer: Neuron, dim):
+    in: [*, dim]
+    out: [*, dim]
+    context:
+        inner = layer(dim)
+    graph:
+        in -> inner -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let code = generate_pytorch(&program, "Wrapper").unwrap();
+    assert!(
+        code.contains("self.inner = layer(dim)"),
+        "Expected construct-from-type, got:\n{}",
+        code
+    );
+    assert!(
+        !code.contains("from neuroscript_runtime"),
+        "Should not generate import for neuron param:\n{}",
+        code
+    );
+}

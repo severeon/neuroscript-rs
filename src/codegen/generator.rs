@@ -132,6 +132,7 @@ impl<'a> CodeGenerator<'a> {
             var_names: std::collections::HashMap::new(),
             call_to_module: std::collections::HashMap::new(),
             current_neuron_params: HashSet::new(),
+            neuron_typed_params: HashSet::new(),
             binding_context: std::collections::HashMap::new(),
             lazy_bindings: std::collections::HashMap::new(),
             inference_ctx,
@@ -145,6 +146,12 @@ impl<'a> CodeGenerator<'a> {
     /// Generate Python code for a neuron
     fn generate_neuron(&mut self, neuron: &NeuronDef) -> Result<String, CodegenError> {
         self.current_neuron_params = neuron.params.iter().map(|p| p.name.clone()).collect();
+        self.neuron_typed_params = neuron
+            .params
+            .iter()
+            .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
+            .map(|p| p.name.clone())
+            .collect();
         let mut output = String::new();
 
         // Generate class definition

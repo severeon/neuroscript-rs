@@ -1,0 +1,119 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BatchMatMul:
+  inputs:
+    left: [batch, i, j]
+    right: [batch, j, k]
+  outputs:
+    default: [batch, i, k]
+  graph:
+    (left, right) -> Einsum#14("bij,bjk->bik")
+    Einsum#14("bij,bjk->bik") -> out
+
+neuron ExpandDim:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, c, 1, h, w]
+  graph:
+    in => @repeat(copy) [b, c, 1, h, w]
+    @repeat(copy) [b, c, 1, h, w] -> out
+
+neuron FlattenTail:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, flat]
+  graph:
+    in => [b, others]
+    [b, others] -> out
+
+neuron GlobalAvgPool:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, c]
+  graph:
+    in => @reduce(mean) [b, c]
+    @reduce(mean) [b, c] -> out
+
+neuron HeadReshapePipeline(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in => [batch, seq, heads, dh=(dim / heads)]
+    [batch, seq, heads, dh=(dim / heads)] => [batch, heads, seq, dh]
+    [batch, heads, seq, dh] -> Linear#11(dh, dh)
+    Linear#11(dh, dh) => [batch, seq, heads, dh]
+    [batch, seq, heads, dh] => [batch, seq, dim]
+    [batch, seq, dim] -> out
+
+neuron MHASelfScores(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, heads, seq, seq]
+  graph:
+    in -> (q, k)
+    q => [batch, seq, heads, dh=(dim / heads)]
+    [batch, seq, heads, dh=(dim / heads)] => [batch, heads, seq, dh]
+    [batch, heads, seq, dh] -> q_heads
+    k => [batch, seq, heads, dh=(dim / heads)]
+    [batch, seq, heads, dh=(dim / heads)] => [batch, heads, seq, dh]
+    [batch, heads, seq, dh] -> k_heads
+    (q_heads, k_heads) -> Einsum#20("bhqd,bhkd->bhqk")
+    Einsum#20("bhqd,bhkd->bhqk") -> out
+
+neuron MultiHeadReshape(dim, heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, heads, seq, (dim / heads)]
+  graph:
+    in => [batch, seq, heads, dh=(dim / heads)]
+    [batch, seq, heads, dh=(dim / heads)] => [batch, heads, seq, dh]
+    [batch, heads, seq, dh] -> out
+
+neuron SelfAttentionScores:
+  inputs:
+    default: [batch, heads, seq, d_head]
+  outputs:
+    default: [batch, heads, seq, seq]
+  graph:
+    in -> (q, k)
+    (q, k) -> Einsum#15("bhqd,bhkd->bhqk")
+    Einsum#15("bhqd,bhkd->bhqk") -> out
+
+neuron SeqPool:
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in => @reduce(mean) [batch, dim]
+    @reduce(mean) [batch, dim] -> out
+
+neuron TransposeHW:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, c, w, h]
+  graph:
+    in => [b, c, w, h]
+    [b, c, w, h] -> out
+
+neuron VitFlatten:
+  inputs:
+    default: [b, c, h, w]
+  outputs:
+    default: [b, hw, c]
+  graph:
+    in => [b, c, hw=(h * w)]
+    [b, c, hw=(h * w)] => [b, hw, c]
+    [b, hw, c] -> out

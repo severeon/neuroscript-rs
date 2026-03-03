@@ -112,6 +112,9 @@ pub struct CodeGenerator<'a> {
     /// Parameters of the current neuron being generated
     pub current_neuron_params: HashSet<String>,
 
+    /// Names of parameters with `: Neuron` type annotation (higher-order neuron params)
+    pub neuron_typed_params: HashSet<String>,
+
     /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
     /// Used to resolve dimension references in match arm pipelines
     pub binding_context: HashMap<String, String>,

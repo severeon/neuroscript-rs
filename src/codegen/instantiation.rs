@@ -66,6 +66,38 @@ pub(super) fn generate_module_instantiations(
         let args = &binding.args;
         let kwargs = &binding.kwargs;
 
+        // Check if the call target is a Neuron-typed parameter
+        if gen.neuron_typed_params.contains(name) {
+            // Neuron-typed param: register as submodule without importing
+            match &binding.scope {
+                Scope::Instance { lazy: false } => {
+                    if args.is_empty() && kwargs.is_empty() {
+                        // Pass-through: the param is already an nn.Module instance
+                        writeln!(output, "        self.{} = {}", module_name, name).unwrap();
+                    } else {
+                        // Construct from type: the param is a class reference
+                        let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
+                        writeln!(
+                            output,
+                            "        self.{} = {}({}{})",
+                            module_name, name, args_str, kwargs_str
+                        )
+                        .unwrap();
+                    }
+                    gen.var_names
+                        .insert(module_name.clone(), format!("self.{}", module_name));
+                    instantiated_count += 1;
+                }
+                _ => {
+                    writeln!(output, "        self.{} = {}", module_name, name).unwrap();
+                    gen.var_names
+                        .insert(module_name.clone(), format!("self.{}", module_name));
+                    instantiated_count += 1;
+                }
+            }
+            continue;
+        }
+
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
             neuron.is_primitive()
         } else {
@@ -268,7 +300,7 @@ pub(super) fn generate_module_instantiations(
             if neuron.is_primitive() {
                 gen.used_primitives.insert(name.clone());
             }
-        } else {
+        } else if !gen.neuron_typed_params.contains(name) {
             gen.used_primitives.insert(name.clone());
         }
 
