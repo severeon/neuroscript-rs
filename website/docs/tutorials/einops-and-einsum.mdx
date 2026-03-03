@@ -197,7 +197,7 @@ The compiler instantiates `AttentionPool` and calls it to perform the reduction,
         in => @repeat(copy) [b, c, 1, h, w] -> out`}
 />
 
-The compiler sees a new dimension (size `1`) that doesn't exist in the source and generates `unsqueeze` + `expand`.
+The compiler sees a new dimension (size `1`) that doesn't exist in the source and generates `unsqueeze` + `expand`. Note that PyTorch's `expand` creates a **view** — no data is copied in memory. In-place operations on the expanded tensor will raise an error; call `.contiguous()` first if you need a true copy.
 
 ---
 
@@ -212,7 +212,8 @@ Fat arrows compose naturally with neuron calls in a pipeline. You can reshape, p
     in: [batch, seq, dim]
     out: [batch, seq, dim]
     graph:
-        in => [batch, seq, heads, dh=dim/heads]
+        in ->
+            => [batch, seq, heads, dh=dim/heads]
             => [batch, heads, seq, dh]
             Linear(dh, dh) ->
             => [batch, seq, heads, dh]
@@ -227,7 +228,7 @@ This is a full reshape round-trip:
 4. Move `heads` back after `seq`
 5. Merge `heads` and `dh` back into `dim`
 
-All shape transitions are checked at compile time.
+All shape transitions are checked at compile time. Note that dimension bindings like `dh=dim/heads` are tracked by name, but the arithmetic constraint itself is not yet propagated through shape inference — the compiler treats `dh` as a free variable. Full end-to-end checking of binding math is a known TODO.
 
 ---
 
@@ -272,14 +273,14 @@ Einsum is a neuron with an equation parameter. Multi-input operations receive th
   title="Batched Matrix Multiply"
   description="Einsum for batched matrix multiplication using Einstein notation"
   initialCode={`neuron BatchMatMul:
-    in: [batch, i, j]
-    out: [batch, i, j]
+    in left: [batch, i, j]
+    in right: [batch, j, k]
+    out: [batch, i, k]
     graph:
-        in -> (a, b)
-        (a, b) -> Einsum(\`bij,bjk->bik\`) -> out`}
+        (left, right) -> Einsum(\`bij,bjk->bik\`) -> out`}
 />
 
-The input is forked into `a` and `b`, then both are passed as a tuple to `Einsum`. The equation `` `bij,bjk->bik` `` contracts over the `j` index — that's matrix multiplication.
+Batched matmul needs two distinct inputs — `left` with shape `[batch, i, j]` and `right` with shape `[batch, j, k]`. The equation `` `bij,bjk->bik` `` contracts over the `j` index, producing `[batch, i, k]`.
 
 ### Attention Scores
 
