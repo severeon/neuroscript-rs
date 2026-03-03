@@ -37,6 +37,7 @@ macro_rules! embedded_primitives {
 embedded_primitives! {
     ACTIVATIONS,    "activations"    => "activations.py",
     ATTENTION,      "attention"      => "attention.py",
+    CONNECTIONS,    "connections"    => "connections.py",
     CONVOLUTIONS,   "convolutions"   => "convolutions.py",
     EMBEDDINGS,     "embeddings"     => "embeddings.py",
     LINEAR,         "linear"         => "linear.py",

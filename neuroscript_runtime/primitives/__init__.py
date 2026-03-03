@@ -92,6 +92,14 @@ from neuroscript_runtime.primitives.pooling import (
 # Debug/Logging
 from neuroscript_runtime.primitives.logging import Log
 
+# Connections (Hyper-Connections)
+from neuroscript_runtime.primitives.connections import (
+    HyperExpand,
+    HyperCollapse,
+    HCWidth,
+    HCDepth,
+)
+
 __all__ = [
     "Linear",
     "GELU",
@@ -155,4 +163,9 @@ __all__ = [
     "GlobalMaxPool",
     # Debug/Logging
     "Log",
+    # Connections (Hyper-Connections)
+    "HyperExpand",
+    "HyperCollapse",
+    "HCWidth",
+    "HCDepth",
 ]

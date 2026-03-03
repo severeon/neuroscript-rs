@@ -665,6 +665,43 @@ impl StdlibRegistry {
                 "Debug logging with colored output and tensor info (pass-through)",
             ),
         );
+
+        // Level 0: Connections (Hyper-Connections)
+        self.register(
+            "HyperExpand",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.connections",
+                "HyperExpand",
+                "Expand single hidden to n copies for hyper-connections",
+            ),
+        );
+
+        self.register(
+            "HyperCollapse",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.connections",
+                "HyperCollapse",
+                "Collapse n copies via sum for hyper-connections",
+            ),
+        );
+
+        self.register(
+            "HCWidth",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.connections",
+                "HCWidth",
+                "Width connection for hyper-connections (mix hidden copies)",
+            ),
+        );
+
+        self.register(
+            "HCDepth",
+            ImplRef::with_desc(
+                "neuroscript_runtime.primitives.connections",
+                "HCDepth",
+                "Depth connection for hyper-connections (merge layer output)",
+            ),
+        );
     }
 
     /// Register a primitive neuron implementation.
