@@ -24,7 +24,7 @@ c_ij = Σ_k  a_ik * b_kj
 
 you simply write `c_ij = a_ik b_kj` — the repeated `k` index tells you to sum over it. This **Einstein summation convention** became standard in physics and mathematics.
 
-In 2004, NumPy brought this idea to programming with `numpy.einsum`. PyTorch, TensorFlow, and JAX all followed with their own `einsum` functions. The key insight: a short string like `"bij,bjk->bik"` can express matrix multiplication, transposition, trace, outer products, and dozens of other operations in a single call.
+In 2011, NumPy 1.6 brought this idea to programming with `numpy.einsum`. PyTorch, TensorFlow, and JAX all followed with their own `einsum` functions. The key insight: a short string like `"bij,bjk->bik"` can express matrix multiplication, transposition, trace, outer products, and dozens of other operations in a single call.
 
 ### Einops (2018)
 
@@ -91,6 +91,10 @@ Here's what happens step by step:
 3. Second `=>` reorders to `[batch, heads, seq, dh]`
 
 This is the reshape that every multi-head attention implementation needs — expressed in one line.
+
+:::note Binding expressions and shape inference
+Dimension bindings like `dh=dim/heads` are tracked by name, but the arithmetic constraint is not yet propagated through shape inference — the compiler treats `dh` as a free variable. Full end-to-end checking of binding math is a known TODO.
+:::
 
 ### Merging Dimensions
 
@@ -197,7 +201,11 @@ The compiler instantiates `AttentionPool` and calls it to perform the reduction,
         in => @repeat(copy) [b, c, 1, h, w] -> out`}
 />
 
-The compiler sees a new dimension (size `1`) that doesn't exist in the source and generates `unsqueeze` + `expand`. Note that PyTorch's `expand` creates a **view** — no data is copied in memory. In-place operations on the expanded tensor will raise an error; call `.contiguous()` first if you need a true copy.
+The compiler sees a new dimension (size `1`) that doesn't exist in the source and generates `unsqueeze` + `expand`.
+
+:::caution @repeat(copy) creates a view, not a copy
+Despite the name, PyTorch's `expand` creates a **view** — no data is copied in memory. In-place operations on the expanded tensor will raise an error; call `.contiguous()` first if you need a true copy.
+:::
 
 ---
 
@@ -228,7 +236,7 @@ This is a full reshape round-trip:
 4. Move `heads` back after `seq`
 5. Merge `heads` and `dh` back into `dim`
 
-All shape transitions are checked at compile time. Note that dimension bindings like `dh=dim/heads` are tracked by name, but the arithmetic constraint itself is not yet propagated through shape inference — the compiler treats `dh` as a free variable. Full end-to-end checking of binding math is a known TODO.
+All shape transitions are checked at compile time (see the [note above](#splitting-dimensions) about binding expression limitations).
 
 ---
 
@@ -267,7 +275,7 @@ Here are the most useful patterns, each expressed as an equation:
 
 ### Using Einsum in NeuroScript
 
-Einsum is a neuron with an equation parameter. Multi-input operations receive their inputs as a tuple:
+Einsum is a neuron with an equation parameter. Multi-input operations receive their inputs as a tuple — tuple elements map positionally to Einsum's named input ports (`a`, `b`) in declaration order:
 
 <InteractiveExample
   title="Batched Matrix Multiply"
