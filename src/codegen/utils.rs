@@ -28,6 +28,33 @@ pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
     }
 }
 
+/// Convert a Value to Python code, resolving names through var_names map.
+/// Used by lazy instantiation where context bindings need `self.` prefix.
+pub(super) fn value_to_python_with_vars(
+    value: &Value,
+    var_names: &std::collections::HashMap<String, String>,
+) -> String {
+    match value {
+        Value::Name(n) => {
+            if let Some(resolved) = var_names.get(n) {
+                resolved.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Value::BinOp { op, left, right } => {
+            format!(
+                "{} {} {}",
+                value_to_python_with_vars(left, var_names),
+                binop_to_str(op, false),
+                value_to_python_with_vars(right, var_names)
+            )
+        }
+        // For other value types, delegate to the standard converter
+        _ => value_to_python_impl(value),
+    }
+}
+
 /// Convert a Value to Python code
 pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {

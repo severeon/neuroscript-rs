@@ -121,9 +121,8 @@ pub(super) fn generate_module_instantiations(
                 .collect();
 
             writeln!(output, "        self.{} = nn.Sequential(", module_name).unwrap();
-            for (i, item) in items.iter().enumerate() {
-                let comma = ",";
-                writeln!(output, "            {}{}", item, comma).unwrap();
+            for item in &items {
+                writeln!(output, "            {},", item).unwrap();
             }
             writeln!(output, "        )").unwrap();
 

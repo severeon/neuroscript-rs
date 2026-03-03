@@ -15,8 +15,8 @@
 /// - Output: [*batch, n, dim] updated hidden state after depth merge
 ///
 /// Notes:
-/// - Concatenates layer_out with state to form (n+1) vectors
-/// - Applies learnable depth mixing matrix to produce n output vectors
+/// - Scales layer_out by learned depth weights beta and adds to each state vector
+/// - Implements Eq. 5: h_out[i] = state[i] + beta[i] * layer_out
 /// - Replaces the simple addition in standard residual connections
 neuron HCDepth(n, dim, dynamic=true):
     in layer_out: [*batch, dim]
