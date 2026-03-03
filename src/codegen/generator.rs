@@ -249,6 +249,9 @@ impl<'a> CodeGenerator<'a> {
 
         // Register all params in var_names with self. prefix so that lazy
         // instantiation can resolve them (e.g., dim → self.dim, layer → self.layer).
+        // Uses or_insert_with intentionally: context bindings registered in __init__
+        // may already have a mapping (e.g., self.binding_name) which should take
+        // precedence. Params are a fallback for names not yet in the map.
         for param in &neuron.params {
             self.var_names
                 .entry(param.name.clone())

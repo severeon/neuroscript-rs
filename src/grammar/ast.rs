@@ -1154,6 +1154,7 @@ impl AstBuilder {
     /// Build a @wrap endpoint: @wrap(Wrapper, args): ref_or_pipeline
     fn build_wrap_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::wrap_endpoint);
+        let span_start = pair.as_span().start();
 
         let mut inner = pair.into_inner();
 
@@ -1164,7 +1165,7 @@ impl AstBuilder {
 
         // Parse call_args (contains wrapper name + extra args)
         let call_args_pair = inner.next().ok_or_else(|| {
-            crate::grammar::error::expected("call arguments after @wrap(", "end of input", 0)
+            crate::grammar::error::expected("call arguments after @wrap(", "end of input", span_start)
         })?;
         let (all_args, kwargs) = self.build_call_args(call_args_pair)?;
 
@@ -1176,7 +1177,7 @@ impl AstBuilder {
                 return Err(crate::grammar::error::expected(
                     "neuron name as first @wrap argument",
                     "non-name value",
-                    0,
+                    span_start,
                 ));
             }
         };
@@ -1191,7 +1192,7 @@ impl AstBuilder {
             crate::grammar::error::expected(
                 "identifier or '->' after @wrap colon",
                 "end of input",
-                0,
+                span_start,
             )
         })?;
         let content = match next.as_rule() {
@@ -1250,7 +1251,7 @@ impl AstBuilder {
                 return Err(crate::grammar::error::expected(
                     "identifier or '->' after @wrap colon",
                     next.as_str(),
-                    0,
+                    span_start,
                 ));
             }
         };

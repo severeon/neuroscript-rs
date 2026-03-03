@@ -30,6 +30,7 @@ pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
 
 /// Convert a Value to Python code, resolving names through var_names map.
 /// Used by lazy instantiation where context bindings need `self.` prefix.
+/// Recurses into BinOp operands and Call args/kwargs to resolve all names.
 pub(super) fn value_to_python_with_vars(
     value: &Value,
     var_names: &std::collections::HashMap<String, String>,
@@ -50,7 +51,31 @@ pub(super) fn value_to_python_with_vars(
                 value_to_python_with_vars(right, var_names)
             )
         }
-        // For other value types, delegate to the standard converter
+        Value::Call { name, args, kwargs } => {
+            let args_str = args
+                .iter()
+                .map(|v| value_to_python_with_vars(v, var_names))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let kwargs_str = if kwargs.is_empty() {
+                String::new()
+            } else {
+                let kw: Vec<String> = kwargs
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, value_to_python_with_vars(v, var_names)))
+                    .collect();
+                if args.is_empty() {
+                    kw.join(", ")
+                } else {
+                    format!(", {}", kw.join(", "))
+                }
+            };
+
+            format!("{}({}{})", name, args_str, kwargs_str)
+        }
+        // For other value types (Int, Float, String, Bool, Global),
+        // delegate to the standard converter
         _ => value_to_python_impl(value),
     }
 }

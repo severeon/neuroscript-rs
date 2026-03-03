@@ -9,6 +9,7 @@ These modules implement the core hyper-connection operations:
 - HCDepth: Depth connection (merge layer output back into hyper state)
 """
 
+import math
 import torch
 import torch.nn as nn
 
@@ -34,8 +35,6 @@ class HyperCollapse(nn.Module):
     Input:  [*batch, n, dim]
     Output: [*batch, dim]
     """
-    def __init__(self):
-        super().__init__()
 
     def forward(self, x):
         # x: [*batch, n, dim] -> [*batch, dim]
@@ -68,8 +67,10 @@ class HCWidth(nn.Module):
         if dynamic:
             # Dynamic: project input to mixing weights (Eq. 10-11)
             # alpha has shape (n+1, n) -- row 0 is for layer_in extraction,
-            # rows 1..n+1 are for state pass-through
-            self.proj = nn.Linear(dim, (n + 1) * n, bias=False)
+            # rows 1..n+1 are for state pass-through.
+            # Bias is used to initialize the round-robin pattern (Eq. 14)
+            # so that tanh(bias) approximates the static identity init.
+            self.proj = nn.Linear(dim, (n + 1) * n, bias=True)
         else:
             # Static: learnable (n+1) x n matrix
             self.alpha = nn.Parameter(torch.zeros(n + 1, n))
@@ -85,11 +86,21 @@ class HCWidth(nn.Module):
         active = self.layer_idx % n
 
         if self.dynamic:
-            # Dynamic mode: zero-initialize projection weights so initial
-            # alpha = tanh(0) = 0 (uniform zero mixing). Training moves
-            # weights away from zero to learn the optimal mixing pattern.
+            # Dynamic mode: zero-initialize weights so the projection
+            # output depends only on the bias at init. The bias is set
+            # so that tanh(bias) approximates the static round-robin
+            # identity matrix from Eq. 14, ensuring the wrapped layer
+            # receives a meaningful signal on the first forward pass.
+            init_val = math.atanh(0.9)  # ~1.47, so tanh(init_val) ≈ 0.9
             with torch.no_grad():
                 self.proj.weight.zero_()
+                bias = torch.zeros((n + 1) * n)
+                # Row 0 (layer input): extract from active copy
+                bias[0 * n + active] = init_val
+                # Rows 1..n+1 (state): identity pass-through
+                for i in range(n):
+                    bias[(i + 1) * n + i] = init_val
+                self.proj.bias.copy_(bias)
         else:
             with torch.no_grad():
                 self.alpha.zero_()
@@ -103,8 +114,10 @@ class HCWidth(nn.Module):
         # x: [*batch, n, dim]
         batch_shape = x.shape[:-2]
         n, dim = x.shape[-2], x.shape[-1]
-        assert n == self.n, f"Expected n={self.n} but got {n}"
-        assert dim == self.dim, f"Expected dim={self.dim} but got {dim}"
+        if n != self.n:
+            raise ValueError(f"Expected n={self.n} but got {n}")
+        if dim != self.dim:
+            raise ValueError(f"Expected dim={self.dim} but got {dim}")
 
         if self.dynamic:
             # Eq. 10-11: compute input-dependent mixing weights
