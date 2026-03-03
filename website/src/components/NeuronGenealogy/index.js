@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import { NEURONS } from '../neuron-genealogy-data';
+import NeuronControls from './NeuronControls';
 import '../../css/neuron-genealogy.css';
 
 // Try to import build-time docs data (may not exist during dev)
@@ -132,11 +133,18 @@ function NeuronGenealogyInner() {
   // ---- Render ----
   return (
     <div className="neuron-genealogy">
-      {/* NeuronControls will go here */}
-      <div className="ng-controls">
-        <div className="ng-logo">NeuroScript <span>Neuron Genealogy</span></div>
-        <div className="ng-stats">{stats.shown} of {stats.total} neurons, {stats.implemented} implemented</div>
-      </div>
+      <NeuronControls
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        activeLevels={activeLevels}
+        onToggleLevel={handleToggleLevel}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        categoryFilter={categoryFilter}
+        onCategoryChange={setCategoryFilter}
+        categories={categories}
+        stats={stats}
+      />
 
       <div className={`ng-main${mobileShowDetail ? ' ng-mobile-showing-detail' : ''}`}>
         {/* NeuronList will go here */}
