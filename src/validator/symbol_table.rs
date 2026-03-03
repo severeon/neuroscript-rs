@@ -290,7 +290,18 @@ where
                 }
             }
 
-            // 3. Look up registry
+            // 3. Handle __sequential__ (synthesized by @wrap pipeline desugaring)
+            if name == "__sequential__" {
+                // __sequential__ is a pseudo-neuron that wraps nn.Sequential.
+                // Return a wildcard port to allow validation to continue.
+                return Ok(vec![Port {
+                    name: "default".to_string(),
+                    shape: Shape { dims: vec![Dim::Variadic("_".to_string())] },
+                    variadic: false,
+                }]);
+            }
+
+            // 4. Look up registry
             if ctx.registry.contains(name) {
                 // Primitive neuron - skip detailed port validation
                 // Primitives are validated at codegen time
@@ -302,7 +313,7 @@ where
                 }]);
             }
 
-            // 4. Check if this is a neuron-typed parameter (higher-order neuron)
+            // 5. Check if this is a neuron-typed parameter (higher-order neuron)
             let is_neuron_param = ctx.neuron.params.iter().any(|p| {
                 p.name == *name && p.type_annotation.as_ref() == Some(&ParamType::Neuron)
             });

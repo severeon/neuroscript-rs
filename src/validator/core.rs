@@ -10,7 +10,10 @@ pub struct Validator;
 impl Validator {
     /// Check if a neuron exists (either in the program or as a primitive)
     fn neuron_exists(name: &str, program: &Program, registry: &StdlibRegistry) -> bool {
-        program.neurons.contains_key(name) || registry.contains(name)
+        // __sequential__ is a synthetic pseudo-neuron created by @wrap desugaring
+        program.neurons.contains_key(name)
+            || registry.contains(name)
+            || name == "__sequential__"
     }
 
     /// Validate an entire program

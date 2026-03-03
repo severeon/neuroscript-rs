@@ -98,6 +98,55 @@ pub(super) fn generate_module_instantiations(
             continue;
         }
 
+        // Handle __sequential__ bindings synthesized by @wrap pipeline desugaring
+        if name == "__sequential__" {
+            let items: Vec<String> = args
+                .iter()
+                .map(|arg| match arg {
+                    Value::Call {
+                        name,
+                        args,
+                        kwargs,
+                    } => {
+                        let (a, k) = extract_kwargs(args, kwargs);
+                        if a.is_empty() && k.is_empty() {
+                            format!("{}()", name)
+                        } else {
+                            format!("{}({}{})", name, a, k)
+                        }
+                    }
+                    Value::Name(n) => format!("self.{}", n),
+                    _ => value_to_python_impl(arg),
+                })
+                .collect();
+
+            writeln!(output, "        self.{} = nn.Sequential(", module_name).unwrap();
+            for (i, item) in items.iter().enumerate() {
+                let comma = if i < items.len() - 1 { "," } else { "," };
+                writeln!(output, "            {}{}", item, comma).unwrap();
+            }
+            writeln!(output, "        )").unwrap();
+
+            // Track primitives used in the sequential
+            for arg in args {
+                if let Value::Call { name, .. } = arg {
+                    // Check if primitive or composite
+                    if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
+                        if neuron.is_primitive() {
+                            gen.used_primitives.insert(name.clone());
+                        }
+                    } else {
+                        gen.used_primitives.insert(name.clone());
+                    }
+                }
+            }
+
+            gen.var_names
+                .insert(module_name.clone(), format!("self.{}", module_name));
+            instantiated_count += 1;
+            continue;
+        }
+
         let is_primitive = if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
             neuron.is_primitive()
         } else {

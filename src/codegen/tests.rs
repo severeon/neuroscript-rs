@@ -1160,3 +1160,67 @@ neuron Wrapper(layer: Neuron, dim):
         code
     );
 }
+
+#[test]
+fn test_wrap_ref_codegen() {
+    let source = r#"
+neuron SimpleWrapper(layer: Neuron, dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> layer -> out
+
+neuron Test(dim):
+    in: [*, dim]
+    out: [*, dim]
+    context:
+        attn = MultiHeadSelfAttention(dim, 8)
+    graph:
+        in -> @wrap(SimpleWrapper, dim): attn -> out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let code = generate_pytorch(&program, "Test").unwrap();
+    // After desugaring, @wrap(SimpleWrapper, dim): attn
+    // becomes SimpleWrapper(attn, dim), which is a Call endpoint
+    assert!(
+        code.contains("SimpleWrapper"),
+        "Expected SimpleWrapper wrapper call, got:\n{}",
+        code
+    );
+}
+
+#[test]
+fn test_wrap_pipeline_codegen() {
+    let source = r#"
+neuron SimpleWrapper(layer: Neuron, dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> layer -> out
+
+neuron Test(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            @wrap(SimpleWrapper, dim): ->
+                LayerNorm(dim)
+                Linear(dim, dim)
+            out
+"#;
+    let mut program = parse(source).unwrap();
+    validate(&mut program).unwrap();
+    let code = generate_pytorch(&program, "Test").unwrap();
+    // After desugaring, the pipeline form should create nn.Sequential
+    assert!(
+        code.contains("nn.Sequential"),
+        "Expected nn.Sequential for pipeline form, got:\n{}",
+        code
+    );
+    assert!(
+        code.contains("SimpleWrapper"),
+        "Expected SimpleWrapper wrapper call, got:\n{}",
+        code
+    );
+}
