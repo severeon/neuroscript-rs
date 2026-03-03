@@ -1,13 +1,5 @@
 import React, { useMemo, useEffect, useRef } from 'react';
-
-const LEVEL_NAMES = [
-  'L0: Primitives',
-  'L1: Composites',
-  'L2: Architectural',
-  'L3: Models',
-  'L4: Meta',
-  'L5: External',
-];
+import { LEVEL_NAMES } from './constants';
 
 export default function NeuronList({ neurons, selectedNeuron, onSelectNeuron }) {
   const listRef = useRef(null);
@@ -55,7 +47,10 @@ export default function NeuronList({ neurons, selectedNeuron, onSelectNeuron }) 
                   ref={isSelected ? selectedRef : null}
                   className={`ng-neuron-item${isSelected ? ' selected' : ''}`}
                   data-name={n.name}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectNeuron(n.name)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNeuron(n.name); } }}
                 >
                   <span className={`ng-status-dot ${n.status}`} />
                   <span className="ng-name">{n.name}</span>

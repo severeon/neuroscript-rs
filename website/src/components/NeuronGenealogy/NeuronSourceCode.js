@@ -9,14 +9,17 @@ export default function NeuronSourceCode({ source, sourceFile }) {
   return (
     <div className="ng-source-section">
       <h3
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
         style={{ cursor: 'pointer', userSelect: 'none' }}
       >
         {expanded ? '\u25BE' : '\u25B8'} Source Code
       </h3>
       {sourceFile && <div className="ng-source-path">{sourceFile}</div>}
       {expanded && (
-        <CodeBlock language="neuroscript">{source}</CodeBlock>
+        <CodeBlock language="text">{source}</CodeBlock>
       )}
     </div>
   );

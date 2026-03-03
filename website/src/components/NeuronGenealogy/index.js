@@ -7,7 +7,7 @@ import NeuronDetail from './NeuronDetail';
 import '../../css/neuron-genealogy.css';
 
 // Try to import build-time docs data (may not exist during dev)
-let neuronDocsData = {};
+let neuronDocsData = { neurons: {}, sources: {} };
 try {
   neuronDocsData = require('@site/.docusaurus/neuron-docs-plugin/default/neuron-docs.json');
 } catch (e) {
@@ -75,7 +75,7 @@ function NeuronGenealogyInner() {
   const handleSelectNeuron = useCallback((name) => {
     setSelectedNeuron(name);
     setMobileShowDetail(true);
-    window.location.hash = name;
+    history.replaceState(null, '', '#' + encodeURIComponent(name));
   }, []);
 
   const handleToggleLevel = useCallback((level) => {
@@ -120,7 +120,15 @@ function NeuronGenealogyInner() {
 
   // ---- Get selected neuron data + docs ----
   const selectedNeuronData = selectedNeuron ? neuronMap.get(selectedNeuron) : null;
-  const selectedNeuronDocs = selectedNeuron ? neuronDocsData[selectedNeuron] || null : null;
+  const selectedNeuronDocs = useMemo(() => {
+    if (!selectedNeuron) return null;
+    const entry = neuronDocsData.neurons?.[selectedNeuron];
+    if (!entry) return null;
+    return {
+      ...entry,
+      source: neuronDocsData.sources?.[entry.sourceFile] || null,
+    };
+  }, [selectedNeuron]);
   const selectedRequiredBy = selectedNeuron ? (requiredByMap.get(selectedNeuron) || []) : [];
 
   // ---- Render ----

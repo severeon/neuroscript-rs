@@ -12,14 +12,18 @@ module.exports = function neuronDocsPlugin(context) {
       let files;
       try {
         files = fs.readdirSync(stdlibDir).filter(f => f.endsWith('.ns'));
-      } catch {
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
         files = [];
       }
 
       const docs = {};
+      const sources = {};
       for (const file of files) {
         const filePath = path.join(stdlibDir, file);
         const source = fs.readFileSync(filePath, 'utf-8');
+        const sourceKey = `stdlib/${file}`;
+        sources[sourceKey] = source;
         const lines = source.split('\n');
 
         // Extract all neuron definitions and their preceding /// doc comments
@@ -35,15 +39,14 @@ module.exports = function neuronDocsPlugin(context) {
             if (match) {
               docs[match[1]] = {
                 docComment: docLines.join('\n'),
-                source: source,
-                sourceFile: `stdlib/${file}`,
+                sourceFile: sourceKey,
               };
             }
           }
         }
       }
 
-      await createData('neuron-docs.json', JSON.stringify(docs));
+      await createData('neuron-docs.json', JSON.stringify({ neurons: docs, sources }));
     },
   };
 };

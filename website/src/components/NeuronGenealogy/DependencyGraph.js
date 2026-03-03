@@ -28,7 +28,13 @@ function GraphNode({ x, y, neuron, isCenter, onClick }) {
   const fontWeight = isCenter ? 700 : 500;
 
   return (
-    <g style={{ cursor: 'pointer' }} onClick={() => onClick(neuron.name)}>
+    <g
+      style={{ cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onClick={() => onClick(neuron.name)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(neuron.name); } }}
+    >
       <rect
         x={x}
         y={y}

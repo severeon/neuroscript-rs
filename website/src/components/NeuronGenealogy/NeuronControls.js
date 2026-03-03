@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const LEVEL_NAMES = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'];
+import { LEVEL_SHORT_NAMES } from './constants';
 
 export default function NeuronControls({
   searchQuery,
@@ -45,7 +44,7 @@ export default function NeuronControls({
       />
 
       <div className="ng-level-pills">
-        {LEVEL_NAMES.map((name, level) => (
+        {LEVEL_SHORT_NAMES.map((name, level) => (
           <div
             key={level}
             className={`ng-level-pill${activeLevels.has(level) ? ' active' : ''}`}

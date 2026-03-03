@@ -1,15 +1,7 @@
 import React from 'react';
 import DependencyGraph from './DependencyGraph';
 import NeuronSourceCode from './NeuronSourceCode';
-
-const LEVEL_NAMES = [
-  'L0: Primitives',
-  'L1: Composites',
-  'L2: Architectural',
-  'L3: Models',
-  'L4: Meta',
-  'L5: External',
-];
+import { LEVEL_NAMES } from './constants';
 
 export default function NeuronDetail({
   neuron,
@@ -50,7 +42,7 @@ export default function NeuronDetail({
 
       {/* Meta */}
       <div className="ng-detail-meta">
-        <span><span className="ng-label">Level:</span> {neuron.level} ({LEVEL_NAMES[neuron.level].split(': ')[1]})</span>
+        <span><span className="ng-label">Level:</span> {neuron.level} ({LEVEL_NAMES[neuron.level]?.split(': ')[1] ?? 'Unknown'})</span>
         <span><span className="ng-label">Category:</span> {neuron.category.replace(/_/g, ' ')}</span>
         {neuron.implRef && <span><span className="ng-label">Impl:</span> {neuron.implRef}</span>}
         {neuron.source && <span><span className="ng-label">Source:</span> {neuron.source}</span>}
@@ -92,7 +84,10 @@ export default function NeuronDetail({
                 <span
                   key={d}
                   className={`ng-dep-chip ${st}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectNeuron(d)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNeuron(d); } }}
                 >
                   {d}
                 </span>
@@ -116,7 +111,10 @@ export default function NeuronDetail({
                 <span
                   key={d}
                   className={`ng-dep-chip ${st}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectNeuron(d)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNeuron(d); } }}
                 >
                   {d}
                 </span>
