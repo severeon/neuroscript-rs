@@ -29,6 +29,7 @@ const sidebars = {
         'tutorials/unroll',
         'tutorials/variadic-ports',
         'tutorials/higher-order-neurons',
+        'tutorials/einops-and-einsum',
       ],
     },
     {
