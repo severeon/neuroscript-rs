@@ -1,0 +1,97 @@
+# Tutorial 04: Einops & Einsum
+# Companion examples for the einops-and-einsum tutorial page.
+
+# --- Fat Arrow: Shape Transforms ---
+
+# Basic transpose
+neuron TransposeHW:
+    in: [b, c, h, w]
+    out: [b, c, w, h]
+    graph:
+        in => [b, c, w, h] -> out
+
+# Split a dimension into multiple
+neuron MultiHeadReshape(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, heads, seq, dim / heads]
+    graph:
+        in => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> out
+
+# Merge multiple dimensions into one
+neuron VitFlatten:
+    in: [b, c, h, w]
+    out: [b, hw, c]
+    graph:
+        in => [b, c, hw=h*w] => [b, hw, c] -> out
+
+# Flatten trailing dimensions with others
+neuron FlattenTail:
+    in: [b, c, h, w]
+    out: [b, flat]
+    graph:
+        in => [b, others] -> out
+
+# --- Annotated Transforms ---
+
+# @reduce — collapse dimensions
+neuron GlobalAvgPool:
+    in: [b, c, h, w]
+    out: [b, c]
+    graph:
+        in => @reduce(mean) [b, c] -> out
+
+neuron SeqPool:
+    in: [batch, seq, dim]
+    out: [batch, dim]
+    graph:
+        in => @reduce(mean) [batch, dim] -> out
+
+# @repeat — add dimensions
+neuron ExpandDim:
+    in: [b, c, h, w]
+    out: [b, c, 1, h, w]
+    graph:
+        in => @repeat(copy) [b, c, 1, h, w] -> out
+
+# --- Chaining Transforms ---
+
+neuron HeadReshapePipeline(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            => [batch, seq, heads, dh=dim/heads]
+            => [batch, heads, seq, dh]
+            Linear(dh, dh) ->
+            => [batch, seq, heads, dh]
+            => [batch, seq, dim]
+            out
+
+# --- Einsum ---
+
+# Two-input batched matmul
+neuron BatchMatMul:
+    in left: [batch, i, j]
+    in right: [batch, j, k]
+    out: [batch, i, k]
+    graph:
+        (left, right) -> Einsum(`bij,bjk->bik`) -> out
+
+# Self-attention scores via fork
+neuron SelfAttentionScores:
+    in: [batch, heads, seq, d_head]
+    out: [batch, heads, seq, seq]
+    graph:
+        in -> (q, k)
+        (q, k) -> Einsum(`bhqd,bhkd->bhqk`) -> out
+
+# --- Combined: fat arrow + einsum ---
+
+neuron MHASelfScores(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, heads, seq, seq]
+    graph:
+        in -> (q, k)
+        q => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> q_heads
+        k => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> k_heads
+        (q_heads, k_heads) -> Einsum(`bhqd,bhkd->bhqk`) -> out

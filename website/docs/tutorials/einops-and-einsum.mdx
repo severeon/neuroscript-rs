@@ -376,7 +376,7 @@ in => @reduce(AttentionPool(dim)) [batch, dim] -> out
 # Add dimensions
 in => @repeat(copy) [b, c, 1, h, w] -> out
 
-# Chain multiple transforms (start pipeline with ->)
+# Chain transforms with neuron calls (-> before the neuron call)
 in ->
     => [batch, seq, heads, dh=dim/heads]
     => [batch, heads, seq, dh]
