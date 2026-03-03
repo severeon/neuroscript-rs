@@ -1,0 +1,397 @@
+---
+sidebar_position: 8
+title: Einops & Einsum
+description: Shape transforms and tensor contractions — the ideas behind NeuroScript's fat arrow operator and Einsum primitive
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Einops & Einsum
+
+NeuroScript borrows two powerful ideas from the tensor programming world: **einops-style shape transforms** (via the fat arrow `=>` operator) and **Einstein summation** (via the `Einsum` primitive). This page explains both concepts, their history, and how to use them.
+
+---
+
+## A Brief History
+
+### Einstein Summation (1916)
+
+In 1916, Albert Einstein introduced a notational shorthand in his paper on general relativity: when an index variable appears twice in a term, it implies summation over that index. Instead of writing:
+
+```
+c_ij = Σ_k  a_ik * b_kj
+```
+
+you simply write `c_ij = a_ik b_kj` — the repeated `k` index tells you to sum over it. This **Einstein summation convention** became standard in physics and mathematics.
+
+In 2004, NumPy brought this idea to programming with `numpy.einsum`. PyTorch, TensorFlow, and JAX all followed with their own `einsum` functions. The key insight: a short string like `"bij,bjk->bik"` can express matrix multiplication, transposition, trace, outer products, and dozens of other operations in a single call.
+
+### Einops (2018)
+
+Alex Rogozhnikov's **einops** library tackled a different but related pain point. Deep learning code is full of `reshape`, `transpose`, `permute`, `unsqueeze`, and `squeeze` calls — operations that rearrange tensor dimensions without doing math on the values. These calls are hard to read and easy to get wrong.
+
+Einops introduced a readable mini-language for shape transforms:
+
+```python
+# PyTorch: x.reshape(b, h, w, c // g, g).permute(0, 3, 4, 1, 2)
+# Einops:  rearrange(x, 'b h w (c g) -> b c g h w', g=num_groups)
+```
+
+The idea: **name your dimensions, describe where they go.** The library figures out the reshapes and transposes for you.
+
+### NeuroScript's Approach
+
+NeuroScript combines both ideas as first-class language features:
+
+- **Fat arrow (`=>`)** — einops-style shape transforms directly in pipelines
+- **`Einsum` primitive** — Einstein summation as a callable neuron
+
+No library imports. No string parsing at runtime. The compiler knows your shapes and checks them at compile time.
+
+---
+
+## Fat Arrow: Shape Transforms
+
+The fat arrow `=>` reshapes, transposes, splits, and merges dimensions inline. It reads left-to-right: data flows in from the left, comes out with the shape on the right.
+
+### Basic Reshape
+
+The simplest case: rearranging dimensions.
+
+<InteractiveExample
+  title="Transpose"
+  description="Swap height and width dimensions of an image tensor"
+  initialCode={`neuron TransposeHW:
+    in: [b, c, h, w]
+    out: [b, c, w, h]
+    graph:
+        in => [b, c, w, h] -> out`}
+/>
+
+The compiler matches dimension names between the input shape `[b, c, h, w]` and the target shape `[b, c, w, h]`, then generates the correct `permute` or `reshape` call.
+
+### Splitting Dimensions
+
+Use **binding syntax** (`name=expr`) to decompose a single dimension into multiple:
+
+<InteractiveExample
+  title="Multi-Head Split"
+  description="Split the model dimension into separate heads — the core reshape in multi-head attention"
+  initialCode={`neuron MultiHeadReshape(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, heads, seq, dim / heads]
+    graph:
+        in => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> out`}
+/>
+
+Here's what happens step by step:
+
+1. Input arrives as `[batch, seq, dim]`
+2. First `=>` splits `dim` into `heads` and `dh` (where `dh = dim / heads`), producing `[batch, seq, heads, dh]`
+3. Second `=>` reorders to `[batch, heads, seq, dh]`
+
+This is the reshape that every multi-head attention implementation needs — expressed in one line.
+
+### Merging Dimensions
+
+The reverse: merge multiple dimensions into one.
+
+<InteractiveExample
+  title="ViT Flatten"
+  description="Merge spatial dimensions for Vision Transformer patch processing"
+  initialCode={`neuron VitFlatten:
+    in: [b, c, h, w]
+    out: [b, hw, c]
+    graph:
+        in => [b, c, hw=h*w] => [b, hw, c] -> out`}
+/>
+
+`hw=h*w` merges the height and width dimensions into a single spatial dimension, then the second arrow transposes channels to the last position. This is the spatial flattening step in Vision Transformers.
+
+### The `others` Keyword
+
+When you want to flatten everything after a certain point without naming each dimension:
+
+<InteractiveExample
+  title="Flatten Tail"
+  description="Collapse all trailing dimensions into one using the others keyword"
+  initialCode={`neuron FlattenTail:
+    in: [b, c, h, w]
+    out: [b, flat]
+    graph:
+        in => [b, others] -> out`}
+/>
+
+`others` acts as a wildcard that absorbs all remaining dimensions and flattens them into one. It compiles to PyTorch's `-1` dimension (infer size).
+
+---
+
+## Annotated Transforms: @reduce and @repeat
+
+Plain `=>` preserves the total number of elements — it only rearranges them. But sometimes you need to **remove** or **add** dimensions. That's what annotations are for.
+
+### @reduce — Collapsing Dimensions
+
+`@reduce` removes dimensions by applying a reduction function. The compiler figures out which dimensions to reduce by comparing the source and target shapes.
+
+<InteractiveExample
+  title="Global Average Pooling"
+  description="Reduce spatial dimensions with mean — a single line replaces AdaptiveAvgPool2d"
+  initialCode={`neuron GlobalAvgPool:
+    in: [b, c, h, w]
+    out: [b, c]
+    graph:
+        in => @reduce(mean) [b, c] -> out`}
+/>
+
+The input has `[b, c, h, w]` and the target has `[b, c]`. The compiler sees that `h` and `w` are missing from the target and generates `.mean(dim=(2, 3))`.
+
+**Available reduction strategies:**
+
+| Strategy | PyTorch equivalent | Use case |
+|----------|-------------------|----------|
+| `mean` | `.mean(dim=...)` | Average pooling, feature aggregation |
+| `sum` | `.sum(dim=...)` | Accumulation, counting |
+| `max` | `.amax(dim=...)` | Max pooling, peak detection |
+| `min` | `.amin(dim=...)` | Minimum finding |
+| `prod` | `.prod(dim=...)` | Product reduction |
+| `logsumexp` | `.logsumexp(dim=...)` | Numerically stable log-sum-exp |
+
+Here's a sequence-level reduction — common in classification where you need a single vector per sequence:
+
+<InteractiveExample
+  title="Sequence Mean Pooling"
+  description="Reduce the sequence dimension to get a fixed-size representation"
+  initialCode={`neuron SeqPool:
+    in: [batch, seq, dim]
+    out: [batch, dim]
+    graph:
+        in => @reduce(mean) [batch, dim] -> out`}
+/>
+
+### @reduce with a Neuron
+
+Instead of a built-in function, you can use a learned reduction — pass a neuron that processes the dimensions being removed:
+
+```neuroscript
+neuron LearnedPool(dim):
+    in: [batch, seq, dim]
+    out: [batch, dim]
+    graph:
+        in => @reduce(AttentionPool(dim)) [batch, dim] -> out
+```
+
+The compiler instantiates `AttentionPool` and calls it to perform the reduction, giving you a learnable alternative to mean pooling.
+
+### @repeat — Adding Dimensions
+
+`@repeat` is the inverse of `@reduce`: it adds new dimensions by copying or broadcasting data.
+
+<InteractiveExample
+  title="Expand Dimension"
+  description="Add a new dimension of size 1 by repeating (broadcasting) the tensor"
+  initialCode={`neuron ExpandDim:
+    in: [b, c, h, w]
+    out: [b, c, 1, h, w]
+    graph:
+        in => @repeat(copy) [b, c, 1, h, w] -> out`}
+/>
+
+The compiler sees a new dimension (size `1`) that doesn't exist in the source and generates `unsqueeze` + `expand`.
+
+---
+
+## Chaining Transforms in Pipelines
+
+Fat arrows compose naturally with neuron calls in a pipeline. You can reshape, process, and reshape again:
+
+<InteractiveExample
+  title="Attention Head Pipeline"
+  description="Split into heads, process, merge back — a common attention pattern"
+  initialCode={`neuron HeadReshapePipeline(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in => [batch, seq, heads, dh=dim/heads]
+            => [batch, heads, seq, dh]
+            Linear(dh, dh) ->
+            => [batch, seq, heads, dh]
+            => [batch, seq, dim]
+            out`}
+/>
+
+This is a full reshape round-trip:
+1. Split `dim` into `heads` x `dh`
+2. Move `heads` before `seq`
+3. Apply a per-head linear projection
+4. Move `heads` back after `seq`
+5. Merge `heads` and `dh` back into `dim`
+
+All shape transitions are checked at compile time.
+
+---
+
+## Einsum: Einstein Summation
+
+For operations that combine **values** across dimensions (not just rearranging them), NeuroScript provides the `Einsum` primitive. It takes an equation string using Einstein notation.
+
+### Reading Einsum Equations
+
+An einsum equation has the form `inputs -> output`, where each tensor is described by its index letters:
+
+```
+"bij,bjk->bik"
+ ^^^  ^^^  ^^^
+  |    |    └── output: batch × i × k
+  |    └─────── second input: batch × j × k
+  └──────────── first input: batch × i × j
+```
+
+**The rule:** indices that appear on the left but not on the right are summed over. Here `j` appears in both inputs but not the output, so it gets summed — that's matrix multiplication.
+
+### Common Einsum Patterns
+
+Here are the most useful patterns, each expressed as an equation:
+
+| Equation | Operation | Description |
+|----------|-----------|-------------|
+| `ij->ji` | Transpose | Swap rows and columns |
+| `ii->i` | Diagonal | Extract the diagonal |
+| `ii->` | Trace | Sum of diagonal elements |
+| `ij,jk->ik` | Matrix multiply | Standard matmul |
+| `bij,bjk->bik` | Batched matmul | Matmul with batch dimension |
+| `bhqd,bhkd->bhqk` | Attention scores | Query-key dot products |
+| `i,j->ij` | Outer product | Every pair multiplied |
+| `ij->i` | Row sum | Sum over columns |
+
+### Using Einsum in NeuroScript
+
+Einsum is a neuron with an equation parameter. Multi-input operations receive their inputs as a tuple:
+
+<InteractiveExample
+  title="Batched Matrix Multiply"
+  description="Einsum for batched matrix multiplication using Einstein notation"
+  initialCode={`neuron BatchMatMul:
+    in: [batch, i, j]
+    out: [batch, i, j]
+    graph:
+        in -> (a, b)
+        (a, b) -> Einsum(\`bij,bjk->bik\`) -> out`}
+/>
+
+The input is forked into `a` and `b`, then both are passed as a tuple to `Einsum`. The equation `` `bij,bjk->bik` `` contracts over the `j` index — that's matrix multiplication.
+
+### Attention Scores
+
+The core computation in attention — computing query-key similarity. Here the input is forked to serve as both queries and keys (self-attention):
+
+<InteractiveExample
+  title="Self-Attention Scores"
+  description="Query-key dot product via einsum — the heart of the attention mechanism"
+  initialCode={`neuron SelfAttentionScores:
+    in: [batch, heads, seq, d_head]
+    out: [batch, heads, seq, seq]
+    graph:
+        in -> (q, k)
+        (q, k) -> Einsum(\`bhqd,bhkd->bhqk\`) -> out`}
+/>
+
+`d_head` appears in both inputs but not the output, so it gets summed — producing the dot product between each query and key vector.
+
+---
+
+## Fat Arrow vs Einsum: When to Use Which
+
+The two features serve different purposes:
+
+| | Fat Arrow (`=>`) | Einsum |
+|---|---|---|
+| **What it does** | Rearranges tensor layout | Computes over tensor values |
+| **Element count** | Preserved (unless annotated) | Can change (contractions) |
+| **Learned params** | None (pure shape op) | None (pure math op) |
+| **Compile-time checked** | Yes — full shape validation | Partial (variadic shapes) |
+| **Typical use** | Reshape, transpose, split, merge | Matmul, dot product, contraction |
+
+**Rule of thumb:** if you're just moving data around (reshape, transpose, split heads), use `=>`. If you're multiplying and summing across indices, use `Einsum`.
+
+---
+
+## Putting It Together
+
+A real-world example combining both: self-attention scores with multi-head reshaping.
+
+<InteractiveExample
+  title="Multi-Head Self-Attention Scores"
+  description="Fork input, reshape each branch into heads with fat arrow, compute scores with einsum"
+  initialCode={`neuron MHASelfScores(dim, heads):
+    in: [batch, seq, dim]
+    out: [batch, heads, seq, seq]
+    graph:
+        in -> (q, k)
+        q => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> q_heads
+        k => [batch, seq, heads, dh=dim/heads] => [batch, heads, seq, dh] -> k_heads
+        (q_heads, k_heads) -> Einsum(\`bhqd,bhkd->bhqk\`) -> out`}
+/>
+
+This shows the two features working together:
+- The input is forked into `q` and `k` branches (self-attention)
+- Fat arrows reshape each branch from `[batch, seq, dim]` into `[batch, heads, seq, dh]`
+- The reshaped tensors are joined as a tuple and passed to Einsum, which contracts the `dh` dimension
+
+---
+
+## Quick Reference
+
+### Fat Arrow Syntax
+
+```neuroscript
+# Basic reshape/transpose
+in => [b, c, w, h] -> out
+
+# Split a dimension
+in => [batch, seq, heads, dh=dim/heads] -> out
+
+# Merge dimensions
+in => [b, c, hw=h*w] -> out
+
+# Flatten remaining dims
+in => [b, others] -> out
+
+# Reduce dimensions
+in => @reduce(mean) [b, c] -> out
+in => @reduce(sum) [batch, dim] -> out
+
+# Reduce with a neuron
+in => @reduce(AttentionPool(dim)) [batch, dim] -> out
+
+# Add dimensions
+in => @repeat(copy) [b, c, 1, h, w] -> out
+
+# Chain multiple transforms (start pipeline with ->)
+in ->
+    => [batch, seq, heads, dh=dim/heads]
+    => [batch, heads, seq, dh]
+    SomeNeuron() ->
+    => [batch, seq, dim]
+    out
+```
+
+### Einsum Syntax
+
+```neuroscript
+# Two-input operations (fork input, pass as tuple)
+in -> (a, b)
+(a, b) -> Einsum(`bij,bjk->bik`) -> out    # batched matmul
+
+in -> (q, k)
+(q, k) -> Einsum(`bhqd,bhkd->bhqk`) -> out  # attention scores
+```
+
+## Try It Yourself
+
+Experiment with these concepts:
+- Change `@reduce(mean)` to `@reduce(sum)` or `@reduce(max)` and see how the generated code changes
+- Try chaining multiple `=>` steps to build complex reshapes
+- Combine `=>` with neuron calls in a pipeline
+- Write an einsum equation for an outer product: `"i,j->ij"`
+- Click "Show Analysis" to see the compiled output
