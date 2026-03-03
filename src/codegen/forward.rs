@@ -239,7 +239,9 @@ pub(super) fn generate_forward_body(
                 })?
             }
             Endpoint::Wrap(_) => {
-                todo!("@wrap should be desugared before codegen")
+                return Err(CodegenError::InvalidConnection(
+                    "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
+                ));
             }
         };
 
@@ -1212,7 +1214,9 @@ fn process_destination(
             Ok(result_var)
         }
         Endpoint::Wrap(_) => {
-            todo!("@wrap should be desugared before codegen")
+            Err(CodegenError::InvalidConnection(
+                "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
+            ))
         }
     }
 }

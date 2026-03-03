@@ -13,7 +13,7 @@ impl Validator {
         // __sequential__ is a synthetic pseudo-neuron created by @wrap desugaring
         program.neurons.contains_key(name)
             || registry.contains(name)
-            || name == "__sequential__"
+            || name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON
     }
 
     /// Validate an entire program

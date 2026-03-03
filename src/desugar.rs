@@ -116,7 +116,7 @@ fn desugar_endpoint_wraps(
 
                     new_bindings.push(Binding {
                         name: anon_name.clone(),
-                        call_name: "__sequential__".to_string(),
+                        call_name: crate::interfaces::SEQUENTIAL_PSEUDO_NEURON.to_string(),
                         args: seq_args,
                         kwargs: vec![],
                         scope: Scope::Instance { lazy: false },
@@ -315,13 +315,13 @@ mod tests {
             assert!(
                 context_bindings
                     .iter()
-                    .any(|b| b.call_name == "__sequential__" && b.name == "_wrap_0"),
+                    .any(|b| b.call_name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON && b.name == "_wrap_0"),
                 "Should have __sequential__ binding named _wrap_0"
             );
 
             let seq_binding = context_bindings
                 .iter()
-                .find(|b| b.call_name == "__sequential__")
+                .find(|b| b.call_name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON)
                 .unwrap();
             assert_eq!(seq_binding.args.len(), 2); // LayerNorm and Linear
 

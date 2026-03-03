@@ -99,7 +99,7 @@ pub(super) fn generate_module_instantiations(
         }
 
         // Handle __sequential__ bindings synthesized by @wrap pipeline desugaring
-        if name == "__sequential__" {
+        if name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON {
             let items: Vec<String> = args
                 .iter()
                 .map(|arg| match arg {
@@ -122,7 +122,7 @@ pub(super) fn generate_module_instantiations(
 
             writeln!(output, "        self.{} = nn.Sequential(", module_name).unwrap();
             for (i, item) in items.iter().enumerate() {
-                let comma = if i < items.len() - 1 { "," } else { "," };
+                let comma = ",";
                 writeln!(output, "            {}{}", item, comma).unwrap();
             }
             writeln!(output, "        )").unwrap();

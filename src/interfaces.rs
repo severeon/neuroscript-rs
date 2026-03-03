@@ -279,6 +279,9 @@ pub struct IfExpr {
     pub id: usize,
 }
 
+/// Pseudo-neuron name used by @wrap pipeline desugaring to emit nn.Sequential
+pub const SEQUENTIAL_PSEUDO_NEURON: &str = "__sequential__";
+
 /// A @wrap annotation expression
 #[derive(Debug, Clone, PartialEq)]
 pub struct WrapExpr {

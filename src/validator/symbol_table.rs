@@ -291,7 +291,7 @@ where
             }
 
             // 3. Handle __sequential__ (synthesized by @wrap pipeline desugaring)
-            if name == "__sequential__" {
+            if name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON {
                 // __sequential__ is a pseudo-neuron that wraps nn.Sequential.
                 // Return a wildcard port to allow validation to continue.
                 return Ok(vec![Port {
