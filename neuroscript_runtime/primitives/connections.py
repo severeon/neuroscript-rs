@@ -9,10 +9,8 @@ These modules implement the core hyper-connection operations:
 - HCDepth: Depth connection (merge layer output back into hyper state)
 """
 
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class HyperExpand(nn.Module):
@@ -87,11 +85,11 @@ class HCWidth(nn.Module):
         active = self.layer_idx % n
 
         if self.dynamic:
-            # Initialize projection bias so initial alpha matches Eq. 14
+            # Dynamic mode: zero-initialize projection weights so initial
+            # alpha = tanh(0) = 0 (uniform zero mixing). Training moves
+            # weights away from zero to learn the optimal mixing pattern.
             with torch.no_grad():
                 self.proj.weight.zero_()
-                # We'll set initial bias through the weight matrix
-                # so that the output alpha matrix has the round-robin pattern
         else:
             with torch.no_grad():
                 self.alpha.zero_()
