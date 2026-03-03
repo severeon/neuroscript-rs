@@ -42,6 +42,7 @@ const config = {
         outputFileNameFull: "llms-full.txt",
       },
     ],
+    require.resolve('./plugins/neuron-docs-plugin'),
   ],
 
   presets: [
