@@ -126,7 +126,7 @@ When you want to flatten everything after a certain point without naming each di
         in => [b, others] -> out`}
 />
 
-`others` acts as a wildcard that absorbs all remaining dimensions and flattens them into one. It compiles to PyTorch's `-1` dimension (infer size).
+`others` acts as a wildcard that absorbs all remaining dimensions and flattens them into one. It compiles to PyTorch's `-1` dimension (infer size). Note that `others` is reshape-only syntax — it can't appear in port declarations. The output port uses `flat` as a free dimension variable whose size is inferred from the collapsed result.
 
 ---
 
