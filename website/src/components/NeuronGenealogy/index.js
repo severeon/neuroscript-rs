@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import { NEURONS } from '../neuron-genealogy-data';
 import NeuronControls from './NeuronControls';
+import NeuronList from './NeuronList';
 import '../../css/neuron-genealogy.css';
 
 // Try to import build-time docs data (may not exist during dev)
@@ -147,12 +148,11 @@ function NeuronGenealogyInner() {
       />
 
       <div className={`ng-main${mobileShowDetail ? ' ng-mobile-showing-detail' : ''}`}>
-        {/* NeuronList will go here */}
-        <div className="ng-list-panel" id="ng-listPanel">
-          <div style={{ padding: '20px', color: 'var(--ng-text-muted)' }}>
-            List placeholder — {filteredNeurons.length} neurons
-          </div>
-        </div>
+        <NeuronList
+          neurons={filteredNeurons}
+          selectedNeuron={selectedNeuron}
+          onSelectNeuron={handleSelectNeuron}
+        />
 
         {/* NeuronDetail will go here */}
         <div className="ng-detail-panel" id="ng-detailPanel">
