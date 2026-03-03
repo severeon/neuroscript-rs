@@ -25,7 +25,7 @@ class HyperExpand(nn.Module):
 
     def forward(self, x):
         # x: [*batch, dim] -> [*batch, 1, dim] -> [*batch, n, dim]
-        return x.unsqueeze(-2).expand(*x.shape[:-1], self.n, x.shape[-1]).clone()
+        return x.unsqueeze(-2).expand(*x.shape[:-1], self.n, x.shape[-1]).contiguous()
 
 
 class HyperCollapse(nn.Module):
@@ -103,6 +103,8 @@ class HCWidth(nn.Module):
         # x: [*batch, n, dim]
         batch_shape = x.shape[:-2]
         n, dim = x.shape[-2], x.shape[-1]
+        assert n == self.n, f"Expected n={self.n} but got {n}"
+        assert dim == self.dim, f"Expected dim={self.dim} but got {dim}"
 
         if self.dynamic:
             # Eq. 10-11: compute input-dependent mixing weights

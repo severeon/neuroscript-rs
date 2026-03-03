@@ -30,13 +30,11 @@ fn desugar_neuron_wraps(neuron: &mut NeuronDef) {
         for conn in connections.iter_mut() {
             desugar_endpoint_wraps(
                 &mut conn.source,
-                context_bindings,
                 &mut new_bindings,
                 &mut wrap_counter,
             );
             desugar_endpoint_wraps(
                 &mut conn.destination,
-                context_bindings,
                 &mut new_bindings,
                 &mut wrap_counter,
             );
@@ -51,7 +49,6 @@ fn desugar_neuron_wraps(neuron: &mut NeuronDef) {
 
 fn desugar_endpoint_wraps(
     endpoint: &mut Endpoint,
-    _existing_bindings: &[Binding],
     new_bindings: &mut Vec<Binding>,
     counter: &mut usize,
 ) {
@@ -110,7 +107,11 @@ fn desugar_endpoint_wraps(
                                     Some(Value::Name(port_ref.node.clone()))
                                 }
                             }
-                            _ => None,
+                            other => panic!(
+                                "@wrap pipeline form only supports Call and Ref endpoints, \
+                                 got: {:?}",
+                                other
+                            ),
                         })
                         .collect();
 
@@ -141,19 +142,19 @@ fn desugar_endpoint_wraps(
         Endpoint::Match(match_expr) => {
             for arm in &mut match_expr.arms {
                 for ep in &mut arm.pipeline {
-                    desugar_endpoint_wraps(ep, _existing_bindings, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter);
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &mut if_expr.branches {
                 for ep in &mut branch.pipeline {
-                    desugar_endpoint_wraps(ep, _existing_bindings, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter);
                 }
             }
             if let Some(else_branch) = &mut if_expr.else_branch {
                 for ep in else_branch {
-                    desugar_endpoint_wraps(ep, _existing_bindings, new_bindings, counter);
+                    desugar_endpoint_wraps(ep, new_bindings, counter);
                 }
             }
         }

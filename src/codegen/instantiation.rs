@@ -89,6 +89,8 @@ pub(super) fn generate_module_instantiations(
                     instantiated_count += 1;
                 }
                 _ => {
+                    // Lazy or other scopes: store the param reference as a submodule.
+                    // This allows higher-order neurons to forward the passed-in module.
                     writeln!(output, "        self.{} = {}", module_name, name).unwrap();
                     gen.var_names
                         .insert(module_name.clone(), format!("self.{}", module_name));

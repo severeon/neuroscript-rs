@@ -45,13 +45,20 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
     grammar::NeuroScriptParser::parse_program(source)
 }
 
-/// Validate a NeuroScript program for correctness:
-/// 1. Expand unroll constructs (named aggregates)
-/// 2. All referenced neurons exist
-/// 3. Connection endpoints match (tuple arity, port names, shapes)
-/// 4. No cycles in the dependency graph
-/// 5. Shape compatibility for all connections (shape inference)
-/// 6. Resolve neuron contract match expressions (`match(param): ...`)
+/// Validate a NeuroScript program for correctness.
+///
+/// **Note:** This function mutates the program as a side effect:
+/// - Desugars `@wrap` annotations into standard `Call` endpoints
+/// - Expands `unroll` constructs into repeated bindings
+///
+/// After calling this, `Endpoint::Wrap` nodes will no longer appear in the IR.
+///
+/// Validation checks:
+/// 1. All referenced neurons exist
+/// 2. Connection endpoints match (tuple arity, port names, shapes)
+/// 3. No cycles in the dependency graph
+/// 4. Shape compatibility for all connections (shape inference)
+/// 5. Resolve neuron contract match expressions (`match(param): ...`)
 ///    for higher-order neurons with `: Neuron` typed parameters
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Desugar @wrap annotations into standard Call endpoints
