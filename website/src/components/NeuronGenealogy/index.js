@@ -3,6 +3,7 @@ import BrowserOnly from '@docusaurus/BrowserOnly';
 import { NEURONS } from '../neuron-genealogy-data';
 import NeuronControls from './NeuronControls';
 import NeuronList from './NeuronList';
+import NeuronDetail from './NeuronDetail';
 import '../../css/neuron-genealogy.css';
 
 // Try to import build-time docs data (may not exist during dev)
@@ -12,15 +13,6 @@ try {
 } catch (e) {
   // Plugin data not available yet
 }
-
-const LEVEL_NAMES = [
-  'L0: Primitives',
-  'L1: Composites',
-  'L2: Architectural',
-  'L3: Models',
-  'L4: Meta',
-  'L5: External',
-];
 
 function NeuronGenealogyInner() {
   // ---- State ----
@@ -154,25 +146,14 @@ function NeuronGenealogyInner() {
           onSelectNeuron={handleSelectNeuron}
         />
 
-        {/* NeuronDetail will go here */}
-        <div className="ng-detail-panel" id="ng-detailPanel">
-          {selectedNeuronData ? (
-            <div style={{ padding: '20px' }}>
-              <h2 style={{ color: `var(--ng-level-${selectedNeuronData.level})` }}>{selectedNeuronData.name}</h2>
-              <p>{selectedNeuronData.description}</p>
-              {selectedNeuronDocs && selectedNeuronDocs.docComment && (
-                <div className="ng-doc-section">
-                  <h3>Documentation</h3>
-                  <p>{selectedNeuronDocs.docComment}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="ng-detail-empty">
-              Select a neuron from the list<br />to view its dependencies and details
-            </div>
-          )}
-        </div>
+        <NeuronDetail
+          neuron={selectedNeuronData}
+          neuronDocs={selectedNeuronDocs}
+          neuronMap={neuronMap}
+          requiredBy={selectedRequiredBy}
+          onSelectNeuron={handleSelectNeuron}
+          onBack={mobileShowDetail ? handleBack : null}
+        />
       </div>
     </div>
   );
