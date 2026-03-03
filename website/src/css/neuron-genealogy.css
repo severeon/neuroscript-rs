@@ -1,36 +1,53 @@
 /* ============================================================
-   Neuron Genealogy — scoped styles
-   Extracted from tools/neuron-genealogy.html, all selectors
-   scoped under .neuron-genealogy to avoid Docusaurus conflicts.
+   Neuron Genealogy — scoped styles with light/dark mode
+   All selectors scoped under .neuron-genealogy to avoid
+   Docusaurus conflicts. Light mode by default; dark overrides
+   via [data-theme='dark'].
    ============================================================ */
 
-/* CSS Custom Properties — scoped to component root */
+/* ============================================================
+   Light Mode Custom Properties (default)
+   ============================================================ */
 .neuron-genealogy {
-  --ng-bg: #0d1117;
-  --ng-bg-surface: #161b22;
-  --ng-bg-card: #1c2128;
-  --ng-bg-hover: #252c35;
-  --ng-border: #30363d;
-  --ng-text: #e6edf3;
-  --ng-text-muted: #8b949e;
-  --ng-text-dim: #6e7681;
+  --ng-bg: #ffffff;
+  --ng-bg-surface: #f6f8fa;
+  --ng-bg-card: #f0f2f5;
+  --ng-bg-hover: #e8eaed;
+  --ng-border: #d0d7de;
+  --ng-text: #1f2328;
+  --ng-text-muted: #656d76;
+  --ng-text-dim: #8c959f;
 
-  /* Level colors */
-  --ng-level-0: #58a6ff;
-  --ng-level-1: #a371f7;
-  --ng-level-2: #f778ba;
-  --ng-level-3: #f0883e;
-  --ng-level-4: #d29922;
-  --ng-level-5: #7ee787;
+  /* Level colors — saturated for light backgrounds */
+  --ng-level-0: #0969da;
+  --ng-level-1: #8250df;
+  --ng-level-2: #bf3989;
+  --ng-level-3: #bc4c00;
+  --ng-level-4: #9a6700;
+  --ng-level-5: #1a7f37;
+
+  /* Level pill backgrounds — light alpha tints */
+  --ng-level-0-bg: rgba(9, 105, 218, 0.1);
+  --ng-level-1-bg: rgba(130, 80, 223, 0.1);
+  --ng-level-2-bg: rgba(191, 57, 137, 0.1);
+  --ng-level-3-bg: rgba(188, 76, 0, 0.1);
+  --ng-level-4-bg: rgba(154, 103, 0, 0.1);
+  --ng-level-5-bg: rgba(26, 127, 55, 0.1);
 
   /* Status colors */
-  --ng-implemented: #3fb950;
-  --ng-planned: #d29922;
+  --ng-implemented: #1a7f37;
+  --ng-planned: #9a6700;
+  --ng-implemented-bg: rgba(26, 127, 55, 0.1);
+  --ng-planned-bg: rgba(154, 103, 0, 0.1);
 
   /* Graph */
-  --ng-edge-dep: #58a6ff;
-  --ng-edge-depby: #f778ba;
-  --ng-node-selected: #f0883e;
+  --ng-edge-dep: #0969da;
+  --ng-edge-depby: #bf3989;
+  --ng-node-selected: #bc4c00;
+
+  /* Item borders — subtle for light mode */
+  --ng-item-border: rgba(208, 215, 222, 0.6);
+  --ng-selected-bg: rgba(188, 76, 0, 0.08);
 
   /* Layout */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -40,6 +57,51 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* ============================================================
+   Dark Mode Custom Properties
+   ============================================================ */
+[data-theme='dark'] .neuron-genealogy {
+  --ng-bg: #0d1117;
+  --ng-bg-surface: #161b22;
+  --ng-bg-card: #1c2128;
+  --ng-bg-hover: #252c35;
+  --ng-border: #30363d;
+  --ng-text: #e6edf3;
+  --ng-text-muted: #8b949e;
+  --ng-text-dim: #6e7681;
+
+  /* Level colors — lighter for dark backgrounds */
+  --ng-level-0: #58a6ff;
+  --ng-level-1: #a371f7;
+  --ng-level-2: #f778ba;
+  --ng-level-3: #f0883e;
+  --ng-level-4: #d29922;
+  --ng-level-5: #7ee787;
+
+  /* Level pill backgrounds — dark alpha tints */
+  --ng-level-0-bg: rgba(88, 166, 255, 0.12);
+  --ng-level-1-bg: rgba(163, 113, 247, 0.12);
+  --ng-level-2-bg: rgba(247, 120, 186, 0.12);
+  --ng-level-3-bg: rgba(240, 136, 62, 0.12);
+  --ng-level-4-bg: rgba(210, 153, 34, 0.12);
+  --ng-level-5-bg: rgba(126, 231, 135, 0.12);
+
+  /* Status colors */
+  --ng-implemented: #3fb950;
+  --ng-planned: #d29922;
+  --ng-implemented-bg: rgba(63, 185, 80, 0.15);
+  --ng-planned-bg: rgba(210, 153, 34, 0.15);
+
+  /* Graph */
+  --ng-edge-dep: #58a6ff;
+  --ng-edge-depby: #f778ba;
+  --ng-node-selected: #f0883e;
+
+  /* Item borders */
+  --ng-item-border: rgba(48, 54, 61, 0.4);
+  --ng-selected-bg: rgba(240, 136, 62, 0.12);
 }
 
 /* ============================================================
@@ -70,6 +132,7 @@
   font-size: 12px;
 }
 
+/* Search input */
 .neuron-genealogy .ng-search-box {
   flex: 1;
   min-width: 180px;
@@ -109,12 +172,12 @@
   opacity: 1;
   border-color: currentColor;
 }
-.neuron-genealogy .ng-level-pill[data-level="0"] { color: var(--ng-level-0); background: rgba(88,166,255,0.12); }
-.neuron-genealogy .ng-level-pill[data-level="1"] { color: var(--ng-level-1); background: rgba(163,113,247,0.12); }
-.neuron-genealogy .ng-level-pill[data-level="2"] { color: var(--ng-level-2); background: rgba(247,120,186,0.12); }
-.neuron-genealogy .ng-level-pill[data-level="3"] { color: var(--ng-level-3); background: rgba(240,136,62,0.12); }
-.neuron-genealogy .ng-level-pill[data-level="4"] { color: var(--ng-level-4); background: rgba(210,153,34,0.12); }
-.neuron-genealogy .ng-level-pill[data-level="5"] { color: var(--ng-level-5); background: rgba(126,231,135,0.12); }
+.neuron-genealogy .ng-level-pill[data-level="0"] { color: var(--ng-level-0); background: var(--ng-level-0-bg); }
+.neuron-genealogy .ng-level-pill[data-level="1"] { color: var(--ng-level-1); background: var(--ng-level-1-bg); }
+.neuron-genealogy .ng-level-pill[data-level="2"] { color: var(--ng-level-2); background: var(--ng-level-2-bg); }
+.neuron-genealogy .ng-level-pill[data-level="3"] { color: var(--ng-level-3); background: var(--ng-level-3-bg); }
+.neuron-genealogy .ng-level-pill[data-level="4"] { color: var(--ng-level-4); background: var(--ng-level-4-bg); }
+.neuron-genealogy .ng-level-pill[data-level="5"] { color: var(--ng-level-5); background: var(--ng-level-5-bg); }
 
 /* Dropdowns */
 .neuron-genealogy .ng-ctrl-select {
@@ -131,6 +194,7 @@
   border-color: var(--ng-level-0);
 }
 
+/* Stats */
 .neuron-genealogy .ng-stats {
   font-size: 12px;
   color: var(--ng-text-muted);
@@ -187,14 +251,14 @@
   gap: 8px;
   padding: 7px 14px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(48,54,61,0.4);
+  border-bottom: 1px solid var(--ng-item-border);
   transition: background 0.1s;
 }
 .neuron-genealogy .ng-neuron-item:hover {
   background: var(--ng-bg-hover);
 }
 .neuron-genealogy .ng-neuron-item.selected {
-  background: rgba(240,136,62,0.12);
+  background: var(--ng-selected-bg);
   border-left: 3px solid var(--ng-node-selected);
 }
 
@@ -253,8 +317,8 @@
   font-size: 11px;
   font-weight: 600;
 }
-.neuron-genealogy .ng-detail-badge.implemented { background: rgba(63,185,80,0.15); color: var(--ng-implemented); }
-.neuron-genealogy .ng-detail-badge.planned { background: rgba(210,153,34,0.15); color: var(--ng-planned); }
+.neuron-genealogy .ng-detail-badge.implemented { background: var(--ng-implemented-bg); color: var(--ng-implemented); }
+.neuron-genealogy .ng-detail-badge.planned { background: var(--ng-planned-bg); color: var(--ng-planned); }
 
 .neuron-genealogy .ng-detail-meta {
   display: flex;
@@ -276,6 +340,9 @@
   border: 1px solid var(--ng-border);
 }
 
+/* ============================================================
+   Dependency Sections
+   ============================================================ */
 .neuron-genealogy .ng-dep-section {
   margin-bottom: 16px;
 }
@@ -343,12 +410,127 @@
 }
 
 /* ============================================================
-   Responsive
+   Source Code Section
+   ============================================================ */
+.neuron-genealogy .ng-source-section {
+  margin-top: 20px;
+  margin-bottom: 16px;
+}
+.neuron-genealogy .ng-source-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  margin-top: 0;
+  color: var(--ng-text);
+}
+.neuron-genealogy .ng-source-path {
+  display: inline-block;
+  font-size: 12px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: var(--ng-text-muted);
+  background: var(--ng-bg-card);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--ng-border);
+  margin-bottom: 8px;
+}
+.neuron-genealogy .ng-source-section pre {
+  background: var(--ng-bg-card);
+  border: 1px solid var(--ng-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ng-text);
+}
+
+/* ============================================================
+   Documentation Section
+   ============================================================ */
+.neuron-genealogy .ng-doc-section {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+.neuron-genealogy .ng-doc-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  margin-top: 0;
+  color: var(--ng-text);
+}
+.neuron-genealogy .ng-doc-section p {
+  font-size: 13px;
+  color: var(--ng-text-muted);
+  line-height: 1.6;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--ng-bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--ng-border);
+}
+
+/* ============================================================
+   Mobile Back Button
+   ============================================================ */
+.neuron-genealogy .ng-back-button {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  background: var(--ng-bg-surface);
+  border: 1px solid var(--ng-border);
+  border-radius: 6px;
+  color: var(--ng-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.neuron-genealogy .ng-back-button:hover {
+  background: var(--ng-bg-hover);
+  color: var(--ng-text);
+}
+
+/* ============================================================
+   Responsive — Mobile Breakpoint
    ============================================================ */
 @media (max-width: 768px) {
-  .neuron-genealogy .ng-main { flex-direction: column; }
-  .neuron-genealogy .ng-list-panel { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--ng-border); min-width: 0; }
-  .neuron-genealogy .ng-detail-panel { height: 55vh; }
-  .neuron-genealogy .ng-controls { gap: 8px; }
-  .neuron-genealogy .ng-search-box { max-width: none; }
+  .neuron-genealogy .ng-main {
+    flex-direction: column;
+  }
+  .neuron-genealogy .ng-list-panel {
+    width: 100%;
+    min-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--ng-border);
+    min-width: 0;
+  }
+  .neuron-genealogy .ng-detail-panel {
+    flex: 1;
+  }
+  .neuron-genealogy .ng-controls {
+    gap: 8px;
+  }
+  .neuron-genealogy .ng-search-box {
+    max-width: none;
+  }
+
+  /* Mobile view switching: show/hide panels */
+  .neuron-genealogy .ng-main.ng-mobile-showing-detail .ng-list-panel {
+    display: none;
+  }
+  .neuron-genealogy .ng-main.ng-mobile-showing-detail .ng-detail-panel {
+    min-height: calc(100vh - 120px);
+  }
+  .neuron-genealogy .ng-main:not(.ng-mobile-showing-detail) .ng-detail-panel {
+    display: none;
+  }
+
+  /* Show back button on mobile detail view */
+  .neuron-genealogy .ng-main.ng-mobile-showing-detail .ng-back-button {
+    display: inline-flex;
+  }
 }
