@@ -1,0 +1,76 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Thomas Quick",
+    "email": "severeon@gmail.com",
+    "description": "Creator and maintainer of NeuroScript, a neural architecture composition language that compiles to PyTorch. NeuroScript treats neurons as first-class composable units with compile-time shape validation, enabling declarative definition of neural networks with strong correctness guarantees.",
+    "webpageUrl": {
+      "url": "https://neuroscript-lang.com/"
+    }
+  },
+  "projects": [
+    {
+      "guid": "neuroscript",
+      "name": "NeuroScript",
+      "description": "A neural architecture composition language that compiles to PyTorch. Features compile-time shape algebra, composable neuron abstractions, a package manager with cryptographic signing, and a standard library of reusable neural building blocks. Designed to make neural network development declarative, type-safe, and reproducible.",
+      "webpageUrl": {
+        "url": "https://neuroscript-lang.com/"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/neuroscript-lang"
+      },
+      "licenses": [
+        "spdx:MIT"
+      ],
+      "tags": [
+        "compiler",
+        "machine-learning",
+        "neural-networks",
+        "pytorch",
+        "rust",
+        "domain-specific-language",
+        "type-systems",
+        "package-manager",
+        "deep-learning",
+        "ai-infrastructure"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/neuroscript-lang",
+        "description": "GitHub Sponsors for the NeuroScript organization"
+      }
+    ],
+    "plans": [
+      {
+        "guid": "one-time-any",
+        "status": "active",
+        "name": "One-time contribution of any amount",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "github-sponsors"
+        ]
+      },
+      {
+        "guid": "monthly-any",
+        "status": "active",
+        "name": "Monthly recurring sponsorship of any amount",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": [
+          "github-sponsors"
+        ]
+      }
+    ]
+  }
+}
