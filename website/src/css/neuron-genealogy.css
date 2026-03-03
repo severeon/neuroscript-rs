@@ -322,6 +322,7 @@
 
 .neuron-genealogy .ng-detail-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 12px;
   font-size: 12px;
