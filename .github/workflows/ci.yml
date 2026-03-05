@@ -12,7 +12,7 @@ env:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, aibox]
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +38,7 @@ jobs:
 
   wasm:
     name: WASM Check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, aibox]
     steps:
       - uses: actions/checkout@v4
 
