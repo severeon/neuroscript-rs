@@ -97,6 +97,9 @@ cargo build --release
 # Disable dead branch elimination only (but keep pattern reordering)
 ./target/release/neuroscript compile examples/residual.ns --no-dead-elim
 
+# Bundle primitives inline (no neuroscript_runtime dependency)
+./target/release/neuroscript compile examples/residual.ns --bundle
+
 # List all neurons in a file
 ./target/release/neuroscript list examples/residual.ns
 
@@ -107,6 +110,11 @@ cargo build --release
 ./target/release/neuroscript init          # Initialize a new package (Axon.toml)
 ./target/release/neuroscript add <dep>     # Add a dependency
 ./target/release/neuroscript fetch         # Fetch all dependencies
+
+# Package signing
+./target/release/neuroscript keygen        # Generate Ed25519 keypair
+./target/release/neuroscript publish       # Sign and prepare for distribution
+./target/release/neuroscript verify        # Verify checksums and signature
 
 # Get help for any command
 ./target/release/neuroscript --help
@@ -150,7 +158,7 @@ cargo check
 
 ### CLI Subcommands
 
-The CLI uses clap with seven subcommands:
+The CLI uses clap with eleven subcommands:
 
 **`parse <FILE>`**
 
@@ -177,6 +185,9 @@ The CLI uses clap with seven subcommands:
   * `-o, --output <FILE>`: Write to file instead of stdout
   * `--no-optimize`: Disable all optimizations
   * `--no-dead-elim`: Disable dead branch elimination only
+  * `--bundle`: Bundle primitive definitions inline (no `neuroscript_runtime` dependency)
+  * `--no-stdlib`: Skip loading standard library
+  * `--no-deps`: Skip loading fetched dependencies
   * `-v, --verbose`: Show optimization stats and detailed output
 
 **`list <FILE>`**
@@ -189,14 +200,21 @@ The CLI uses clap with seven subcommands:
 
 * Package management commands for Axon.toml-based dependency management
 
+**`keygen`** / **`publish`** / **`verify`**
+
+* Package signing and distribution commands
+* `keygen`: Generate Ed25519 keypair for package signing
+* `publish`: Sign and prepare a package for distribution
+* `verify`: Verify package checksums and signature
+
 ## Architecture
 
 ```
-Source (.ns) → Pest Grammar → AST Builder → IR → Validator → Optimizer → Codegen → PyTorch
-                                                     ↓
-                                               Shape Inference
-                                               Shape Algebra
-                                               Stdlib Registry
+Source (.ns) → Pest Grammar → AST Builder → IR → Unroll Expansion → Contract Resolution → Validator → Optimizer → Codegen → PyTorch
+                                                                                              ↓
+                                                                                        Shape Inference
+                                                                                        Shape Algebra
+                                                                                        Stdlib Registry
 ```
 
 ### Module Organization
@@ -209,6 +227,8 @@ src/
 ├── main.rs             # CLI entry point
 ├── interfaces.rs       # Central type definitions (IR, errors, traits)
 ├── ir.rs               # Legacy IR types (mostly moved to interfaces.rs)
+├── contract_resolver.rs # Compile-time neuron contract resolution (match(param):)
+├── unroll.rs           # Compile-time context-unroll expansion pass
 ├── grammar/
 │   ├── mod.rs         # Pest parser entry point (NeuroScriptParser)
 │   ├── neuroscript.pest # PEG grammar definition
@@ -233,8 +253,11 @@ src/
 │   ├── mod.rs         # Re-exports
 │   ├── generator.rs   # Main CodeGenerator struct
 │   ├── instantiation.rs # Module instantiation (__init__)
+│   ├── instantiation/ # Instantiation tests
 │   ├── forward.rs     # Forward pass generation
+│   ├── forward/       # Forward pass tests
 │   ├── utils.rs       # Helper functions
+│   ├── utils/         # Utils tests
 │   └── tests.rs       # Codegen tests
 ├── optimizer/
 │   ├── mod.rs         # Re-exports
@@ -247,6 +270,7 @@ src/
 │   ├── registry.rs    # Package registry
 │   └── resolver.rs    # Dependency resolution
 ├── stdlib_registry.rs # Primitive implementation registry
+├── stdlib_registry/   # Registry tests
 ├── stdlib.rs          # Standard library loading
 ├── doc_parser.rs      # Documentation extraction from .ns files
 ├── bin/
@@ -271,7 +295,7 @@ src/
   * `NeuronDef`: A neuron definition with params, inputs, outputs, and body
   * `NeuronBody`: Either `Primitive(ImplRef)` or `Graph(Vec<Connection>)`
   * `Connection`: Links `Endpoint` → `Endpoint` in a dataflow graph
-  * `Endpoint`: Can be `Ref`, `Tuple`, `Call`, or `Match`
+  * `Endpoint`: Can be `Ref`, `Tuple`, `Call`, `Match`, or `Reshape` (fat arrow)
   * `Shape`: Tensor shapes like `[*, dim]` with dimension expressions
   * `PortRef`: References to ports (e.g., `in`, `out`, `fork.left`)
   * `InferenceContext`: Tracks resolved dimensions and node outputs during shape inference
@@ -387,6 +411,13 @@ Two types:
 * Wildcards: `[*, dim]` (single dimension), `[*shape]` (variadic)
 * Expressions: `[dim * 4]`, `[seq - 1]`
 
+### Fat Arrow (`=>`) Shape Transform
+
+* Inline reshape/view operator: `in => [batch, seq, heads, dim] -> ...`
+* Compiles to `torch.reshape()` in generated PyTorch code
+* Can appear anywhere in a pipeline as an `Endpoint::Reshape`
+* See `examples/fat_arrow_basic.ns`, `fat_arrow_reduce.ns`, `fat_arrow_repeat.ns`
+
 ## Critical Implementation Details
 
 ### PEG Grammar Notes
@@ -396,105 +427,28 @@ Two types:
 * Keywords are defined as pest rules with `!ident_cont` negative lookahead to prevent partial matches
 * Indentation significance is handled during AST building, not in the grammar itself
 
-### Tuple Unpacking & Implicit Fork
-
-```neuroscript
-# Implicit fork — preferred for splitting tensors
-in -> (a, b, c)        # Single output auto-replicates to all bindings
-in -> (main, skip)     # Any number of outputs supported
-
-# Explicit Fork — only when you need named port access
-in -> Fork() -> f
-f.left -> ...
-f.right -> ...
-
-# NOT for inline calls
-Linear(dim, dim * 4)  # Call with args, not tuple
-```
-
 ### Match Expressions
 
-* Pattern match on tensor shapes with dimension capture
 * **Data-threading syntax**: `match: ->` followed by indented arms
 * **Match arm syntax**: `[pattern] where guard: pipeline`
-* **With guards**: `[*, d] where d > 512: Linear(d, 512) -> out`
-* **Dispatch on parameter**: `match(block):` followed by neuron port contract arms
-* **Dimension binding**: Captured dimensions (e.g., `d`, `seq`) can be:
-  * Used in guard conditions (`where d > 512`)
-  * Passed as arguments to neuron calls (`Linear(d, 512)`)
-  * Referenced in pipeline expressions
+* **Dispatch on parameter**: `match(block):` followed by neuron port contract arms (resolved at compile time by `contract_resolver.rs`)
+* Captured dimensions can be used in guards and neuron call arguments
 * Compiler generates lazy instantiation for modules with captured dimensions
 
-### Context Bindings
-
-* Define reusable neuron instantiations within a neuron definition
-* Syntax: `context:` block with bindings using `=` (not `:`)
-* Optional annotations: `@lazy`, `@static`, `@global`
-* Enables recursion via `@lazy` binding to self with modified parameters
-* Example:
-
-  ```neuroscript
-  neuron MyNeuron(d_model, num_heads, d_ff, depth):
-    in: [*, seq, d_model]
-    out: [*, seq, d_model]
-    context:
-      @lazy recurse = MyNeuron(d_model, num_heads, d_ff, depth - 1)
-    graph:
-      in -> match: ->
-        [*, seq, d_model] where depth > 0: recurse
-        [*, seq, d_model]: Identity() -> out
-  ```
-
-### Unroll Blocks
-
-* Compile-time expansion of repeated layers (e.g., stacking N transformer blocks)
-* Named unroll blocks live inside `context:` sections
-* Syntax: `name = unroll(count): binding = NeuronCall(args)`
-* The unroll name becomes a sequential pipeline endpoint in the graph
-* Example:
-
-  ```neuroscript
-  neuron TransformerStack(d_model, num_heads, d_ff, layers=10):
-    in: [*batch, seq, d_model]
-    out: [*batch, seq, d_model]
-    context:
-      stack = unroll(layers):
-        transformer = TransformerBlock(d_model, num_heads, d_ff)
-    graph:
-      in ->
-        stack
-        out
-  ```
-
-### If/Elif/Else Expressions
-
-* Conditional branching within graph pipelines
-* Syntax: `if condition: pipeline`, with optional `elif` and `else` branches
-* Supports both inline and indented pipeline forms
-
-### Global Declarations
-
-* Module-level shared state: `@global vocab_table = Embedding(50257, 768)`
-* Global value bindings: `@global num_heads = 12`
-* Referenced in shapes/expressions via `@global name`
-
-### Error Handling Philosophy
+### Error Handling
 
 * Use `miette::Diagnostic` for structured errors with source spans
 * Prefer `thiserror::Error` for error types
 * Always include context: what failed, where (span), and why
-* The IR types use `Display` traits for debugging - shapes print as `[*, dim]`
 
 ## Testing Strategy
 
 ### Example Files (`examples/`)
 
-Comprehensive test suite with 126+ `.ns` files covering language features:
+18 `.ns` files covering language features:
 
-* `01-comments.ns` through `17-match-dimension-binding.ns`: Core language features
-* Many additional test cases for edge cases, patterns, and advanced features
-* Real-world examples: `residual.ns`, `transformer_from_stdlib.ns`, etc.
-* Codegen test cases: `codegen_demo.ns`
+* Feature examples: `fat_arrow_basic.ns`, `higher_order_neuron.ns`, `match_neuron_contract.ns`, `unroll_context.ns`, etc.
+* Edge cases: `variadic_concat.ns`, `variable_length_tuple.ns`, `doc_comment_blank_line.ns`
 
 ### Standard Library (`stdlib/`)
 
@@ -635,7 +589,7 @@ Generated PyTorch modules are standalone after runtime is installed.
 * ✅ Shape algebra with pattern matching
 * ✅ Python runtime package
 * ✅ Standard library registry
-* ✅ Comprehensive test suite (126+ examples, 34 stdlib files)
+* ✅ Comprehensive test suite (18 examples, 34 stdlib files)
 
 ### Phase 2: Codegen ✅ Complete
 
@@ -654,6 +608,10 @@ Generated PyTorch modules are standalone after runtime is installed.
 * ✅ Higher-order neurons (neuron parameters with `: Neuron` type annotation)
 * ✅ Named unroll blocks for repeated layers (`unroll(count):`)
 * ✅ Default parameter values (`layers=10`)
+* ✅ Fat arrow (`=>`) shape transform operator
+* ✅ Compile-time contract resolution (`match(param):`)
+* ✅ `--bundle` flag for self-contained codegen (no runtime dependency)
+* ✅ Package signing (`keygen`, `publish`, `verify`)
 * ⏳ Full dimension variable type inference across programs
 * ⏳ Graph simplification and fusion optimizations
 * ⏳ Multiple backends (ONNX, JAX, TorchScript)
@@ -668,23 +626,9 @@ Generated PyTorch modules are standalone after runtime is installed.
 
 ## Key Dependencies
 
-### Rust Crates (from Cargo.toml)
+Key crates: `pest`/`pest_derive` (PEG parser), `miette` (diagnostics), `thiserror` (error types), `num-bigint` (shape algebra), `insta` (snapshot testing). See `Cargo.toml` for full list.
 
-* `pest` (2.7): PEG parser generator
-* `pest_derive` (2.7): Derive macro for pest grammar compilation
-* `thiserror` (1.0): Clean error type definitions with derive macros
-* `miette` (7.x): Beautiful diagnostic error reporting with source spans and fancy formatting
-* `num-bigint` (0.4): Arbitrary precision integers for shape algebra (prevents overflow)
-* `num-integer` (0.1): Integer traits for gcd, lcm operations
-* `num-traits` (0.2): Numeric traits (Zero, One) for generic arithmetic
-* `pretty_assertions` (1.4): Enhanced test output with colored diffs (dev-only)
-* `insta` (1.34): Snapshot testing for comprehensive regression detection (dev-only, with yaml feature)
-
-### Python Runtime (separate package)
-
-* Located in project root with `setup.py` / `pyproject.toml`
-* Install with `pip install -e .`
-* Provides `neuroscript_runtime.primitives.*` modules for generated code
+Python runtime: `pip install -e .` from project root for `neuroscript_runtime.primitives.*`.
 
 ## Development Notes
 
