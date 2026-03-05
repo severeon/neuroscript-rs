@@ -37,13 +37,11 @@ impl Shape {
         self.size().unwrap_or(BigUint::zero())
     }
 
-    /// flatten to rank-1 shape [size]
-    pub fn flatten(&self) -> Shape {
-        let size = self
-            .size()
-            .unwrap_or(BigUint::zero())
-            .to_usize()
-            .unwrap_or(0);
-        Shape::new(vec![Dim::Literal(size as i64)]) // best-effort for small sizes
+    /// Flatten to rank-1 shape [size].
+    /// Returns `None` if the shape contains non-literal dimensions (named, variadic, wildcard)
+    /// or if the total size overflows `usize`.
+    pub fn flatten(&self) -> Option<Shape> {
+        let size = self.size()?.to_usize()?;
+        Some(Shape::new(vec![Dim::Literal(size as i64)]))
     }
 }
