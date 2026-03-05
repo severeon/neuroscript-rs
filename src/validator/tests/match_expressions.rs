@@ -180,3 +180,91 @@ fn test_is_catch_all_pattern() {
     let pattern5 = Shape::new(vec![]);
     assert!(!Validator::is_catch_all_pattern(&pattern5));
 }
+
+#[test]
+fn test_match_inconsistent_port_count() {
+    // Arm 1 resolves to 1 port (ref "out"), arm 2 resolves to 2 ports (tuple)
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestMatch",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
+                    arms: vec![
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                Dim::Literal(512),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                named_dim("d"),
+                            ])),
+                            guard: None,
+                            pipeline: vec![tuple_endpoint(vec!["out", "extra"])],
+                            is_reachable: true,
+                        },
+                    ],
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { .. })
+    });
+}
+
+#[test]
+fn test_match_inconsistent_port_names() {
+    // Both arms produce 1 port but with different names ("out" vs "extra")
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestMatch",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
+                    arms: vec![
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                Dim::Literal(512),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                named_dim("d"),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("extra")],
+                            is_reachable: true,
+                        },
+                    ],
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { .. })
+    });
+}

@@ -689,6 +689,15 @@ pub enum ValidationError {
         reason: String,
         context: String,
     },
+    InconsistentArmPorts {
+        expr_kind: String,
+        arm_index: usize,
+        expected_count: usize,
+        got_count: usize,
+        expected_names: Vec<String>,
+        got_names: Vec<String>,
+        context: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -799,6 +808,29 @@ impl std::fmt::Display for ValidationError {
                     "Invalid annotation {}: {} ({})",
                     annotation, reason, context
                 )
+            }
+            ValidationError::InconsistentArmPorts {
+                expr_kind,
+                arm_index,
+                expected_count,
+                got_count,
+                expected_names,
+                got_names,
+                context,
+            } => {
+                if expected_count != got_count {
+                    write!(
+                        f,
+                        "Inconsistent port signature in {} expression: arm 1 produces {} port(s) but arm {} produces {} port(s) (in {})",
+                        expr_kind, expected_count, arm_index, got_count, context
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Inconsistent port names in {} expression: arm 1 has ports {:?} but arm {} has ports {:?} (in {})",
+                        expr_kind, expected_names, arm_index, got_names, context
+                    )
+                }
             }
             ValidationError::Custom(msg) => {
                 write!(f, "{}", msg)
