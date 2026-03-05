@@ -16,8 +16,23 @@ fn shape_three_wildcard() -> Shape {
     Shape::new(vec![Dim::Wildcard, Dim::Wildcard, Dim::Wildcard])
 }
 
+fn shape_named_3d() -> Shape {
+    Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("seq".to_string()),
+        Dim::Named("dim".to_string()),
+    ])
+}
+
+fn shape_named_2d() -> Shape {
+    Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("dim".to_string()),
+    ])
+}
+
 // Helper to build a composite neuron for @reduce tests: 3-dim input, 2-dim output
-// so the reduce properly decreases rank.
+// so the reduce properly decreases rank. Uses named dims so unreachable-dim checks pass.
 fn build_reduce_reshape_program(
     name: &str,
     reshape_ep: Endpoint,
@@ -38,8 +53,8 @@ fn build_reduce_reshape_program(
     builder
         .with_composite_ports(
             name,
-            vec![default_port(shape_three_wildcard())],
-            vec![default_port(shape_two_wildcard())],
+            vec![default_port(shape_named_3d())],
+            vec![default_port(shape_named_2d())],
             vec![
                 connection(ref_endpoint("in"), reshape_ep),
                 connection(reshape_ep_source, ref_endpoint("out")),

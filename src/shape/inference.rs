@@ -63,6 +63,7 @@ impl InferenceContext {
                 self.solve_expr_for_unknown(expr, *n as usize)
             }
             (Dim::Wildcard, _) | (_, Dim::Wildcard) => Ok(()), // Wildcard matches anything
+            (Dim::Inferred, _) | (_, Dim::Inferred) => Ok(()), // Inferred matches anything
             (Dim::Global(g1), Dim::Global(g2)) => {
                 if g1 == g2 {
                     Ok(())

@@ -563,6 +563,7 @@ pub(super) fn check_port_compatibility(
                                 source_rank, target_rank
                             ),
                             context: format!("in {}", context_neuron),
+                            span: None,
                         });
                     }
                 }
