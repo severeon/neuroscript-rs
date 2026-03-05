@@ -390,7 +390,7 @@ where
             // Shape compatibility across arms is handled separately by the shape inference pass.
             check_arm_port_consistency(&all_arm_ports, "match", &ctx.neuron.name)?;
 
-            // Safe: empty arms case returns early above at line 372
+            // Safe: empty arms case returns early above
             Ok(all_arm_ports[0].clone())
         }
         Endpoint::If(if_expr) => {

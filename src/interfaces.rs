@@ -689,6 +689,9 @@ pub enum ValidationError {
         reason: String,
         context: String,
     },
+    /// Match/if arms produce different port signatures.
+    /// Both counts and names are stored for a single variant; Display
+    /// branches on whether count or names differ.
     InconsistentArmPorts {
         expr_kind: String,
         arm_index: usize,
@@ -827,8 +830,8 @@ impl std::fmt::Display for ValidationError {
                 } else {
                     write!(
                         f,
-                        "Inconsistent port names in {} expression: arm 1 has ports {:?} but arm {} has ports {:?} (in {})",
-                        expr_kind, expected_names, arm_index, got_names, context
+                        "Inconsistent port names in {} expression: arm 1 has ports [{}] but arm {} has ports [{}] (in {})",
+                        expr_kind, expected_names.join(", "), arm_index, got_names.join(", "), context
                     )
                 }
             }

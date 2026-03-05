@@ -182,6 +182,34 @@ fn test_is_catch_all_pattern() {
 }
 
 #[test]
+fn test_if_inconsistent_port_count() {
+    // If branch resolves to 1 port, else branch resolves to 2 ports
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestIf",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::If(IfExpr {
+                    branches: vec![IfBranch {
+                        condition: Value::Name("cond".to_string()),
+                        pipeline: vec![ref_endpoint("out")],
+                    }],
+                    else_branch: Some(vec![tuple_endpoint(vec!["out", "extra"])]),
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { expr_kind, .. } if expr_kind == "if")
+    });
+}
+
+#[test]
 fn test_match_inconsistent_port_count() {
     // Arm 1 resolves to 1 port (ref "out"), arm 2 resolves to 2 ports (tuple)
     let mut program = ProgramBuilder::new()
