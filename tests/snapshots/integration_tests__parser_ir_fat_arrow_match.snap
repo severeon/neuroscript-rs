@@ -1,0 +1,31 @@
+---
+source: tests/integration_tests.rs
+expression: format_program_ir(&program)
+---
+=== Neurons ===
+
+neuron Identity:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/Identity
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron ReshapeRouter:
+  inputs:
+    default: [batch, dim]
+  outputs:
+    default: [batch, 256]
+  graph:
+    in -> match:
+      [batch, d] where (d > 512): Identity#0() -> [batch, 4, (d / 4)] -> [batch, d] -> Linear#3(d, 256) -> out
+      [batch, d]: Linear#4(d, 256) -> out

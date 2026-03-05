@@ -1,0 +1,28 @@
+# Fat arrow reshape inside match arms
+#
+# Exercises the => reshape operator within match arm pipelines.
+# This tests codegen's arm_reshape_src resolution path.
+
+# Primitives
+neuron Linear(in_dim, out_dim):
+  in: [*, in_dim]
+  out: [*, out_dim]
+  impl: core,nn/Linear
+
+neuron Identity:
+  in: [*shape]
+  out: [*shape]
+  impl: core,nn/Identity
+
+# Match arms that reshape before processing
+neuron ReshapeRouter:
+  in: [batch, dim]
+  out: [batch, 256]
+
+  graph:
+    in -> match: ->
+      # Large dim: reshape into groups, process, then project
+      [batch, d] where d > 512: Identity() => [batch, 4, d / 4] => [batch, d] -> Linear(d, 256) -> out
+
+      # Small dim: direct projection
+      [batch, d]: Linear(d, 256) -> out
