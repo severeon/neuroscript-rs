@@ -888,9 +888,50 @@ impl ShapeInferenceEngine {
                     })?;
                 }
 
-                // 3. Check for obvious conflicts (e.g. constant vs constant) in the middle?
-                // For MVP, we assume variadics are flexible enough to handle the rest.
-                // TODO: More rigorous overlap check
+                // 3. Check fixed dims in the "middle" gap between prefix and suffix.
+                // Each shape's middle region (prefix_end..suffix_start) contains its
+                // variadic plus zero or more fixed dims. Extract only the fixed dims
+                // from each side and check for conflicts.
+                //
+                // The fixed dims before the variadic (gap between common prefix and
+                // variadic pos) must be absorbed by the other shape's variadic.
+                // The fixed dims after the variadic are already covered by suffix
+                // unification. But if both shapes have fixed dims in the gap between
+                // the common prefix end and their respective variadic positions, those
+                // fixed dims should be unifiable pairwise (since both variadics could
+                // potentially expand to zero, making those dims align directly).
+
+                // Determine which variadic comes first
+                let (early_pos, late_pos, early_shape, late_shape) = if pos1 <= pos2 {
+                    (pos1, pos2, s1, s2)
+                } else {
+                    (pos2, pos1, s2, s1)
+                };
+
+                // Fixed dims between common prefix end and the early variadic
+                // (these exist only if common_prefix_len < early_pos)
+                let early_gap: Vec<&Dim> = early_shape.dims[common_prefix_len..early_pos]
+                    .iter()
+                    .collect();
+
+                // Fixed dims between common prefix end and the late variadic
+                let late_gap: Vec<&Dim> = late_shape.dims[common_prefix_len..late_pos]
+                    .iter()
+                    .collect();
+
+                // If both have fixed dims in the gap, try to unify the overlapping
+                // portion pairwise. The shorter gap's dims must match the corresponding
+                // dims in the longer gap (the remainder is absorbed by a variadic).
+                let overlap_len = std::cmp::min(early_gap.len(), late_gap.len());
+                for i in 0..overlap_len {
+                    ctx.unify(early_gap[i], late_gap[i]).map_err(|e| {
+                        format!(
+                            "Middle dimension {} mismatch in both-variadic unification: {}",
+                            common_prefix_len + i,
+                            e
+                        )
+                    })?;
+                }
 
                 Ok(())
             }
