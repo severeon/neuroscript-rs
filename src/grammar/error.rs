@@ -3,22 +3,20 @@
 //! Converts pest errors to our ParseError type for consistent error reporting.
 
 use miette::SourceSpan;
-use pest::error::{Error as PestError, LineColLocation};
+use pest::error::{Error as PestError, InputLocation};
 
 use crate::grammar::Rule;
 use crate::interfaces::ParseError;
 
 /// Convert a pest error to our ParseError type
 pub fn from_pest_error(err: PestError<Rule>) -> ParseError {
-    let (start, end) = match err.line_col {
-        LineColLocation::Pos((line, col)) => {
-            // Single position error - estimate span from location
-            let start = estimate_offset(line, col);
-            (start, start + 1)
+    // Use pest's InputLocation which provides exact byte offsets,
+    // rather than estimating from line/column numbers
+    let (start, end) = match err.location {
+        InputLocation::Pos(pos) => {
+            (pos, pos + 1)
         }
-        LineColLocation::Span((start_line, start_col), (end_line, end_col)) => {
-            let start = estimate_offset(start_line, start_col);
-            let end = estimate_offset(end_line, end_col);
+        InputLocation::Span((start, end)) => {
             (start, end)
         }
     };
@@ -35,10 +33,26 @@ pub fn from_pest_error(err: PestError<Rule>) -> ParseError {
     }
 }
 
-/// Estimate byte offset from line/column (approximate)
+/// Compute byte offset from line/column using actual source text.
+///
+/// Lines and columns are 1-based (as reported by pest's `LineColLocation`).
+/// Falls back to `estimate_offset` if the line number exceeds the source line count.
+pub fn compute_offset(source: &str, line: usize, col: usize) -> usize {
+    let mut offset = 0;
+    for (i, src_line) in source.lines().enumerate() {
+        if i + 1 == line {
+            // Found the target line; add the column offset (1-based → 0-based)
+            return offset + col.saturating_sub(1).min(src_line.len());
+        }
+        // +1 for the newline character
+        offset += src_line.len() + 1;
+    }
+    // Fallback: line exceeds source — use estimate
+    estimate_offset(line, col)
+}
+
+/// Estimate byte offset from line/column (approximate fallback)
 fn estimate_offset(line: usize, col: usize) -> usize {
-    // Rough estimate: assume 80 chars per line on average
-    // This is imprecise but gives a reasonable location for error reporting
     (line.saturating_sub(1)) * 80 + col.saturating_sub(1)
 }
 
