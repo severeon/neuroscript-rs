@@ -1062,26 +1062,21 @@ fn process_destination(
                                 if !named_reduce.is_empty() {
                                     named_reduce
                                 } else {
-                                    // Fallback: use trailing dims based on rank delta.
-                                    // Common case: [*, c, h, w] => @reduce(mean) [*, c]
-                                    // reduces the last (src_rank - target_rank) dims.
-                                    //
-                                    // LIMITATION: This assumes the reduced dims are trailing.
-                                    // If the reduction target is non-trailing (e.g., reducing
-                                    // dim index 1 from [*, heads, seq, dh] to [*, seq, dh]),
-                                    // this fallback will select the wrong indices. Use fully
-                                    // named source shapes for correct non-trailing reduction.
-                                    let src_rank = src_shape.dims.len();
-                                    let tgt_rank = reshape.dims.len();
-                                    eprintln!(
-                                        "warning: @reduce fallback assumes trailing dimensions; \
-                                         use fully named source shapes for correct non-trailing reduction"
-                                    );
-                                    if src_rank > tgt_rank {
-                                        (tgt_rank..src_rank).collect()
-                                    } else {
-                                        vec![]
-                                    }
+                                    // Cannot reliably determine which dimensions to reduce.
+                                    // The source shape has no named dims that are absent
+                                    // from the target, so we cannot infer the reduction axes.
+                                    // Previously this used a trailing-dims heuristic that
+                                    // silently produced wrong code for non-trailing reductions
+                                    // (e.g., reducing dim index 1 from [*, heads, seq, dh]
+                                    // to [*, seq, dh]).
+                                    return Err(CodegenError::InvalidConnection(
+                                        "cannot determine @reduce dimensions: source shape dims \
+                                         are not sufficiently named to identify which axes to \
+                                         reduce. Use fully named dimensions in the source shape \
+                                         (e.g., [batch, heads, seq, dim]) so the compiler can \
+                                         match them against the target shape."
+                                            .to_string(),
+                                    ));
                                 }
                             } else {
                                 return Err(CodegenError::InvalidConnection(
