@@ -1156,7 +1156,21 @@ fn process_destination(
                                     true
                                 }
                                 ReshapeDim::Named(n) => !source_dim_names.contains(n),
-                                _ => false,
+                                ReshapeDim::Binding { name, .. } => {
+                                    !source_dim_names.contains(name)
+                                }
+                                ReshapeDim::Expr(_) => {
+                                    // Expressions reference existing dims; not new
+                                    false
+                                }
+                                ReshapeDim::Others => {
+                                    // Others represents a variable number of remaining
+                                    // dims and cannot map to a single expand() slot.
+                                    return Err(CodegenError::UnsupportedFeature(
+                                        "Others (`...`) cannot appear in @repeat(copy) target shape: \
+                                         expand() requires fixed-rank dimensions".to_string(),
+                                    ));
+                                }
                             };
                             if is_new {
                                 unsqueeze_indices.push(i);
