@@ -708,9 +708,6 @@ fn process_destination(
             // Initialize result_var to None for safety (though not strictly needed if all paths return)
             writeln!(output, "{}{} = None", indent, result_var).unwrap();
 
-            let mut first = true;
-            let mut prev_condition = String::new();
-
             // Check if there's a reachable catch-all arm (all wildcards, no guard)
             let has_reachable_catchall = match_expr.arms.iter().any(|arm| {
                 arm.is_reachable
@@ -724,16 +721,23 @@ fn process_destination(
                     }
             });
 
+            // Pre-compute shape checks for all reachable arms and group by shape condition.
+            // Arms sharing the same shape condition (e.g., same ndim) must be nested under
+            // one if/elif block, with guards as nested conditions inside.
+            struct ArmInfo<'a> {
+                shape: &'a Shape,
+                shape_check: ShapeCheckResult,
+                arm: &'a MatchArm,
+            }
+
+            let mut arm_infos: Vec<ArmInfo> = Vec::new();
             for arm in &match_expr.arms {
-                // Skip unreachable arms (pruned by optimizer)
                 if !arm.is_reachable {
                     continue;
                 }
-
                 let shape = match &arm.pattern {
                     MatchPattern::Shape(s) => s,
                     MatchPattern::NeuronContract(_) => {
-                        // NeuronContract should be resolved before codegen
                         return Err(CodegenError::UnsupportedFeature(
                             "NeuronContract patterns must be resolved before codegen".to_string(),
                         ));
@@ -741,97 +745,174 @@ fn process_destination(
                 };
                 let shape_check =
                     generate_shape_check(gen, shape, arm.guard.as_ref(), &source_var);
+                arm_infos.push(ArmInfo {
+                    shape,
+                    shape_check,
+                    arm,
+                });
+            }
 
-                // Determine prefix: use "else:" if pattern condition is same as previous
-                let prefix = if first {
-                    "if"
-                } else if shape_check.condition == prev_condition {
-                    // Same pattern, different guard (or no guard) -> use else
-                    "else"
+            // Group consecutive arms by shape condition
+            let mut groups: Vec<Vec<usize>> = Vec::new();
+            for (i, info) in arm_infos.iter().enumerate() {
+                if i == 0
+                    || arm_infos[groups.last().unwrap()[0]].shape_check.condition
+                        != info.shape_check.condition
+                {
+                    groups.push(vec![i]);
                 } else {
-                    "elif"
-                };
-                first = false;
-
-                // Only output condition if it's not "else"
-                if prefix == "else" {
-                    writeln!(output, "{}{}:", indent, prefix).unwrap();
-                } else {
-                    writeln!(output, "{}{} {}:", indent, prefix, shape_check.condition).unwrap();
-                    prev_condition = shape_check.condition.clone();
+                    groups.last_mut().unwrap().push(i);
                 }
+            }
 
-                // Process pipeline - save var_names to avoid pollution from match arm scope
-                let saved_var_names = gen.var_names.clone();
+            let mut first_group = true;
+            for group in &groups {
+                let first_info = &arm_infos[group[0]];
+                let shape_condition = &first_info.shape_check.condition;
+
+                // Emit the shape-level if/elif
+                let prefix = if first_group { "if" } else { "elif" };
+                first_group = false;
+                writeln!(output, "{}{} {}:", indent, prefix, shape_condition).unwrap();
+
                 let arm_indent = format!("{}    ", indent);
 
-                // Emit dimension bindings before processing pipeline
-                for binding in &shape_check.bindings {
+                // Emit dimension bindings once for the group (all arms share the same shape)
+                for binding in &first_info.shape_check.bindings {
                     writeln!(output, "{}{}", arm_indent, binding).unwrap();
                 }
 
-                // If guard uses captured dimensions, check it after binding
-                let pipeline_indent = if let Some(guard_cond) = &shape_check.guard_condition {
-                    writeln!(output, "{}if {}:", arm_indent, guard_cond).unwrap();
-                    format!("{}    ", arm_indent)
-                } else {
-                    arm_indent.clone()
-                };
+                // If the group has only one arm with no guard_condition, emit pipeline directly
+                if group.len() == 1 && first_info.shape_check.guard_condition.is_none() {
+                    let info = &arm_infos[group[0]];
+                    let saved_var_names = gen.var_names.clone();
 
-                let mut current_var = source_var.clone();
+                    let pipeline_indent = arm_indent.clone();
+                    let mut current_var = source_var.clone();
+                    let mut prev_endpoint: Option<&Endpoint> = None;
+                    for ep in &info.arm.pipeline {
+                        let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                            resolve_endpoint_source_shape(prev_endpoint, gen)
+                                .or_else(|| {
+                                    if prev_endpoint.is_none() {
+                                        Some(info.shape.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                        } else {
+                            None
+                        };
 
-                let mut prev_endpoint: Option<&Endpoint> = None;
-                for ep in &arm.pipeline {
-                    // For Reshape endpoints, try to resolve source shape from previous endpoint.
-                    // When reshape is the first endpoint in a match arm (prev_endpoint is None),
-                    // use the match arm's pattern shape as the source — the pattern defines
-                    // the shape of the data flowing into the arm pipeline.
-                    let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
-                        resolve_endpoint_source_shape(prev_endpoint, gen)
-                            .or_else(|| {
-                                if prev_endpoint.is_none() {
-                                    Some(shape.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                    } else {
-                        None
-                    };
+                        current_var = process_destination(
+                            output,
+                            gen,
+                            ep,
+                            current_var,
+                            &pipeline_indent,
+                            used_var_names,
+                            call_to_result,
+                            match_to_result,
+                            if_to_result,
+                            binding_call_results,
+                            emitted_unroll_groups,
+                            1,
+                            arm_reshape_src.as_ref(),
+                        )?;
 
-                    current_var = process_destination(
-                        output,
-                        gen,
-                        ep,
-                        current_var,
-                        &pipeline_indent,
-                        used_var_names,
-                        call_to_result,
-                        match_to_result,
-                        if_to_result,
-                        binding_call_results,
-                        emitted_unroll_groups,
-                        1,
-                        arm_reshape_src.as_ref(),
-                    )?;
-
-                    // If endpoint was a Call, store result in call_to_result
-                    if let Endpoint::Call { .. } = ep {
-                        let key = endpoint_key_impl(ep);
-                        call_to_result.insert(key, current_var.clone());
+                        if let Endpoint::Call { .. } = ep {
+                            let key = endpoint_key_impl(ep);
+                            call_to_result.insert(key, current_var.clone());
+                        }
+                        prev_endpoint = Some(ep);
                     }
-                    prev_endpoint = Some(ep);
+
+                    writeln!(
+                        output,
+                        "{}{} = {}",
+                        pipeline_indent, result_var, current_var
+                    )
+                    .unwrap();
+
+                    gen.var_names = saved_var_names;
+                } else {
+                    // Multiple arms (or single guarded arm) sharing the same shape condition:
+                    // emit nested if/elif/else for guards
+                    let mut first_guard = true;
+                    for &arm_idx in group {
+                        let info = &arm_infos[arm_idx];
+                        let saved_var_names = gen.var_names.clone();
+
+                        // Re-emit bindings into var_names scope (they were emitted textually above)
+                        // The bindings are already in the output; we just need the pipeline to see them.
+
+                        let pipeline_indent;
+                        if let Some(guard_cond) = &info.shape_check.guard_condition {
+                            let guard_prefix = if first_guard { "if" } else { "elif" };
+                            writeln!(output, "{}{} {}:", arm_indent, guard_prefix, guard_cond)
+                                .unwrap();
+                            pipeline_indent = format!("{}    ", arm_indent);
+                            first_guard = false;
+                        } else if !first_guard {
+                            // No guard on this arm but previous arms had guards -> else
+                            writeln!(output, "{}else:", arm_indent).unwrap();
+                            pipeline_indent = format!("{}    ", arm_indent);
+                        } else {
+                            // Single arm with no guard (shouldn't reach here due to fast path above,
+                            // but handle gracefully)
+                            pipeline_indent = arm_indent.clone();
+                            first_guard = false;
+                        }
+
+                        let mut current_var = source_var.clone();
+                        let mut prev_endpoint: Option<&Endpoint> = None;
+                        for ep in &info.arm.pipeline {
+                            let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                                resolve_endpoint_source_shape(prev_endpoint, gen)
+                                    .or_else(|| {
+                                        if prev_endpoint.is_none() {
+                                            Some(info.shape.clone())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                            } else {
+                                None
+                            };
+
+                            current_var = process_destination(
+                                output,
+                                gen,
+                                ep,
+                                current_var,
+                                &pipeline_indent,
+                                used_var_names,
+                                call_to_result,
+                                match_to_result,
+                                if_to_result,
+                                binding_call_results,
+                                emitted_unroll_groups,
+                                1,
+                                arm_reshape_src.as_ref(),
+                            )?;
+
+                            if let Endpoint::Call { .. } = ep {
+                                let key = endpoint_key_impl(ep);
+                                call_to_result.insert(key, current_var.clone());
+                            }
+                            prev_endpoint = Some(ep);
+                        }
+
+                        writeln!(
+                            output,
+                            "{}{} = {}",
+                            pipeline_indent, result_var, current_var
+                        )
+                        .unwrap();
+
+                        gen.var_names = saved_var_names;
+                    }
                 }
-
-                writeln!(
-                    output,
-                    "{}{} = {}",
-                    pipeline_indent, result_var, current_var
-                )
-                .unwrap();
-
-                // Restore var_names to prevent match arm scope from leaking
-                gen.var_names = saved_var_names;
             }
 
             // Else clause: only raise if no reachable catch-all exists
@@ -1156,7 +1237,21 @@ fn process_destination(
                                     true
                                 }
                                 ReshapeDim::Named(n) => !source_dim_names.contains(n),
-                                _ => false,
+                                ReshapeDim::Binding { name, .. } => {
+                                    !source_dim_names.contains(name)
+                                }
+                                ReshapeDim::Expr(_) => {
+                                    // Expressions reference existing dims; not new
+                                    false
+                                }
+                                ReshapeDim::Others => {
+                                    // Others represents a variable number of remaining
+                                    // dims and cannot map to a single expand() slot.
+                                    return Err(CodegenError::UnsupportedFeature(
+                                        "Others (`...`) cannot appear in @repeat(copy) target shape: \
+                                         expand() requires fixed-rank dimensions".to_string(),
+                                    ));
+                                }
                             };
                             if is_new {
                                 unsqueeze_indices.push(i);
