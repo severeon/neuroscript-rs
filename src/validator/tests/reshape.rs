@@ -12,6 +12,58 @@ fn next_test_id() -> usize {
 
 // ========== Tests using ProgramBuilder (IR-level) ==========
 
+fn shape_three_wildcard() -> Shape {
+    Shape::new(vec![Dim::Wildcard, Dim::Wildcard, Dim::Wildcard])
+}
+
+fn shape_named_3d() -> Shape {
+    Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("seq".to_string()),
+        Dim::Named("dim".to_string()),
+    ])
+}
+
+fn shape_named_2d() -> Shape {
+    Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("dim".to_string()),
+    ])
+}
+
+// Helper to build a composite neuron for @reduce tests: 3-dim input, 2-dim output
+// so the reduce properly decreases rank. Uses named dims so unreachable-dim checks pass.
+fn build_reduce_reshape_program(
+    name: &str,
+    reshape_ep: Endpoint,
+    extra_neurons: Vec<(&str, Shape, Shape)>,
+) -> Program {
+    let reshape_ep_source = match &reshape_ep {
+        Endpoint::Reshape(r) => Endpoint::Reshape(ReshapeExpr {
+            dims: r.dims.clone(),
+            annotation: r.annotation.clone(),
+            id: next_test_id(),
+        }),
+        other => other.clone(),
+    };
+    let mut builder = ProgramBuilder::new();
+    for (n, in_shape, out_shape) in extra_neurons {
+        builder = builder.with_simple_neuron(n, in_shape, out_shape);
+    }
+    builder
+        .with_composite_ports(
+            name,
+            vec![default_port(shape_named_3d())],
+            vec![default_port(shape_named_2d())],
+            vec![
+                connection(ref_endpoint("in"), reshape_ep),
+                connection(reshape_ep_source, ref_endpoint("out")),
+            ],
+            Some(10),
+        )
+        .build()
+}
+
 // Helper to build a composite neuron with proper wildcard shapes that
 // won't conflict with reshape output shapes during port compatibility checks
 fn build_reshape_program(
@@ -82,7 +134,7 @@ fn test_validate_reshape_basic() {
 
 #[test]
 fn test_validate_reshape_with_reduce_mean() {
-    // Reshape with @reduce(mean) annotation should pass when target dims exist in input shape
+    // Reshape with @reduce(mean) annotation should pass when rank decreases (3 -> 2)
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![
             ReshapeDim::Named("batch".to_string()),
@@ -94,29 +146,13 @@ fn test_validate_reshape_with_reduce_mean() {
         id: 101,
     });
 
-    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
-    let input_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let output_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let mut program = build_reshape_program_with_ports(
-        "ReduceTest",
-        reshape_ep,
-        vec![],
-        vec![default_port(input_shape)],
-        vec![default_port(output_shape)],
-    );
+    let mut program = build_reduce_reshape_program("ReduceTest", reshape_ep, vec![]);
     assert_validation_ok(&mut program);
 }
 
 #[test]
 fn test_validate_reshape_with_reduce_sum() {
-    // Reshape with @reduce(sum) annotation should pass when target dims exist in input shape
+    // Reshape with @reduce(sum) annotation should pass when rank decreases (3 -> 2)
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![
             ReshapeDim::Named("batch".to_string()),
@@ -128,24 +164,63 @@ fn test_validate_reshape_with_reduce_sum() {
         id: 102,
     });
 
-    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
-    let input_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let output_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let mut program = build_reshape_program_with_ports(
-        "ReduceSumTest",
-        reshape_ep,
-        vec![],
-        vec![default_port(input_shape)],
-        vec![default_port(output_shape)],
-    );
+    let mut program = build_reduce_reshape_program("ReduceSumTest", reshape_ep, vec![]);
     assert_validation_ok(&mut program);
+}
+
+#[test]
+fn test_validate_reshape_reduce_must_decrease_rank() {
+    // @reduce with same rank as source should fail (2 dims -> 2 dims)
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![
+            ReshapeDim::Named("batch".to_string()),
+            ReshapeDim::Named("dim".to_string()),
+        ],
+        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+            "mean".to_string(),
+        ))),
+        id: next_test_id(),
+    });
+
+    // build_reshape_program uses shape_two_wildcard() = [*, *] (2 dims) as input
+    let mut program = build_reshape_program("ReduceNoRankDecrease", reshape_ep, vec![]);
+    assert_validation_error(&mut program, |e| {
+        matches!(
+            e,
+            ValidationError::InvalidAnnotation {
+                reason,
+                ..
+            } if reason.contains("@reduce must decrease rank")
+        )
+    });
+}
+
+#[test]
+fn test_validate_reshape_reduce_increasing_rank_fails() {
+    // @reduce with more dims than source should fail (2 dims -> 3 dims)
+    let reshape_ep = Endpoint::Reshape(ReshapeExpr {
+        dims: vec![
+            ReshapeDim::Named("batch".to_string()),
+            ReshapeDim::Named("seq".to_string()),
+            ReshapeDim::Named("dim".to_string()),
+        ],
+        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+            "sum".to_string(),
+        ))),
+        id: next_test_id(),
+    });
+
+    // build_reshape_program uses shape_two_wildcard() = [*, *] (2 dims) as input
+    let mut program = build_reshape_program("ReduceRankIncrease", reshape_ep, vec![]);
+    assert_validation_error(&mut program, |e| {
+        matches!(
+            e,
+            ValidationError::InvalidAnnotation {
+                reason,
+                ..
+            } if reason.contains("@reduce must decrease rank")
+        )
+    });
 }
 
 #[test]
@@ -224,6 +299,7 @@ fn test_validate_reshape_invalid_repeat_intrinsic() {
 #[test]
 fn test_validate_reshape_with_neuron_annotation_existing() {
     // Reshape with a neuron annotation referencing an existing neuron should pass
+    // Uses 3-dim input -> 2-dim target so @reduce properly decreases rank
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![
             ReshapeDim::Named("batch".to_string()),
@@ -237,22 +313,10 @@ fn test_validate_reshape_with_neuron_annotation_existing() {
         id: 106,
     });
 
-    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
-    let input_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let output_shape = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let mut program = build_reshape_program_with_ports(
+    let mut program = build_reduce_reshape_program(
         "NeuronAnnotationTest",
         reshape_ep,
         vec![("PoolNeuron", wildcard(), wildcard())],
-        vec![default_port(input_shape)],
-        vec![default_port(output_shape)],
     );
     assert_validation_ok(&mut program);
 }

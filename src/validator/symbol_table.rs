@@ -536,6 +536,39 @@ pub(super) fn check_port_compatibility(
             }
         }
         // Annotated reshapes (@reduce/@repeat) intentionally change element count.
+        // However, @reduce must strictly decrease rank (target dims < source dims).
+        if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+            // Compute source rank from the first source port's shape.
+            // Skip check if source has variadic dims (unknown rank).
+            if let Some(src_port) = source_ports.first() {
+                let source_has_variadic = src_port
+                    .shape
+                    .dims
+                    .iter()
+                    .any(|d| matches!(d, Dim::Variadic(_)));
+                // Skip check if target has Others (unknown rank).
+                let target_has_others = reshape
+                    .dims
+                    .iter()
+                    .any(|d| matches!(d, ReshapeDim::Others));
+
+                if !source_has_variadic && !target_has_others {
+                    let source_rank = src_port.shape.dims.len();
+                    let target_rank = reshape.dims.len();
+                    if target_rank >= source_rank {
+                        errors.push(ValidationError::InvalidAnnotation {
+                            annotation: format!("{}", reshape.annotation.as_ref().unwrap()),
+                            reason: format!(
+                                "@reduce must decrease rank: source has {} dimensions but target has {}",
+                                source_rank, target_rank
+                            ),
+                            context: format!("in {}", context_neuron),
+                            span: None,
+                        });
+                    }
+                }
+            }
+        }
         return errors;
     }
 

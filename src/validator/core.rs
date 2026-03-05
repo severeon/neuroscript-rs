@@ -268,7 +268,7 @@ impl Validator {
                 Dim::Global(name) => {
                     known.insert(name.clone());
                 }
-                Dim::Literal(_) | Dim::Wildcard => {}
+                Dim::Literal(_) | Dim::Wildcard | Dim::Inferred => {}
             }
         }
     }
@@ -289,7 +289,7 @@ impl Validator {
             Dim::Global(name) => {
                 known.insert(name.clone());
             }
-            Dim::Literal(_) | Dim::Wildcard => {}
+            Dim::Literal(_) | Dim::Wildcard | Dim::Inferred => {}
         }
     }
 
