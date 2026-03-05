@@ -336,6 +336,23 @@ fn format_endpoint(endpoint: &Endpoint) -> String {
             result.push(']');
             result
         }
+        Endpoint::Wrap(wrap_expr) => {
+            let mut result = format!("@wrap({}", wrap_expr.wrapper_name);
+            for arg in &wrap_expr.wrapper_args {
+                result.push_str(&format!(", {}", format_value(arg)));
+            }
+            result.push_str("): ");
+            match &wrap_expr.content {
+                neuroscript::WrapContent::Ref(name) => result.push_str(name),
+                neuroscript::WrapContent::Pipeline(pipeline) => {
+                    result.push_str("-> ");
+                    let pipeline_str: Vec<String> =
+                        pipeline.iter().map(format_endpoint).collect();
+                    result.push_str(&pipeline_str.join(" -> "));
+                }
+            }
+            result
+        }
     }
 }
 

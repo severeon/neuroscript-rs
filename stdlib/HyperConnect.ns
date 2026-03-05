@@ -1,0 +1,10 @@
+/// Hyper-Connection wrapper.
+/// Replaces residual connections with learnable depth+width connections.
+/// Reference: Zhu et al., "Hyper-Connections" (ICLR 2025) -- arXiv:2409.19606v3
+neuron HyperConnect(layer: Neuron, n, dim, layer_idx, dynamic=true):
+    in: [*batch, n, dim]
+    out: [*batch, n, dim]
+    graph:
+        in -> HCWidth(n, dim, layer_idx, dynamic) -> (layer_in, state)
+        layer_in -> layer -> layer_out
+        (layer_out, state) -> HCDepth(n, dim, dynamic) -> out

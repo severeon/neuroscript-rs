@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HyperCollapse:
+  inputs:
+    default: [*batch, n, dim]
+  outputs:
+    default: [*batch, dim]
+  impl:
+    Source: core,connections/HyperCollapse

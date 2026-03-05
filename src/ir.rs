@@ -182,6 +182,7 @@ impl std::fmt::Display for Endpoint {
             Endpoint::Match(m) => write!(f, "{}", m),
             Endpoint::If(expr) => write!(f, "{}", expr),
             Endpoint::Reshape(r) => write!(f, "{}", r),
+            Endpoint::Wrap(w) => write!(f, "{}", w),
         }
     }
 }
@@ -214,6 +215,32 @@ impl std::fmt::Display for IfExpr {
             }
         }
         Ok(())
+    }
+}
+
+impl std::fmt::Display for WrapExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@wrap({}", self.wrapper_name)?;
+        for arg in &self.wrapper_args {
+            write!(f, ", {}", arg)?;
+        }
+        for (k, v) in &self.wrapper_kwargs {
+            write!(f, ", {}={}", k, v)?;
+        }
+        write!(f, "): ")?;
+        match &self.content {
+            WrapContent::Ref(name) => write!(f, "{}", name),
+            WrapContent::Pipeline(pipeline) => {
+                write!(f, "-> ")?;
+                for (i, ep) in pipeline.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " -> ")?;
+                    }
+                    write!(f, "{}", ep)?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 

@@ -517,3 +517,115 @@ neuron CustomPool(dim):
         panic!("expected graph body");
     }
 }
+
+#[test]
+fn test_parse_wrap_ref() {
+    let source = r#"
+neuron Test(dim):
+    in: [*, dim]
+    out: [*, dim]
+    context:
+        attn = MultiHeadSelfAttention(dim, 8)
+    graph:
+        in -> @wrap(HyperConnect, 4, dim, 0): attn -> out
+"#;
+    let program = crate::parse(source).expect("should parse @wrap ref form");
+    let neuron = program.neurons.get("Test").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert!(!connections.is_empty(), "Should have connections");
+        // The @wrap endpoint should appear as an Endpoint::Wrap in the connections
+        let has_wrap = connections.iter().any(|c| {
+            matches!(&c.source, crate::interfaces::Endpoint::Wrap(_))
+                || matches!(&c.destination, crate::interfaces::Endpoint::Wrap(_))
+        });
+        assert!(has_wrap, "Should contain a Wrap endpoint");
+        // Check wrapper name and args
+        for conn in connections {
+            if let crate::interfaces::Endpoint::Wrap(wrap_expr) = &conn.source {
+                assert_eq!(wrap_expr.wrapper_name, "HyperConnect");
+                assert_eq!(wrap_expr.wrapper_args.len(), 3); // 4, dim, 0
+                assert!(matches!(&wrap_expr.content, crate::interfaces::WrapContent::Ref(name) if name == "attn"));
+                break;
+            }
+            if let crate::interfaces::Endpoint::Wrap(wrap_expr) = &conn.destination {
+                assert_eq!(wrap_expr.wrapper_name, "HyperConnect");
+                assert_eq!(wrap_expr.wrapper_args.len(), 3); // 4, dim, 0
+                assert!(matches!(&wrap_expr.content, crate::interfaces::WrapContent::Ref(name) if name == "attn"));
+                break;
+            }
+        }
+    } else {
+        panic!("Expected Graph body");
+    }
+}
+
+#[test]
+fn test_parse_wrap_pipeline() {
+    let source = r#"
+neuron Test(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in ->
+            @wrap(HyperConnect, 4, dim, 0): ->
+                LayerNorm(dim)
+                Linear(dim, dim)
+            out
+"#;
+    let program = crate::parse(source).expect("should parse @wrap pipeline form");
+    let neuron = program.neurons.get("Test").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert!(!connections.is_empty(), "Should have connections");
+        // Find the wrap endpoint
+        let has_wrap = connections.iter().any(|c| {
+            matches!(&c.source, crate::interfaces::Endpoint::Wrap(_))
+                || matches!(&c.destination, crate::interfaces::Endpoint::Wrap(_))
+        });
+        assert!(has_wrap, "Should contain a Wrap endpoint");
+        // Check wrapper details
+        for conn in connections {
+            if let crate::interfaces::Endpoint::Wrap(wrap_expr) = &conn.source {
+                assert_eq!(wrap_expr.wrapper_name, "HyperConnect");
+                assert!(matches!(&wrap_expr.content, crate::interfaces::WrapContent::Pipeline(p) if !p.is_empty()));
+                break;
+            }
+            if let crate::interfaces::Endpoint::Wrap(wrap_expr) = &conn.destination {
+                assert_eq!(wrap_expr.wrapper_name, "HyperConnect");
+                assert!(matches!(&wrap_expr.content, crate::interfaces::WrapContent::Pipeline(p) if !p.is_empty()));
+                break;
+            }
+        }
+    } else {
+        panic!("Expected Graph body");
+    }
+}
+
+#[test]
+fn test_parse_wrap_inline_pipeline() {
+    let source = r#"
+neuron Test(dim):
+    in: [*, dim]
+    out: [*, dim]
+    graph:
+        in -> @wrap(HyperConnect, 4, dim, 0): -> LayerNorm(dim) -> out
+"#;
+    let program = crate::parse(source).expect("should parse @wrap inline pipeline form");
+    let neuron = program.neurons.get("Test").unwrap();
+    if let crate::interfaces::NeuronBody::Graph { connections, .. } = &neuron.body {
+        assert!(!connections.is_empty(), "Should have connections");
+    } else {
+        panic!("Expected Graph body");
+    }
+}
+
+#[test]
+fn test_parse_wrap_grammar_rule() {
+    // Test the wrap_endpoint grammar rule directly
+    let input = "@wrap(HyperConnect, 4, dim): foo";
+    let result = NeuroScriptParser::parse(Rule::wrap_endpoint, input);
+    assert!(
+        result.is_ok(),
+        "Failed to parse wrap_endpoint: {:?}",
+        result.err()
+    );
+}

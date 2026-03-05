@@ -1,0 +1,21 @@
+/// Hyper-Expand (Network Entry Point)
+///
+/// Expands a single hidden vector into n copies for use with
+/// hyper-connections.  Placed at the beginning of a network to
+/// initialize the hyper hidden state from a standard embedding.
+///
+/// Parameters:
+/// - n: Number of hidden copies to create (expansion factor)
+///
+/// Shape Contract:
+/// - Input: [*batch, dim] standard hidden vector
+/// - Output: [*batch, n, dim] n stacked copies of the input
+///
+/// Notes:
+/// - Simple unsqueeze + repeat operation (no learnable parameters)
+/// - Pairs with HyperCollapse at the network exit
+/// - n should match the expansion factor used by HCWidth/HCDepth
+neuron HyperExpand(n):
+    in: [*batch, dim]
+    out: [*batch, n, dim]
+    impl: core,connections/HyperExpand

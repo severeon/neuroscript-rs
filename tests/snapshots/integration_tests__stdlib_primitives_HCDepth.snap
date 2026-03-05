@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HCDepth(n, dim, dynamic = true):
+  inputs:
+    layer_out: [*batch, dim]
+    state: [*batch, n, dim]
+  outputs:
+    default: [*batch, n, dim]
+  impl:
+    Source: core,connections/HCDepth

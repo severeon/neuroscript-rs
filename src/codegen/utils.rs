@@ -28,6 +28,58 @@ pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
     }
 }
 
+/// Convert a Value to Python code, resolving names through var_names map.
+/// Used by lazy instantiation where context bindings need `self.` prefix.
+/// Recurses into BinOp operands and Call args/kwargs to resolve all names.
+pub(super) fn value_to_python_with_vars(
+    value: &Value,
+    var_names: &std::collections::HashMap<String, String>,
+) -> String {
+    match value {
+        Value::Name(n) => {
+            if let Some(resolved) = var_names.get(n) {
+                resolved.clone()
+            } else {
+                n.clone()
+            }
+        }
+        Value::BinOp { op, left, right } => {
+            format!(
+                "{} {} {}",
+                value_to_python_with_vars(left, var_names),
+                binop_to_str(op, false),
+                value_to_python_with_vars(right, var_names)
+            )
+        }
+        Value::Call { name, args, kwargs } => {
+            let args_str = args
+                .iter()
+                .map(|v| value_to_python_with_vars(v, var_names))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let kwargs_str = if kwargs.is_empty() {
+                String::new()
+            } else {
+                let kw: Vec<String> = kwargs
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, value_to_python_with_vars(v, var_names)))
+                    .collect();
+                if args.is_empty() {
+                    kw.join(", ")
+                } else {
+                    format!(", {}", kw.join(", "))
+                }
+            };
+
+            format!("{}({}{})", name, args_str, kwargs_str)
+        }
+        // For other value types (Int, Float, String, Bool, Global),
+        // delegate to the standard converter
+        _ => value_to_python_impl(value),
+    }
+}
+
 /// Convert a Value to Python code
 pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
@@ -118,6 +170,7 @@ pub(super) fn endpoint_key_impl(endpoint: &Endpoint) -> String {
         }
         Endpoint::If(if_expr) => format!("if@{}", if_expr.id),
         Endpoint::Reshape(r) => format!("reshape@{}", r.id),
+        Endpoint::Wrap(w) => format!("wrap@{}", w.id),
         _ => format!("{:?}", endpoint),
     }
 }
@@ -181,6 +234,9 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
             // collect_reshape_transforms in instantiation.rs (as self._transform_{id}).
             // Do NOT create synthetic Call endpoints here — that would cause
             // duplicate module instantiation.
+        }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before codegen
         }
         // Endpoint::Unroll removed — expanded before codegen
     }

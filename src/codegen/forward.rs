@@ -238,6 +238,11 @@ pub(super) fn generate_forward_body(
                     ))
                 })?
             }
+            Endpoint::Wrap(_) => {
+                return Err(CodegenError::InvalidConnection(
+                    "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
+                ));
+            }
         };
 
         // Determine source output count for implicit fork detection
@@ -607,10 +612,12 @@ fn process_destination(
                 // Lazy instantiation: check cache, instantiate if needed
                 writeln!(output, "{}if self._{} is None:", indent, module_name).unwrap();
 
-                // Generate instantiation with current dimension values
+                // Generate instantiation with current dimension values.
+                // Use value_to_python_with_vars to resolve context binding names
+                // (e.g., "attn" → "self.attn") and parameter names (e.g., "n" → "self.n").
                 let args_str = args
                     .iter()
-                    .map(value_to_python_impl)
+                    .map(|v| value_to_python_with_vars(v, &gen.var_names))
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -619,7 +626,9 @@ fn process_destination(
                 } else {
                     let kw: Vec<String> = kwargs
                         .iter()
-                        .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
+                        .map(|(k, v)| {
+                            format!("{}={}", k, value_to_python_with_vars(v, &gen.var_names))
+                        })
                         .collect();
                     if args.is_empty() {
                         kw.join(", ")
@@ -1207,6 +1216,11 @@ fn process_destination(
             call_to_result.insert(key, result_var.clone());
 
             Ok(result_var)
+        }
+        Endpoint::Wrap(_) => {
+            Err(CodegenError::InvalidConnection(
+                "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
+            ))
         }
     }
 }

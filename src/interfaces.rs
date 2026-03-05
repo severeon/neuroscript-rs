@@ -112,6 +112,9 @@ pub struct CodeGenerator<'a> {
     /// Parameters of the current neuron being generated
     pub current_neuron_params: HashSet<String>,
 
+    /// Names of parameters with `: Neuron` type annotation (higher-order neuron params)
+    pub neuron_typed_params: HashSet<String>,
+
     /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
     /// Used to resolve dimension references in match arm pipelines
     pub binding_context: HashMap<String, String>,
@@ -196,6 +199,8 @@ pub enum Endpoint {
     If(IfExpr),
     /// Shape transformation: => [shape] or => @annotation [shape]
     Reshape(ReshapeExpr),
+    /// Wrap annotation: @wrap(Wrapper, args): content
+    Wrap(WrapExpr),
 }
 
 /// A connection: source -> destination
@@ -272,6 +277,34 @@ pub struct IfExpr {
     pub branches: Vec<IfBranch>,            // if and elifs
     pub else_branch: Option<Vec<Endpoint>>, // optional else
     pub id: usize,
+}
+
+/// Pseudo-neuron name used by @wrap pipeline desugaring to emit nn.Sequential.
+/// This is a reserved internal name — user-defined neurons must not use it.
+pub const SEQUENTIAL_PSEUDO_NEURON: &str = "__sequential__";
+
+/// A @wrap annotation expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrapExpr {
+    /// The higher-order neuron to wrap with
+    pub wrapper_name: String,
+    /// Arguments to the wrapper (excluding the first Neuron-typed param)
+    pub wrapper_args: Vec<Value>,
+    /// Keyword arguments to the wrapper
+    pub wrapper_kwargs: Vec<Kwarg>,
+    /// The wrapped content: either a reference to an existing binding or an anonymous pipeline
+    pub content: WrapContent,
+    /// Unique ID for deduplication
+    pub id: usize,
+}
+
+/// What @wrap wraps
+#[derive(Debug, Clone, PartialEq)]
+pub enum WrapContent {
+    /// Reference form: @wrap(Wrapper, args): existing_binding
+    Ref(String),
+    /// Pipeline form: @wrap(Wrapper, args): -> X -> Y -> Z
+    Pipeline(Vec<Endpoint>),
 }
 
 /// A reshape expression: [dim_spec, dim_spec, ...]

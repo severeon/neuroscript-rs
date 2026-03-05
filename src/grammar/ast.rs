@@ -12,7 +12,7 @@ use crate::interfaces::{
     BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Documentation, Endpoint,
     GlobalBinding, ImplRef, MatchArm, MatchExpr, MatchPattern, MatchSubject, NeuronBody, NeuronDef,
     NeuronPortContract, Param, ParseError, Port, PortRef, Program, ReshapeDim, ReshapeExpr, Shape,
-    TransformAnnotation, TransformStrategy, UseStmt, Value,
+    TransformAnnotation, TransformStrategy, UseStmt, Value, WrapContent, WrapExpr,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -1015,6 +1015,7 @@ impl AstBuilder {
             Rule::match_eval_expr => Ok(Endpoint::Match(self.build_match_eval_expr(inner)?)),
             Rule::match_expr => Ok(Endpoint::Match(self.build_match_expr(inner)?)),
             Rule::if_expr => Ok(Endpoint::If(self.build_if_expr(inner)?)),
+            Rule::wrap_endpoint => self.build_wrap_endpoint(inner),
             Rule::tuple_endpoint => self.build_tuple_endpoint(inner),
             Rule::call_endpoint => self.build_call_endpoint(inner),
             Rule::ref_endpoint => self.build_ref_endpoint(inner),
@@ -1150,6 +1151,130 @@ impl AstBuilder {
         }
         Ok(endpoints)
     }
+    /// Build a @wrap endpoint: @wrap(Wrapper, args): ref_or_pipeline
+    fn build_wrap_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::wrap_endpoint);
+        let span_start = pair.as_span().start();
+
+        let mut inner = pair.into_inner();
+
+        // Skip: at, keyword_wrap, lparen
+        inner.next(); // at
+        inner.next(); // keyword_wrap
+        inner.next(); // lparen
+
+        // Parse call_args (contains wrapper name + extra args)
+        let call_args_pair = inner.next().ok_or_else(|| {
+            crate::grammar::error::expected("call arguments after @wrap(", "end of input", span_start)
+        })?;
+        let (all_args, kwargs) = self.build_call_args(call_args_pair)?;
+
+        // First arg must be the wrapper neuron name (a bare identifier).
+        let wrapper_name = match all_args.first() {
+            Some(Value::Name(n)) => n.clone(),
+            Some(Value::Call { name, .. }) => {
+                // The grammar's call_args rule parses `Name(args)` as
+                // Value::Call. Reject this form explicitly — @wrap expects
+                // a bare name, not a call expression.
+                return Err(crate::grammar::error::expected(
+                    "bare neuron name as first @wrap argument (not a call)",
+                    &format!("{}(...)", name),
+                    span_start,
+                ));
+            }
+            _ => {
+                return Err(crate::grammar::error::expected(
+                    "neuron name as first @wrap argument",
+                    "non-name value",
+                    span_start,
+                ));
+            }
+        };
+        let wrapper_args = all_args[1..].to_vec();
+
+        // Skip rparen and colon
+        inner.next(); // rparen
+        inner.next(); // colon
+
+        // Now determine content: either ident (ref) or arrow (pipeline)
+        let next = inner.next().ok_or_else(|| {
+            crate::grammar::error::expected(
+                "identifier or '->' after @wrap colon",
+                "end of input",
+                span_start,
+            )
+        })?;
+        let content = match next.as_rule() {
+            Rule::ident => WrapContent::Ref(next.as_str().to_string()),
+            Rule::arrow => {
+                // Pipeline form: collect subsequent endpoints
+                let mut pipeline = Vec::new();
+
+                if let Some(next_pair) = inner.next() {
+                    match next_pair.as_rule() {
+                        Rule::indented_pipeline => {
+                            // Indented pipeline form
+                            pipeline = self.build_standalone_indented_pipeline(next_pair)?;
+                        }
+                        Rule::endpoint => {
+                            // Inline: first endpoint, then possibly more
+                            pipeline.push(self.build_endpoint(next_pair)?);
+                            for remaining in inner {
+                                match remaining.as_rule() {
+                                    Rule::endpoint => {
+                                        pipeline.push(self.build_endpoint(remaining)?);
+                                    }
+                                    Rule::fat_arrow_step => {
+                                        pipeline.push(self.build_fat_arrow_step(remaining)?);
+                                    }
+                                    Rule::arrow | Rule::NEWLINE => continue,
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {
+                            // Skip NEWLINE tokens and try again
+                            if next_pair.as_rule() == Rule::NEWLINE {
+                                for remaining in inner {
+                                    match remaining.as_rule() {
+                                        Rule::indented_pipeline => {
+                                            pipeline =
+                                                self.build_standalone_indented_pipeline(remaining)?;
+                                            break;
+                                        }
+                                        Rule::endpoint => {
+                                            pipeline.push(self.build_endpoint(remaining)?);
+                                        }
+                                        Rule::NEWLINE => continue,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                WrapContent::Pipeline(pipeline)
+            }
+            _ => {
+                return Err(crate::grammar::error::expected(
+                    "identifier or '->' after @wrap colon",
+                    next.as_str(),
+                    span_start,
+                ));
+            }
+        };
+
+        let id = self.next_id();
+        Ok(Endpoint::Wrap(WrapExpr {
+            wrapper_name,
+            wrapper_args,
+            wrapper_kwargs: kwargs,
+            content,
+            id,
+        }))
+    }
+
     /// Build a reference endpoint (in, out, name, name.port)
     fn build_ref_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::ref_endpoint);

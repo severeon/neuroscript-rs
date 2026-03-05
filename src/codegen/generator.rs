@@ -37,6 +37,7 @@ macro_rules! embedded_primitives {
 embedded_primitives! {
     ACTIVATIONS,    "activations"    => "activations.py",
     ATTENTION,      "attention"      => "attention.py",
+    CONNECTIONS,    "connections"    => "connections.py",
     CONVOLUTIONS,   "convolutions"   => "convolutions.py",
     EMBEDDINGS,     "embeddings"     => "embeddings.py",
     LINEAR,         "linear"         => "linear.py",
@@ -132,6 +133,7 @@ impl<'a> CodeGenerator<'a> {
             var_names: std::collections::HashMap::new(),
             call_to_module: std::collections::HashMap::new(),
             current_neuron_params: HashSet::new(),
+            neuron_typed_params: HashSet::new(),
             binding_context: std::collections::HashMap::new(),
             lazy_bindings: std::collections::HashMap::new(),
             inference_ctx,
@@ -145,6 +147,12 @@ impl<'a> CodeGenerator<'a> {
     /// Generate Python code for a neuron
     fn generate_neuron(&mut self, neuron: &NeuronDef) -> Result<String, CodegenError> {
         self.current_neuron_params = neuron.params.iter().map(|p| p.name.clone()).collect();
+        self.neuron_typed_params = neuron
+            .params
+            .iter()
+            .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
+            .map(|p| p.name.clone())
+            .collect();
         let mut output = String::new();
 
         // Generate class definition
@@ -238,6 +246,17 @@ impl<'a> CodeGenerator<'a> {
         };
 
         writeln!(output, "    def forward(self, {}):", input_params).unwrap();
+
+        // Register all params in var_names with self. prefix so that lazy
+        // instantiation can resolve them (e.g., dim → self.dim, layer → self.layer).
+        // Uses or_insert_with intentionally: context bindings registered in __init__
+        // may already have a mapping (e.g., self.binding_name) which should take
+        // precedence. Params are a fallback for names not yet in the map.
+        for param in &neuron.params {
+            self.var_names
+                .entry(param.name.clone())
+                .or_insert_with(|| format!("self.{}", param.name));
+        }
 
         match &neuron.body {
             NeuronBody::Primitive(_impl_ref) => {
@@ -368,6 +387,9 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
                     result.insert(name.clone());
                 }
             }
+        }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before codegen
         }
         // Endpoint::Unroll removed — expanded before codegen
     }

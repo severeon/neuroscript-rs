@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HCWidth(n, dim, layer_idx, dynamic = true):
+  inputs:
+    default: [*batch, n, dim]
+  outputs:
+    layer_in: [*batch, dim]
+    state: [*batch, n, dim]
+  impl:
+    Source: core,connections/HCWidth

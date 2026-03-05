@@ -1,0 +1,18 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HCTransformerBlock(dim, heads, d_ff, n = 4, layer_idx = 0):
+  inputs:
+    default: [*batch, n, dim]
+  outputs:
+    default: [*batch, n, dim]
+  context:
+    attn = MultiHeadSelfAttention(...)
+    ffn_block = FFN(...)
+  graph:
+    in -> HyperConnect#0(attn, n, dim, (layer_idx * 2))
+    HyperConnect#0(attn, n, dim, (layer_idx * 2)) -> HyperConnect#1(ffn_block, n, dim, ((layer_idx * 2) + 1))
+    HyperConnect#1(ffn_block, n, dim, ((layer_idx * 2) + 1)) -> out

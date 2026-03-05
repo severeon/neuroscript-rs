@@ -40,6 +40,7 @@ keyword_elif = @{ "elif" ~ !ident_cont }
 keyword_else = @{ "else" ~ !ident_cont }
 keyword_unroll = @{ "unroll" ~ !ident_cont }
 keyword_others = @{ "others" ~ !ident_cont }
+keyword_wrap = @{ "wrap" ~ !ident_cont }
 
 // ============================================================================
 // Operators
@@ -103,6 +104,7 @@ keyword = _{
   | keyword_if | keyword_elif | keyword_else
   | keyword_unroll
   | keyword_others
+  | keyword_wrap
 }
 
 // Identifiers: foo, _bar, baz123
@@ -381,11 +383,23 @@ indented_pipeline_item = {
   | (!( (ref_endpoint | tuple_endpoint) ~ arrow) ~ endpoint ~ NEWLINE*)
 }
 
-// Endpoint: in, out, foo, Foo(args), (a, b), match: -> ..., match(param): ..., if ...
+// Wrap endpoint: @wrap(Wrapper, args): ref_or_pipeline
+wrap_endpoint = {
+    at ~ keyword_wrap ~ lparen ~ call_args ~ rparen ~ colon
+    ~ (
+        // Pipeline form: -> followed by inline or indented pipeline
+        (arrow ~ (NEWLINE ~ indented_pipeline | endpoint ~ ((arrow ~ endpoint) | fat_arrow_step)*))
+        // Reference form: just a binding name
+      | ident
+    )
+}
+
+// Endpoint: in, out, foo, Foo(args), (a, b), match: -> ..., match(param): ..., if ..., @wrap(...)
 endpoint = {
     match_eval_expr
   | match_expr
   | if_expr
+  | wrap_endpoint
   | tuple_endpoint
   | ref_endpoint
   | call_endpoint

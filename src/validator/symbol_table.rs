@@ -290,7 +290,18 @@ where
                 }
             }
 
-            // 3. Look up registry
+            // 3. Handle __sequential__ (synthesized by @wrap pipeline desugaring)
+            if name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON {
+                // __sequential__ is a pseudo-neuron that wraps nn.Sequential.
+                // Return a wildcard port to allow validation to continue.
+                return Ok(vec![Port {
+                    name: "default".to_string(),
+                    shape: Shape { dims: vec![Dim::Variadic("_".to_string())] },
+                    variadic: false,
+                }]);
+            }
+
+            // 4. Look up registry
             if ctx.registry.contains(name) {
                 // Primitive neuron - skip detailed port validation
                 // Primitives are validated at codegen time
@@ -302,15 +313,16 @@ where
                 }]);
             }
 
-            // 4. Check if this is a neuron-typed parameter (higher-order neuron)
+            // 5. Check if this is a neuron-typed parameter (higher-order neuron)
             let is_neuron_param = ctx.neuron.params.iter().any(|p| {
                 p.name == *name && p.type_annotation.as_ref() == Some(&ParamType::Neuron)
             });
             if is_neuron_param {
-                // Neuron-typed param: return a dummy port to allow validation to continue
+                // Neuron-typed param: return a variadic wildcard port to allow validation
+                // A variadic shape [*_] is compatible with any other shape
                 return Ok(vec![Port {
                     name: "default".to_string(),
-                    shape: Shape { dims: vec![] },
+                    shape: Shape { dims: vec![Dim::Variadic("_".to_string())] },
                     variadic: false,
                 }]);
             }
@@ -421,6 +433,10 @@ where
                 shape: output_shape,
                 variadic: false,
             }])
+        }
+        Endpoint::Wrap(_) => {
+            // @wrap should be desugared before validation
+            Ok(vec![])
         }
     }
 }
@@ -572,6 +588,7 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
         Endpoint::Match(_) => "Match".to_string(),
         Endpoint::If(_) => "If".to_string(),
         Endpoint::Reshape(_) => "Reshape".to_string(),
+        Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
     }
 }
 
@@ -640,6 +657,7 @@ pub(super) fn endpoint_desc(endpoint: &Endpoint) -> String {
                     .join(", ")
             )
         }
+        Endpoint::Wrap(w) => format!("@wrap({})", w.wrapper_name),
     }
 }
 

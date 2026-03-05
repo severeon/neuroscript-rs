@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HyperExpand(n):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, n, dim]
+  impl:
+    Source: core,connections/HyperExpand

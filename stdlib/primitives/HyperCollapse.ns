@@ -1,0 +1,19 @@
+/// Hyper-Collapse (Network Exit Point)
+///
+/// Collapses n hidden copies back into a single vector via summation.
+/// Placed at the end of a network to produce a standard output from
+/// the hyper hidden state.
+///
+/// Shape Contract:
+/// - Input: [*batch, n, dim] stacked hidden vectors
+/// - Output: [*batch, dim] collapsed output (sum over n dimension)
+///
+/// Notes:
+/// - Sums along the n dimension (no learnable parameters)
+/// - Pairs with HyperExpand at the network entry
+/// - Alternative collapse strategies (mean, learned weights) possible
+///   but sum is simplest and matches the paper
+neuron HyperCollapse:
+    in: [*batch, n, dim]
+    out: [*batch, dim]
+    impl: core,connections/HyperCollapse

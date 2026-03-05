@@ -100,6 +100,7 @@ pub(super) fn extract_node_names_from_sources(
         Endpoint::Match(_) => vec![],
         Endpoint::If(_) => vec![],
         Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
+        Endpoint::Wrap(_) => vec![],    // @wrap is desugared before validation
         // Endpoint::Unroll removed
     }
 }
@@ -221,6 +222,7 @@ pub(super) fn extract_node_names_from_destinations(
         Endpoint::Match(_) => vec![],
         Endpoint::If(_) => vec![],
         Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
+        Endpoint::Wrap(_) => vec![],    // @wrap is desugared before validation
         // Endpoint::Unroll removed
     }
 }
@@ -245,6 +247,7 @@ pub(super) fn extract_simple_node_names(endpoint: &Endpoint) -> Vec<String> {
         Endpoint::Match(_) => vec![], // Skip Match for cycle detection
         Endpoint::If(_) => vec![],    // Skip If for cycle detection
         Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
+        Endpoint::Wrap(_) => vec![],    // @wrap is desugared before validation
         // Endpoint::Unroll removed // Expanded before validation
     }
 }

@@ -1,0 +1,18 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron HyperConnect(layer, n, dim, layer_idx, dynamic = true):
+  inputs:
+    default: [*batch, n, dim]
+  outputs:
+    default: [*batch, n, dim]
+  graph:
+    in -> HCWidth#0(n, dim, layer_idx, dynamic)
+    HCWidth#0(n, dim, layer_idx, dynamic) -> (layer_in, state)
+    layer_in -> layer
+    layer -> layer_out
+    (layer_out, state) -> HCDepth#1(n, dim, dynamic)
+    HCDepth#1(n, dim, dynamic) -> out
