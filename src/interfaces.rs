@@ -318,14 +318,34 @@ pub struct ReshapeExpr {
 impl ReshapeExpr {
     /// Convert reshape dims to a Shape for validation/inference purposes.
     ///
-    /// Known limitations:
-    /// - `Binding { name, expr }` (e.g., `dh=dim/heads`) maps to `Dim::Named(name)`,
-    ///   discarding the expression constraint. Shape inference sees `dh` as unconstrained.
-    ///   TODO: propagate binding constraints for tighter validation.
-    /// - `Others` maps to `Dim::Wildcard`, but semantically `others` means "collapse all
-    ///   remaining dims" (like PyTorch's -1), not "one unknown dim". This means rank
-    ///   validation doesn't catch mismatches through `others`.
-    ///   TODO: add a `Dim::Inferred` variant or track rank separately.
+    /// # Known limitations
+    ///
+    /// ## Binding expressions are dropped (deliberate)
+    ///
+    /// `Binding { name, expr }` (e.g., `dh=dim/heads`) maps to `Dim::Named(name)`,
+    /// intentionally discarding the expression constraint. The shape solver currently
+    /// only handles simple single-unknown linear equations (e.g., `dim = 512`). It
+    /// cannot verify divisibility constraints like `dh = dim / heads` because that
+    /// requires solving a two-variable equation, which is beyond the solver's scope.
+    ///
+    /// Adding a `Dim::Constrained(name, expr)` variant was considered but rejected
+    /// because `Dim` is pattern-matched in 20+ files; adding a variant would cause
+    /// cascading changes with no immediate benefit until the solver is extended to
+    /// handle multi-variable constraints. The expression *is* preserved in the IR
+    /// (`ReshapeDim::Binding`) and is available to codegen, which correctly emits the
+    /// computed reshape size — so runtime behavior is correct even though the
+    /// compile-time shape checker cannot verify the constraint.
+    ///
+    /// To fix this properly, the shape solver would need to be extended to support
+    /// constraint propagation (e.g., `dh * heads == dim`), which is a larger effort
+    /// tracked under "full dimension variable type inference" in the roadmap.
+    ///
+    /// ## `Others` loses rank information
+    ///
+    /// `Others` maps to `Dim::Wildcard`, but semantically `others` means "collapse
+    /// all remaining dims" (like PyTorch's `-1`), not "one unknown dim". This means
+    /// rank validation doesn't catch mismatches through `others`. A `Dim::Inferred`
+    /// variant or separate rank tracking would be needed to fix this.
     pub fn to_shape(&self) -> Shape {
         Shape {
             dims: self
@@ -334,6 +354,8 @@ impl ReshapeExpr {
                 .map(|d| match d {
                     ReshapeDim::Named(name) => Dim::Named(name.clone()),
                     ReshapeDim::Literal(n) => Dim::Literal(*n),
+                    // Expression is intentionally dropped here — see doc comment above.
+                    // The binding expr is still available in ReshapeDim::Binding for codegen.
                     ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
                     ReshapeDim::Others => Dim::Wildcard,
                     ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
