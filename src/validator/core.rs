@@ -34,7 +34,19 @@ impl Validator {
             }
         }
 
-        // 2. Validate variadic port declarations
+        // 2. Reject reserved dunder neuron names (e.g., __sequential__)
+        for neuron in program.neurons.values() {
+            let name = &neuron.name;
+            if name.starts_with("__") && name.ends_with("__") && name.len() > 4 {
+                errors.push(ValidationError::Custom(format!(
+                    "Neuron name '{}' is reserved: names starting and ending with double underscores \
+                     are reserved for internal use",
+                    name
+                )));
+            }
+        }
+
+        // 3. Validate variadic port declarations
         for neuron in program.neurons.values() {
             // Variadic ports on outputs are not supported
             for port in &neuron.outputs {
@@ -67,7 +79,7 @@ impl Validator {
             }
         }
 
-        // 3. Check each neuron (read-only pass for structure)
+        // 4. Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
         {
             for neuron in program.neurons.values() {
