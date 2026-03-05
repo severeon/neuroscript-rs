@@ -364,6 +364,7 @@ impl Validator {
                                     name, context_neuron
                                 ),
                                 context: format!("in {}", context_neuron),
+                                span: None,
                             });
                         }
                     }
