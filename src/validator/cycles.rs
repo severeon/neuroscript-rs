@@ -58,7 +58,6 @@ pub(super) fn detect_cycles(
                     cycle,
                     context: context_neuron.to_string(),
                 });
-                break; // Report first cycle only
             }
         }
     }
