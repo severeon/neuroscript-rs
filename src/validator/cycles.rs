@@ -18,8 +18,9 @@ pub(super) fn detect_cycles(
         graph.insert(node.clone(), HashSet::new());
     }
 
-    // Track Call destinations: each destination creates a new unique instance
-    // Track Call sources: sources map to their most recent destination instance
+    // Track Call instances: each Call destination creates a unique instance.
+    // The cache maps call signatures to the most recent instance so that
+    // subsequent source references find the right node.
     let mut call_last_instance: HashMap<String, String> = HashMap::new();
     let mut call_instance_counter: HashMap<String, usize> = HashMap::new();
 
@@ -204,21 +205,20 @@ pub(super) fn extract_node_names_from_destinations(
                 .join(",");
             let base_sig = format!("{}({})", name, args_str);
 
-            // Check if we already have an instance from a source
-            if let Some(existing) = call_last_instance.get(&base_sig) {
-                // Reuse the existing instance (this creates a cycle if used again later)
-                vec![existing.clone()]
-            } else {
-                // Create a new unique instance
-                let instance_id = call_counter.entry(base_sig.clone()).or_insert(0);
-                let unique_name = format!("{}#{}", base_sig, instance_id);
-                *instance_id += 1;
+            // Always create a new unique instance for each Call destination.
+            // Each Call endpoint in NeuroScript represents a distinct module
+            // instance (e.g., LayerNorm(dim) used 5 times in Conformer creates
+            // 5 separate nn.LayerNorm modules). Cycles in NeuroScript can only
+            // occur through named Ref endpoints (context bindings), not through
+            // anonymous Call endpoints.
+            let instance_id = call_counter.entry(base_sig.clone()).or_insert(0);
+            let unique_name = format!("{}#{}", base_sig, instance_id);
+            *instance_id += 1;
 
-                // Record this as the instance for this call signature
-                call_last_instance.insert(base_sig, unique_name.clone());
+            // Update cache so subsequent source lookups find this latest instance
+            call_last_instance.insert(base_sig, unique_name.clone());
 
-                vec![unique_name]
-            }
+            vec![unique_name]
         }
         Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
         Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),

@@ -3,14 +3,16 @@ use crate::interfaces::*;
 
 #[test]
 fn test_simple_cycle() {
+    // Cycles in NeuroScript occur through named Ref endpoints (context bindings).
+    // Two named nodes feeding into each other: a -> b -> a
     let mut program = ProgramBuilder::new()
         .with_simple_neuron("A", wildcard(), wildcard())
         .with_simple_neuron("B", wildcard(), wildcard())
         .with_composite(
             "Composite",
             vec![
-                connection(call_endpoint("A"), call_endpoint("B")),
-                connection(call_endpoint("B"), call_endpoint("A")),
+                connection(ref_endpoint("a"), ref_endpoint("b")),
+                connection(ref_endpoint("b"), ref_endpoint("a")),
             ],
             None,
         )
@@ -33,12 +35,12 @@ fn test_cycle_through_unpacked_ports() {
         .with_composite(
             "Composite",
             vec![
-                connection(call_endpoint("A"), call_endpoint("Fork")),
+                connection(ref_endpoint("a"), call_endpoint("Fork")),
                 connection(
                     call_endpoint("Fork"),
                     tuple_endpoint(vec!["main", "skip"]),
                 ),
-                connection(ref_endpoint("main"), call_endpoint("A")),
+                connection(ref_endpoint("main"), ref_endpoint("a")),
             ],
             None,
         )
@@ -88,7 +90,7 @@ fn test_no_cycle_valid_residual() {
 
 #[test]
 fn test_two_independent_cycles_both_reported() {
-    // Two independent cycles: A->B->A and C->D->C
+    // Two independent cycles through named refs: a->b->a and c->d->c
     // Both should be reported (not just the first one)
     let mut program = ProgramBuilder::new()
         .with_simple_neuron("A", wildcard(), wildcard())
@@ -98,12 +100,12 @@ fn test_two_independent_cycles_both_reported() {
         .with_composite(
             "Composite",
             vec![
-                // Cycle 1: A -> B -> A
-                connection(call_endpoint("A"), call_endpoint("B")),
-                connection(call_endpoint("B"), call_endpoint("A")),
-                // Cycle 2: C -> D -> C
-                connection(call_endpoint("C"), call_endpoint("D")),
-                connection(call_endpoint("D"), call_endpoint("C")),
+                // Cycle 1: a -> b -> a
+                connection(ref_endpoint("a"), ref_endpoint("b")),
+                connection(ref_endpoint("b"), ref_endpoint("a")),
+                // Cycle 2: c -> d -> c
+                connection(ref_endpoint("c"), ref_endpoint("d")),
+                connection(ref_endpoint("d"), ref_endpoint("c")),
             ],
             None,
         )
@@ -126,8 +128,8 @@ fn test_two_independent_cycles_both_reported() {
 
 #[test]
 fn test_no_false_positive_when_non_cyclic_node_feeds_into_cycle() {
-    // Graph: A->B->C->B (cycle) plus D->B (D feeds into the cycle but is not part of it)
-    // Should report exactly 1 cycle (B->C->B), NOT a false positive for D
+    // Graph: d->b, b->c->b (cycle). D feeds into the cycle but is not part of it.
+    // Should report exactly 1 cycle (b->c->b), NOT a false positive for d
     let mut program = ProgramBuilder::new()
         .with_simple_neuron("A", wildcard(), wildcard())
         .with_simple_neuron("B", wildcard(), wildcard())
@@ -136,25 +138,24 @@ fn test_no_false_positive_when_non_cyclic_node_feeds_into_cycle() {
         .with_composite(
             "Composite",
             vec![
-                connection(call_endpoint("A"), call_endpoint("B")),
-                connection(call_endpoint("B"), call_endpoint("C")),
-                connection(call_endpoint("C"), call_endpoint("B")),
-                // D feeds into B but is NOT part of the cycle
-                connection(call_endpoint("D"), call_endpoint("B")),
+                connection(ref_endpoint("b"), ref_endpoint("c")),
+                connection(ref_endpoint("c"), ref_endpoint("b")),
+                // d feeds into b but is NOT part of the cycle
+                connection(ref_endpoint("d"), ref_endpoint("b")),
             ],
             None,
         )
         .build();
 
     let result = crate::validator::Validator::validate(&mut program);
-    assert!(result.is_err(), "Expected validation error for B->C->B cycle");
+    assert!(result.is_err(), "Expected validation error for b->c->b cycle");
     let errors = result.unwrap_err();
     let cycle_errors: Vec<_> = errors
         .iter()
         .filter(|e| matches!(e, ValidationError::CycleDetected { .. }))
         .collect();
 
-    // Should have exactly 1 cycle error, not a false positive involving D
+    // Should have exactly 1 cycle error, not a false positive involving d
     assert_eq!(
         cycle_errors.len(),
         1,
@@ -163,12 +164,12 @@ fn test_no_false_positive_when_non_cyclic_node_feeds_into_cycle() {
         cycle_errors
     );
 
-    // Verify the cycle does not include D
+    // Verify the cycle does not include d
     for error in &cycle_errors {
         if let ValidationError::CycleDetected { cycle, .. } = error {
             assert!(
-                !cycle.iter().any(|n| n.contains("D")),
-                "Cycle should not include D (false positive). Cycle: {:?}",
+                !cycle.iter().any(|n| n.contains("d")),
+                "Cycle should not include d (false positive). Cycle: {:?}",
                 cycle
             );
         }
