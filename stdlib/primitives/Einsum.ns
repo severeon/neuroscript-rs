@@ -13,7 +13,7 @@
 ///
 /// Notes:
 /// - No learnable parameters (pure operation)
-/// - Supports 1-3 input tensors depending on equation
+/// - Supports 2 input tensors (ports a and b)
 /// - Examples:
 ///   - "ij->ji" - transpose
 ///   - "bij,bjk->bik" - batched matrix multiply
