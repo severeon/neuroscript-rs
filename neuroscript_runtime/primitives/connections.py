@@ -164,7 +164,7 @@ class HCDepth(nn.Module):
         self.dynamic = dynamic
 
         if dynamic:
-            self.proj = nn.Linear(dim, n, bias=False)
+            self.proj = nn.Linear(dim, n, bias=True)
         else:
             # Static: learnable weight vector of length n
             self.beta = nn.Parameter(torch.ones(n))
@@ -172,10 +172,18 @@ class HCDepth(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        """Initialize to standard residual (add layer output equally)."""
+        """Initialize to standard residual (add layer output equally).
+
+        Static mode: beta = 1.0 for all copies.
+        Dynamic mode: zero weights + atanh(0.9) bias so that
+        tanh(bias) ≈ 0.9 ≈ 1.0, matching the static initialisation
+        and ensuring the layer output contributes on the first forward pass.
+        """
         if self.dynamic:
+            init_val = math.atanh(0.9)  # ~1.47, so tanh(init_val) ≈ 0.9
             with torch.no_grad():
                 self.proj.weight.zero_()
+                self.proj.bias.fill_(init_val)
         else:
             with torch.no_grad():
                 self.beta.fill_(1.0)
