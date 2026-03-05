@@ -8,7 +8,7 @@
 ///
 /// Shape Contract:
 /// - Input a: [*shape_a] first tensor
-/// - Input b: [*shape_b] second tensor (optional, depends on equation)
+/// - Input b: [*shape_b] second tensor
 /// - Output: [*shape_out] result shape determined by equation
 ///
 /// Notes:

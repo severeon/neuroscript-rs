@@ -881,6 +881,52 @@ fn snapshot_all_examples() {
 }
 
 // ============================================================================
+// Validate Idempotency Tests
+// ============================================================================
+
+#[test]
+fn test_validate_idempotency() {
+    // Calling validate() on an already-validated program should produce the same
+    // result as calling validate() once. This tests that the mutations performed
+    // by validate() (unroll expansion, @wrap desugaring, contract resolution)
+    // are idempotent — running them a second time should be a no-op.
+    let source = r#"
+use core,nn/*
+
+neuron SimpleLinear:
+    in: [*, 512]
+    out: [*, 256]
+    graph:
+        in -> Linear(512, 256) -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+"#;
+
+    // First pass: parse + validate
+    let mut program1 = parse(source).expect("Parse failed");
+    validate(&mut program1).expect("First validate() failed");
+
+    // Generate code after first validate
+    let code_after_first =
+        generate_pytorch(&program1, "SimpleLinear").expect("Codegen after first validate failed");
+
+    // Second pass: validate the already-validated program again
+    validate(&mut program1).expect("Second validate() failed (idempotency violation)");
+
+    // Generate code after second validate — should be identical
+    let code_after_second =
+        generate_pytorch(&program1, "SimpleLinear").expect("Codegen after second validate failed");
+
+    assert_eq!(
+        code_after_first, code_after_second,
+        "Generated code differs after second validate() call — validate is not idempotent"
+    );
+}
+
+// ============================================================================
 // Bundle Mode Tests
 // ============================================================================
 

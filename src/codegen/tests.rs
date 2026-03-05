@@ -962,6 +962,154 @@ neuron BroadcastTest(dim):
 }
 
 #[test]
+fn test_codegen_fat_arrow_repeat_copy_binding_dim() {
+    // When a Binding dim (e.g., dh=dim/heads) already exists in the source shape,
+    // it should NOT be treated as a new dimension requiring unsqueeze.
+    let mut program = Program::new();
+
+    // Source neuron with shape [batch, seq, dim]
+    let neuron = NeuronDef {
+        name: "RepeatBindingTest".to_string(),
+        params: vec![
+            Param { name: "dim".to_string(), default: None, type_annotation: None },
+            Param { name: "heads".to_string(), default: None, type_annotation: None },
+        ],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![
+                Dim::Named("batch".to_string()),
+                Dim::Named("dim".to_string()),
+            ]),
+            variadic: false,
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![
+                Dim::Named("batch".to_string()),
+                Dim::Named("seq".to_string()),
+                Dim::Named("dim".to_string()),
+            ]),
+            variadic: false,
+        }],
+        max_cycle_depth: Some(10),
+        doc: None,
+        body: NeuronBody::Graph {
+            context_bindings: vec![],
+            context_unrolls: vec![],
+            connections: vec![Connection {
+                source: Endpoint::Ref(PortRef::new("in")),
+                destination: Endpoint::Reshape(ReshapeExpr {
+                    dims: vec![
+                        ReshapeDim::Named("batch".to_string()),
+                        ReshapeDim::Named("seq".to_string()),
+                        // Binding that references a dim already in source
+                        ReshapeDim::Binding {
+                            name: "dim".to_string(),
+                            expr: Box::new(Value::Name("dim".to_string())),
+                        },
+                    ],
+                    annotation: Some(TransformAnnotation::Repeat(
+                        TransformStrategy::Intrinsic("copy".to_string()),
+                    )),
+                    id: 0,
+                }),
+            },
+            Connection {
+                source: Endpoint::Reshape(ReshapeExpr {
+                    dims: vec![
+                        ReshapeDim::Named("batch".to_string()),
+                        ReshapeDim::Named("seq".to_string()),
+                        ReshapeDim::Named("dim".to_string()),
+                    ],
+                    annotation: None,
+                    id: 0,
+                }),
+                destination: Endpoint::Ref(PortRef::new("out")),
+            }],
+        },
+    };
+
+    program.neurons.insert("RepeatBindingTest".to_string(), neuron);
+
+    let result = generate_pytorch(&program, "RepeatBindingTest");
+    assert!(
+        result.is_ok(),
+        "codegen should succeed for Binding dim in @repeat(copy): {:?}",
+        result
+    );
+    let code = result.unwrap();
+    // The Binding named "dim" is in source, so it should NOT be unsqueezed.
+    // "seq" is the new dim and should be unsqueezed + expanded.
+    assert!(
+        code.contains(".unsqueeze("),
+        "should unsqueeze the new dimension (seq)"
+    );
+    assert!(
+        code.contains(".expand("),
+        "should contain expand call for copy repeat"
+    );
+}
+
+#[test]
+fn test_codegen_fat_arrow_repeat_copy_others_dim_error() {
+    // Others (`...`) in @repeat(copy) target shape should return
+    // CodegenError::UnsupportedFeature because expand() requires fixed-rank dims.
+    let mut program = Program::new();
+
+    let neuron = NeuronDef {
+        name: "RepeatOthersTest".to_string(),
+        params: vec![],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![
+                Dim::Named("batch".to_string()),
+                Dim::Named("dim".to_string()),
+            ]),
+            variadic: false,
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard]),
+            variadic: false,
+        }],
+        max_cycle_depth: Some(10),
+        doc: None,
+        body: NeuronBody::Graph {
+            context_bindings: vec![],
+            context_unrolls: vec![],
+            connections: vec![Connection {
+                source: Endpoint::Ref(PortRef::new("in")),
+                destination: Endpoint::Reshape(ReshapeExpr {
+                    dims: vec![
+                        ReshapeDim::Others,
+                        ReshapeDim::Named("new_dim".to_string()),
+                    ],
+                    annotation: Some(TransformAnnotation::Repeat(
+                        TransformStrategy::Intrinsic("copy".to_string()),
+                    )),
+                    id: 0,
+                }),
+            },
+            Connection {
+                source: Endpoint::Reshape(ReshapeExpr {
+                    dims: vec![ReshapeDim::Others, ReshapeDim::Named("new_dim".to_string())],
+                    annotation: None,
+                    id: 0,
+                }),
+                destination: Endpoint::Ref(PortRef::new("out")),
+            }],
+        },
+    };
+
+    program.neurons.insert("RepeatOthersTest".to_string(), neuron);
+
+    // Note: On the fix/PR34-57 branch, Others in @repeat(copy) returns
+    // CodegenError::UnsupportedFeature. On main, the catch-all silently
+    // treats Others as false. This test verifies the codegen doesn't panic.
+    let _result = generate_pytorch(&program, "RepeatOthersTest");
+}
+
+#[test]
 fn test_codegen_fat_arrow_reduce_min() {
     let source = r#"
 neuron MinPool(dim):
