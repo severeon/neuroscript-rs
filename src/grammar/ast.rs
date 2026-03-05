@@ -1875,6 +1875,7 @@ impl AstBuilder {
                         "*",
                         0,
                     )),
+                    Dim::Inferred => unreachable!("Dim::Inferred is only produced by ReshapeExpr::to_shape(), not by the parser"),
                     Dim::Variadic(_) => Err(error::expected(
                         "named dimension, literal, or 'others'",
                         first.as_str(),
@@ -1953,6 +1954,7 @@ fn dim_to_value(dim: Dim) -> Result<Value, ParseError> {
             "*",
             0,
         )),
+        Dim::Inferred => unreachable!("Dim::Inferred is only produced by ReshapeExpr::to_shape(), not by the parser"),
         Dim::Variadic(name) => Err(error::expected(
             "named dimension or literal in reshape binding expression",
             &format!("*{}", name),

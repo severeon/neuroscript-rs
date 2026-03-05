@@ -66,6 +66,7 @@ impl std::fmt::Display for Dim {
             Dim::Literal(n) => write!(f, "{}", n),
             Dim::Named(s) => write!(f, "{}", s),
             Dim::Wildcard => write!(f, "*"),
+            Dim::Inferred => write!(f, "..."),
             Dim::Variadic(s) => write!(f, "*{}", s),
             Dim::Expr(e) => write!(f, "({} {} {})", e.left, e.op, e.right),
             Dim::Global(s) => write!(f, "@global {}", s),

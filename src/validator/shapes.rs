@@ -41,6 +41,8 @@ pub(super) fn dims_compatible(source: &Dim, dest: &Dim) -> bool {
     match (source, dest) {
         // Wildcards match anything
         (Dim::Wildcard, _) | (_, Dim::Wildcard) => true,
+        // Inferred dims match anything (like PyTorch's -1, size computed at runtime)
+        (Dim::Inferred, _) | (_, Dim::Inferred) => true,
         // Variadics match anything (shouldn't reach here due to check above, but safe)
         (Dim::Variadic(_), _) | (_, Dim::Variadic(_)) => true,
         // Exact matches
@@ -207,6 +209,7 @@ pub fn is_catch_all_pattern(pattern: &Shape) -> bool {
     }
 
     // Non-variadic patterns are catch-all if all dims are wildcards or named (no literals/globals)
+    // Inferred is excluded: unreachable!() in ast.rs enforces it never appears in match patterns
     pattern
         .dims
         .iter()
@@ -257,6 +260,8 @@ pub(super) fn non_variadic_subsumes(general: &Shape, specific: &Shape) -> bool {
         match (g_dim, s_dim) {
             // Wildcard matches anything
             (Dim::Wildcard, _) => continue,
+            // Inferred dims match anything (like PyTorch's -1)
+            (Dim::Inferred, _) => continue,
             // Named dimensions match anything (they capture)
             (Dim::Named(_), _) => continue,
             // Literal must match exactly
