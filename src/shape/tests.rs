@@ -430,3 +430,52 @@ fn test_shapes_compatible() {
     let s8 = literal_shape(vec![512, 256]);
     assert!(!engine.shapes_compatible(&s7, &s8));
 }
+
+#[test]
+fn test_both_variadic_unification() {
+    let engine = ShapeInferenceEngine::new();
+
+    // Compatible: [A, *x, B] vs [A, *y, C, B] — C absorbed by *x
+    let s1 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(64),
+    ]);
+    let s2 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(128),
+        Dim::Literal(64),
+    ]);
+    assert!(engine.shapes_compatible(&s1, &s2));
+
+    // Compatible: [*x, D] vs [*y, D] — matching suffixes
+    let s3 = Shape::new(vec![
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(256),
+    ]);
+    let s4 = Shape::new(vec![
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(256),
+    ]);
+    assert!(engine.shapes_compatible(&s3, &s4));
+
+    // Incompatible: [*x, A, B] vs [*y, C, B] where A != C
+    // Suffix unification catches this: [A, B] vs [C, B] with A=512, C=128
+    let s5 = Shape::new(vec![
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(512),
+        Dim::Literal(64),
+    ]);
+    let s6 = Shape::new(vec![
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(128),
+        Dim::Literal(64),
+    ]);
+    assert!(!engine.shapes_compatible(&s5, &s6));
+
+    // Compatible: [*x] vs [*y] — both fully variadic
+    let s7 = Shape::new(vec![Dim::Variadic("x".to_string())]);
+    let s8 = Shape::new(vec![Dim::Variadic("y".to_string())]);
+    assert!(engine.shapes_compatible(&s7, &s8));
+}
