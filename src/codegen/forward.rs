@@ -719,7 +719,7 @@ fn process_destination(
                         MatchPattern::Shape(shape) => shape
                             .dims
                             .iter()
-                            .all(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_))),
+                            .all(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Variadic(_))),
                         MatchPattern::NeuronContract(_) => false,
                     }
             });
@@ -1265,6 +1265,7 @@ fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, C
         Dim::Global(n) => n.clone(),
         Dim::Expr(e) => dim_expr_to_python(gen, e)?,
         Dim::Wildcard => "-1".to_string(),
+        Dim::Inferred => "-1".to_string(),
         Dim::Variadic(_) => "-1".to_string(),
     })
 }

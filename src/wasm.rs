@@ -325,6 +325,7 @@ fn format_dim(dim: &Dim) -> String {
         Dim::Literal(n) => n.to_string(),
         Dim::Named(name) => name.clone(),
         Dim::Wildcard => "*".to_string(),
+        Dim::Inferred => "...".to_string(),
         Dim::Variadic(name) => format!("*{}", name),
         Dim::Expr(expr) => {
             let op = match expr.op {

@@ -327,6 +327,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Dim::Global(name) => name.clone(),
                 Dim::Wildcard => return None, // Can't assert on wildcard
+                Dim::Inferred => return None, // Can't assert on inferred (-1) dim
                 Dim::Variadic(_) => return None, // Can't assert on variadic
                 Dim::Expr(expr) => {
                     // Try to evaluate the expression
@@ -368,6 +369,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Dim::Global(name) => format!("@global {}", name),
                 Dim::Wildcard => "*".to_string(),
+                Dim::Inferred => "...".to_string(),
                 Dim::Variadic(name) => format!("*{}", name),
                 Dim::Expr(expr) => {
                     format!("{}", expr.left)
@@ -393,7 +395,7 @@ impl<'a> CodeGenerator<'a> {
         if shape
             .dims
             .iter()
-            .any(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_)))
+            .any(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Variadic(_)))
         {
             return false;
         }

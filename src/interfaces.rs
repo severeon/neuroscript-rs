@@ -17,6 +17,13 @@ pub enum Dim {
     Named(String),
     /// Wildcard: * (matches any single dimension)
     Wildcard,
+    /// Inferred dimension: collapses remaining dims (like PyTorch's -1 in reshape).
+    /// Semantically different from Wildcard: Wildcard matches exactly one unknown
+    /// dimension in shape patterns, while Inferred means "compute this dimension
+    /// from the total element count and other specified dimensions" (i.e., may absorb
+    /// multiple dimensions). Only produced by `ReshapeExpr::to_shape()` from
+    /// `ReshapeDim::Others`.
+    Inferred,
     /// Variadic: *batch (captures zero or more dimensions)
     Variadic(String),
     /// Computed: dim * 4
@@ -39,6 +46,7 @@ impl Dim {
         match (self, other) {
             (Dim::Literal(a), Dim::Literal(b)) => *a == *b || *a == 1 || *b == 1,
             (Dim::Wildcard, _) | (_, Dim::Wildcard) => true,
+            (Dim::Inferred, _) | (_, Dim::Inferred) => true,
             _ => false, // Named, Variadic, Expr can't be broadcast at runtime
         }
     }
@@ -322,10 +330,6 @@ impl ReshapeExpr {
     /// - `Binding { name, expr }` (e.g., `dh=dim/heads`) maps to `Dim::Named(name)`,
     ///   discarding the expression constraint. Shape inference sees `dh` as unconstrained.
     ///   TODO: propagate binding constraints for tighter validation.
-    /// - `Others` maps to `Dim::Wildcard`, but semantically `others` means "collapse all
-    ///   remaining dims" (like PyTorch's -1), not "one unknown dim". This means rank
-    ///   validation doesn't catch mismatches through `others`.
-    ///   TODO: add a `Dim::Inferred` variant or track rank separately.
     pub fn to_shape(&self) -> Shape {
         Shape {
             dims: self
@@ -335,7 +339,7 @@ impl ReshapeExpr {
                     ReshapeDim::Named(name) => Dim::Named(name.clone()),
                     ReshapeDim::Literal(n) => Dim::Literal(*n),
                     ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
-                    ReshapeDim::Others => Dim::Wildcard,
+                    ReshapeDim::Others => Dim::Inferred,
                     ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
                 })
                 .collect(),
