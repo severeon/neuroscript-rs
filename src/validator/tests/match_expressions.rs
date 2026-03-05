@@ -206,7 +206,7 @@ fn test_if_inconsistent_port_count() {
 
     assert_validation_error(&mut program, |e| {
         matches!(e, ValidationError::InconsistentArmPorts { expr_kind, arm_index, .. }
-            if expr_kind == "if" && *arm_index == 0) // 0 = else branch
+            if expr_kind == "if" && arm_index.is_none()) // None = else branch
     });
 }
 
@@ -235,7 +235,7 @@ fn test_if_inconsistent_port_names() {
 
     assert_validation_error(&mut program, |e| {
         matches!(e, ValidationError::InconsistentArmPorts { expr_kind, arm_index, .. }
-            if expr_kind == "if" && *arm_index == 0)
+            if expr_kind == "if" && arm_index.is_none())
     });
 }
 
@@ -324,5 +324,89 @@ fn test_match_inconsistent_port_names() {
 
     assert_validation_error(&mut program, |e| {
         matches!(e, ValidationError::InconsistentArmPorts { .. })
+    });
+}
+
+#[test]
+fn test_match_three_arms_third_inconsistent() {
+    // Arms 1 and 2 produce "out", arm 3 produces "extra"
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestMatch",
+            vec![default_port(Shape::new(vec![Dim::Wildcard, Dim::Wildcard, Dim::Wildcard]))],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
+                    arms: vec![
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard, Dim::Wildcard, Dim::Literal(512),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard, Dim::Wildcard, Dim::Literal(256),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard, Dim::Wildcard, named_dim("d"),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("extra")],
+                            is_reachable: true,
+                        },
+                    ],
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { arm_index: Some(3), .. })
+    });
+}
+
+#[test]
+fn test_if_elif_middle_branch_inconsistent() {
+    // if branch and else produce "out", elif produces "extra"
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestIf",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::If(IfExpr {
+                    branches: vec![
+                        IfBranch {
+                            condition: Value::Name("cond1".to_string()),
+                            pipeline: vec![ref_endpoint("out")],
+                        },
+                        IfBranch {
+                            condition: Value::Name("cond2".to_string()),
+                            pipeline: vec![ref_endpoint("extra")],
+                        },
+                    ],
+                    else_branch: Some(vec![ref_endpoint("out")]),
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { arm_index: Some(2), .. })
     });
 }

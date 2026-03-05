@@ -454,7 +454,7 @@ where
 /// Check that all arms/branches of a match or if expression produce the same port signature.
 /// Compares port count and port names across all arms against the first arm.
 /// Shape compatibility is handled separately by the shape inference pass.
-/// `num_numbered` is how many entries are numbered arms (vs an else branch at the end).
+/// `num_numbered` is how many entries are numbered arms; any entry beyond that is the else branch.
 fn check_arm_port_consistency(
     all_arm_ports: &[Vec<Port>],
     expr_kind: &str,
@@ -472,11 +472,10 @@ fn check_arm_port_consistency(
         let arm_names: Vec<String> = arm_ports.iter().map(|p| p.name.clone()).collect();
 
         if arm_ports.len() != first.len() || arm_names != first_names {
-            // For if expressions, the entry after all numbered branches is the else
-            let arm_index = if i >= num_numbered { 0 } else { i + 1 };
+            let arm_index = if i >= num_numbered { None } else { Some(i + 1) };
             return Err(Box::new(ValidationError::InconsistentArmPorts {
                 expr_kind: expr_kind.to_string(),
-                arm_index, // 1-based for numbered arms, 0 = else branch
+                arm_index,
                 expected_count: first.len(),
                 got_count: arm_ports.len(),
                 expected_names: first_names,

@@ -690,11 +690,9 @@ pub enum ValidationError {
         context: String,
     },
     /// Match/if arms produce different port signatures.
-    /// Both counts and names are stored for a single variant; Display
-    /// branches on whether count or names differ.
     InconsistentArmPorts {
         expr_kind: String,
-        arm_index: usize,
+        arm_index: Option<usize>, // None = else branch, Some(n) = 1-based arm number
         expected_count: usize,
         got_count: usize,
         expected_names: Vec<String>,
@@ -821,25 +819,19 @@ impl std::fmt::Display for ValidationError {
                 got_names,
                 context,
             } => {
-                // arm_index 0 means else branch; otherwise 1-based arm number
-                let arm_label = if *arm_index == 0 {
-                    "else branch".to_string()
-                } else {
-                    format!("arm {}", arm_index)
+                let arm_label = match arm_index {
+                    None => "else branch".to_string(),
+                    Some(n) => format!("arm {}", n),
                 };
-                if expected_count != got_count {
-                    write!(
-                        f,
-                        "Inconsistent port signature in {} expression: arm 1 produces {} port(s) but {} produces {} port(s) (in {})",
-                        expr_kind, expected_count, arm_label, got_count, context
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Inconsistent port names in {} expression: arm 1 has ports [{}] but {} has ports [{}] (in {})",
-                        expr_kind, expected_names.join(", "), arm_label, got_names.join(", "), context
-                    )
-                }
+                write!(
+                    f,
+                    "Inconsistent ports in {} expression: arm 1 has {} port(s) [{}] but {} has {} port(s) [{}] (in {})",
+                    expr_kind,
+                    expected_count, expected_names.join(", "),
+                    arm_label,
+                    got_count, got_names.join(", "),
+                    context
+                )
             }
             ValidationError::Custom(msg) => {
                 write!(f, "{}", msg)
