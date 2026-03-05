@@ -275,6 +275,7 @@ impl Validator {
                     errors.push(ValidationError::InvalidReshape {
                         message: "reshape expression must have at least one dimension".to_string(),
                         context: format!("in {}", context_neuron),
+                        span: None, // TODO: propagate source span from ReshapeExpr
                     });
                 }
                 // Validate at most one 'others' dimension (PyTorch allows only one -1)
@@ -290,6 +291,7 @@ impl Validator {
                             others_count
                         ),
                         context: format!("in {}", context_neuron),
+                        span: None, // TODO: propagate source span from ReshapeExpr
                     });
                 }
                 if let Some(ref annotation) = reshape.annotation {
@@ -328,6 +330,7 @@ impl Validator {
                                         valid_intrinsics.join(", ")
                                     ),
                                     context: format!("in {}", context_neuron),
+                                    span: None, // TODO: propagate source span from annotation
                                 });
                             }
                         }
