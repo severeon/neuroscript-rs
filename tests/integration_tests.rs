@@ -732,6 +732,16 @@ fn snapshot_codegen_fat_arrow_basic() {
 }
 
 #[test]
+fn snapshot_codegen_fat_arrow_flatten_tail() {
+    let source = fs::read_to_string("examples/fat_arrow_basic.ns")
+        .expect("Failed to read fat_arrow_basic.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "FlattenTail").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_flatten_tail", code);
+}
+
+#[test]
 fn snapshot_codegen_fat_arrow_reduce() {
     let source = fs::read_to_string("examples/fat_arrow_reduce.ns")
         .expect("Failed to read fat_arrow_reduce.ns");

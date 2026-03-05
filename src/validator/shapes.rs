@@ -209,6 +209,7 @@ pub fn is_catch_all_pattern(pattern: &Shape) -> bool {
     }
 
     // Non-variadic patterns are catch-all if all dims are wildcards or named (no literals/globals)
+    // Note: Inferred cannot appear in match patterns (only in reshape exprs), included defensively
     pattern
         .dims
         .iter()
