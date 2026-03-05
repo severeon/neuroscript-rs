@@ -329,12 +329,6 @@ impl Registry {
     }
 }
 
-impl Default for Registry {
-    fn default() -> Self {
-        Self::new().expect("Failed to create default registry")
-    }
-}
-
 /// Cache statistics
 #[derive(Debug, Default)]
 pub struct CacheStats {

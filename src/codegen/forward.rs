@@ -719,7 +719,7 @@ fn process_destination(
                         MatchPattern::Shape(shape) => shape
                             .dims
                             .iter()
-                            .all(|d| matches!(d, Dim::Wildcard | Dim::Variadic(_))),
+                            .all(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Variadic(_))),
                         MatchPattern::NeuronContract(_) => false,
                     }
             });
@@ -962,30 +962,6 @@ fn process_destination(
         Endpoint::Reshape(reshape) => {
             let result_var = make_var_name(used_var_names, "x");
 
-            // Helper closure: resolve a ReshapeDim name to a Python expression.
-            // Priority: neuron param -> self.param, binding_context, else use as-is
-            let resolve_dim_name = |name: &str| -> String {
-                if gen.current_neuron_params.contains(name) {
-                    format!("self.{}", name)
-                } else if let Some(resolved) = gen.binding_context.get(name) {
-                    resolved.clone()
-                } else {
-                    // Assume it's already in scope (from match capture, prior reshape, etc.)
-                    name.to_string()
-                }
-            };
-
-            // Convert a ReshapeDim to Python expression
-            let dim_to_py = |d: &ReshapeDim| -> Result<String, CodegenError> {
-                Ok(match d {
-                    ReshapeDim::Named(name) => resolve_dim_name(name),
-                    ReshapeDim::Literal(n) => n.to_string(),
-                    ReshapeDim::Binding { name, .. } => name.clone(),
-                    ReshapeDim::Others => "-1".to_string(),
-                    ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr)?,
-                })
-            };
-
             // Emit binding assignments for all cases (bare, @reduce, @repeat).
             // Binding dims like `dh=dim/heads` must be assigned before any use.
             for dim in &reshape.dims {
@@ -1002,7 +978,7 @@ fn process_destination(
                     let shape_args = reshape
                         .dims
                         .iter()
-                        .map(|d| dim_to_py(d))
+                        .map(|d| reshape_dim_to_python(gen, d))
                         .collect::<Result<Vec<_>, _>>()?
                         .join(", ");
 
@@ -1062,26 +1038,21 @@ fn process_destination(
                                 if !named_reduce.is_empty() {
                                     named_reduce
                                 } else {
-                                    // Fallback: use trailing dims based on rank delta.
-                                    // Common case: [*, c, h, w] => @reduce(mean) [*, c]
-                                    // reduces the last (src_rank - target_rank) dims.
-                                    //
-                                    // LIMITATION: This assumes the reduced dims are trailing.
-                                    // If the reduction target is non-trailing (e.g., reducing
-                                    // dim index 1 from [*, heads, seq, dh] to [*, seq, dh]),
-                                    // this fallback will select the wrong indices. Use fully
-                                    // named source shapes for correct non-trailing reduction.
-                                    let src_rank = src_shape.dims.len();
-                                    let tgt_rank = reshape.dims.len();
-                                    eprintln!(
-                                        "warning: @reduce fallback assumes trailing dimensions; \
-                                         use fully named source shapes for correct non-trailing reduction"
-                                    );
-                                    if src_rank > tgt_rank {
-                                        (tgt_rank..src_rank).collect()
-                                    } else {
-                                        vec![]
-                                    }
+                                    // Cannot reliably determine which dimensions to reduce.
+                                    // The source shape has no named dims that are absent
+                                    // from the target, so we cannot infer the reduction axes.
+                                    // Previously this used a trailing-dims heuristic that
+                                    // silently produced wrong code for non-trailing reductions
+                                    // (e.g., reducing dim index 1 from [*, heads, seq, dh]
+                                    // to [*, seq, dh]).
+                                    return Err(CodegenError::InvalidConnection(
+                                        "cannot determine @reduce dimensions: source shape dims \
+                                         are not sufficiently named to identify which axes to \
+                                         reduce. Use fully named dimensions in the source shape \
+                                         (e.g., [batch, heads, seq, dim]) so the compiler can \
+                                         match them against the target shape."
+                                            .to_string(),
+                                    ));
                                 }
                             } else {
                                 return Err(CodegenError::InvalidConnection(
@@ -1156,7 +1127,21 @@ fn process_destination(
                                     true
                                 }
                                 ReshapeDim::Named(n) => !source_dim_names.contains(n),
-                                _ => false,
+                                ReshapeDim::Binding { name, .. } => {
+                                    !source_dim_names.contains(name)
+                                }
+                                ReshapeDim::Expr(_) => {
+                                    // Expressions reference existing dims; not new
+                                    false
+                                }
+                                ReshapeDim::Others => {
+                                    // Others represents a variable number of remaining
+                                    // dims and cannot map to a single expand() slot.
+                                    return Err(CodegenError::UnsupportedFeature(
+                                        "Others (`...`) cannot appear in @repeat(copy) target shape: \
+                                         expand() requires fixed-rank dimensions".to_string(),
+                                    ));
+                                }
                             };
                             if is_new {
                                 unsqueeze_indices.push(i);
@@ -1183,7 +1168,7 @@ fn process_destination(
                         let shape_args = reshape
                             .dims
                             .iter()
-                            .map(|d| dim_to_py(d))
+                            .map(|d| reshape_dim_to_python(gen, d))
                             .collect::<Result<Vec<_>, _>>()?
                             .join(", ");
 
@@ -1224,6 +1209,35 @@ fn process_destination(
         }
     }
 }
+/// Resolve a dimension name to a Python expression.
+///
+/// This is the single, unified path for converting dimension variable names to Python.
+/// Priority: neuron param -> `self.param`, binding_context lookup, else use as-is
+/// (assuming it's already in scope from a match capture, prior reshape, etc.).
+fn resolve_dim_name(gen: &CodeGenerator, name: &str) -> String {
+    if gen.current_neuron_params.contains(name) {
+        format!("self.{}", name)
+    } else if let Some(resolved) = gen.binding_context.get(name) {
+        resolved.clone()
+    } else {
+        name.to_string()
+    }
+}
+
+/// Convert a `ReshapeDim` to a Python expression string.
+///
+/// Handles all reshape dimension variants (named, literal, binding, others, expr)
+/// using `resolve_dim_name` for consistent name resolution.
+fn reshape_dim_to_python(gen: &CodeGenerator, d: &ReshapeDim) -> Result<String, CodegenError> {
+    Ok(match d {
+        ReshapeDim::Named(name) => resolve_dim_name(gen, name),
+        ReshapeDim::Literal(n) => n.to_string(),
+        ReshapeDim::Binding { name, .. } => name.clone(),
+        ReshapeDim::Others => "-1".to_string(),
+        ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr)?,
+    })
+}
+
 /// Convert a DimExpr to Python code for dimension arithmetic (uses // for division).
 /// Returns an error if the expression contains comparison operators, which are not
 /// valid in dimension arithmetic contexts.
@@ -1244,27 +1258,22 @@ fn dim_expr_to_python(gen: &CodeGenerator, expr: &DimExpr) -> Result<String, Cod
             )));
         }
     };
-    let left = reshape_dim_ref_to_python(gen, &expr.left)?;
-    let right = reshape_dim_ref_to_python(gen, &expr.right)?;
+    let left = dim_ref_to_python(gen, &expr.left)?;
+    let right = dim_ref_to_python(gen, &expr.right)?;
     Ok(format!("{} {} {}", left, op_str, right))
 }
 
-/// Convert a Dim (when used as part of a DimExpr in a reshape) to Python
-fn reshape_dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, CodegenError> {
+/// Convert a Dim (when used as part of a DimExpr in a reshape) to Python.
+///
+/// Uses `resolve_dim_name` for consistent name resolution across all dim-to-Python paths.
+fn dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, CodegenError> {
     Ok(match dim {
         Dim::Literal(n) => n.to_string(),
-        Dim::Named(n) => {
-            if gen.current_neuron_params.contains(n) {
-                format!("self.{}", n)
-            } else if let Some(resolved) = gen.binding_context.get(n) {
-                resolved.clone()
-            } else {
-                n.clone()
-            }
-        }
+        Dim::Named(n) => resolve_dim_name(gen, n),
         Dim::Global(n) => n.clone(),
         Dim::Expr(e) => dim_expr_to_python(gen, e)?,
         Dim::Wildcard => "-1".to_string(),
+        Dim::Inferred => "-1".to_string(),
         Dim::Variadic(_) => "-1".to_string(),
     })
 }

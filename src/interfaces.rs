@@ -17,6 +17,13 @@ pub enum Dim {
     Named(String),
     /// Wildcard: * (matches any single dimension)
     Wildcard,
+    /// Inferred dimension: collapses remaining dims (like PyTorch's -1 in reshape).
+    /// Semantically different from Wildcard: Wildcard matches exactly one unknown
+    /// dimension in shape patterns, while Inferred means "compute this dimension
+    /// from the total element count and other specified dimensions" (i.e., may absorb
+    /// multiple dimensions). Only produced by `ReshapeExpr::to_shape()` from
+    /// `ReshapeDim::Others`.
+    Inferred,
     /// Variadic: *batch (captures zero or more dimensions)
     Variadic(String),
     /// Computed: dim * 4
@@ -34,14 +41,6 @@ impl Dim {
         }
     }
 
-    /// Check if this dimension is compatible with another for broadcasting
-    pub fn broadcastable_with(&self, other: &Dim) -> bool {
-        match (self, other) {
-            (Dim::Literal(a), Dim::Literal(b)) => *a == *b || *a == 1 || *b == 1,
-            (Dim::Wildcard, _) | (_, Dim::Wildcard) => true,
-            _ => false, // Named, Variadic, Expr can't be broadcast at runtime
-        }
-    }
 }
 
 /// Binary operation on dimensions
@@ -357,7 +356,7 @@ impl ReshapeExpr {
                     // Expression is intentionally dropped here — see doc comment above.
                     // The binding expr is still available in ReshapeDim::Binding for codegen.
                     ReshapeDim::Binding { name, .. } => Dim::Named(name.clone()),
-                    ReshapeDim::Others => Dim::Wildcard,
+                    ReshapeDim::Others => Dim::Inferred,
                     ReshapeDim::Expr(expr) => Dim::Expr(expr.clone()),
                 })
                 .collect(),
@@ -592,8 +591,10 @@ pub struct InferenceContext {
     /// e.g. "shape" -> [batch, seq]
     pub resolved_variadics: HashMap<String, Vec<Dim>>,
 
-    /// Pending expression constraints to be solved
+    /// Pending expression constraints to be solved later when more dims are known.
     /// Format: (result_dim, expression, context)
+    /// TODO(SHAPE-4): these are pushed but never drained — add a flush pass that
+    /// retries resolution after all direct unifications complete.
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
 }
 
@@ -705,10 +706,24 @@ pub enum ValidationError {
     InvalidReshape {
         message: String,
         context: String,
+        /// Source span for diagnostic reporting
+        span: Option<SourceSpan>,
     },
     InvalidAnnotation {
         annotation: String,
         reason: String,
+        context: String,
+        /// Source span for diagnostic reporting
+        span: Option<SourceSpan>,
+    },
+    /// Match/if arms produce different port signatures.
+    InconsistentArmPorts {
+        expr_kind: String,
+        arm_index: Option<usize>, // None = else branch, Some(n) = 1-based arm number
+        expected_count: usize,
+        got_count: usize,
+        expected_names: Vec<String>,
+        got_names: Vec<String>,
         context: String,
     },
     Custom(String),
@@ -808,18 +823,42 @@ impl std::fmt::Display for ValidationError {
                     neuron, reason
                 )
             }
-            ValidationError::InvalidReshape { message, context } => {
+            ValidationError::InvalidReshape { message, context, .. } => {
                 write!(f, "Invalid reshape: {} (in {})", message, context)
             }
             ValidationError::InvalidAnnotation {
                 annotation,
                 reason,
                 context,
+                ..
             } => {
                 write!(
                     f,
                     "Invalid annotation {}: {} ({})",
                     annotation, reason, context
+                )
+            }
+            ValidationError::InconsistentArmPorts {
+                expr_kind,
+                arm_index,
+                expected_count,
+                got_count,
+                expected_names,
+                got_names,
+                context,
+            } => {
+                let arm_label = match arm_index {
+                    None => "else branch".to_string(),
+                    Some(n) => format!("arm {}", n),
+                };
+                write!(
+                    f,
+                    "Inconsistent ports in {} expression: arm 1 has {} port(s) [{}] but {} has {} port(s) [{}] (in {})",
+                    expr_kind,
+                    expected_count, expected_names.join(", "),
+                    arm_label,
+                    got_count, got_names.join(", "),
+                    context
                 )
             }
             ValidationError::Custom(msg) => {

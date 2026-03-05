@@ -119,6 +119,7 @@ fn pattern_specificity(arm: &MatchArm) -> (usize, bool) {
                 Dim::Expr(_) => score += 50,  // Expressions moderately specific
                 Dim::Global(_) => score += 80, // Globals quite specific
                 Dim::Wildcard => score += 1,  // Wildcards least specific
+                Dim::Inferred => score += 1,  // Inferred (-1) least specific, like wildcard
                 Dim::Variadic(_) => score += 0, // Variadics are catch-all
             }
         }
@@ -259,6 +260,7 @@ fn pattern_matches_shape(pattern: &Shape, concrete: &Shape, ctx: &InferenceConte
     for (pat_dim, concrete_dim) in pattern.dims.iter().zip(&concrete.dims) {
         match pat_dim {
             Dim::Wildcard => continue,       // Always matches
+            Dim::Inferred => continue,       // Inferred (-1) matches anything
             Dim::Variadic(_) => return true, // Matches rest of shape
             Dim::Global(pat_name) => {
                 let concrete_name = match concrete_dim {

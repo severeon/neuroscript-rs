@@ -1,5 +1,7 @@
-/// WaveNet Residual Block
-/// Gated activation unit with dilated causal convolution and residual connection.
+/// WaveNet-style Residual Block
+/// Gated activation unit with dilated convolution and residual connection.
+/// NOTE: uses symmetric (same) padding, not causal padding. For true causal
+/// convolution, left-only padding of dilation * (kernel_size - 1) is needed.
 /// Dilation controls the receptive field; stack blocks with dilation 1, 2, 4, 8, ...
 /// Reference: van den Oord et al. (2016), "WaveNet"
 neuron WaveNetBlock(channels, kernel_size, dilation):

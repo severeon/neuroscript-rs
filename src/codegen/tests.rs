@@ -1016,12 +1016,12 @@ fn test_codegen_fat_arrow_reshape_in_match_arm() {
         ],
         inputs: vec![Port {
             name: "default".to_string(),
-            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
+            shape: Shape::new(vec![Dim::Named("batch".to_string()), Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
             variadic: false,
         }],
         outputs: vec![Port {
             name: "default".to_string(),
-            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("heads".to_string()), Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
+            shape: Shape::new(vec![Dim::Named("batch".to_string()), Dim::Named("heads".to_string()), Dim::Named("seq".to_string()), Dim::Named("dim".to_string())]),
             variadic: false,
         }],
         max_cycle_depth: Some(10),
@@ -1036,7 +1036,7 @@ fn test_codegen_fat_arrow_reshape_in_match_arm() {
                     arms: vec![
                         MatchArm {
                             pattern: MatchPattern::Shape(Shape::new(vec![
-                                Dim::Wildcard,
+                                Dim::Named("batch".to_string()),
                                 Dim::Named("seq".to_string()),
                                 Dim::Named("d".to_string()),
                             ])),
@@ -1069,7 +1069,7 @@ fn test_codegen_fat_arrow_reshape_in_match_arm() {
                         },
                         MatchArm {
                             pattern: MatchPattern::Shape(Shape::new(vec![
-                                Dim::Wildcard,
+                                Dim::Named("batch".to_string()),
                                 Dim::Named("seq".to_string()),
                                 Dim::Named("d".to_string()),
                             ])),

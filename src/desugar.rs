@@ -10,10 +10,17 @@ use crate::interfaces::*;
 /// Must be called after parsing but before validation.
 pub fn desugar_wraps(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     let mut errors = Vec::new();
+    // Snapshot neuron definitions for lookup during desugaring
+    let neuron_defs: std::collections::HashMap<String, Vec<Param>> = program
+        .neurons
+        .iter()
+        .map(|(name, def)| (name.clone(), def.params.clone()))
+        .collect();
+    let registry = StdlibRegistry::new();
     let neuron_names: Vec<String> = program.neurons.keys().cloned().collect();
     for name in &neuron_names {
         if let Some(neuron) = program.neurons.get_mut(name) {
-            if let Err(mut errs) = desugar_neuron_wraps(neuron) {
+            if let Err(mut errs) = desugar_neuron_wraps(neuron, &neuron_defs, &registry) {
                 errors.append(&mut errs);
             }
         }
@@ -25,7 +32,11 @@ pub fn desugar_wraps(program: &mut Program) -> Result<(), Vec<ValidationError>> 
     }
 }
 
-fn desugar_neuron_wraps(neuron: &mut NeuronDef) -> Result<(), Vec<ValidationError>> {
+fn desugar_neuron_wraps(
+    neuron: &mut NeuronDef,
+    neuron_defs: &std::collections::HashMap<String, Vec<Param>>,
+    registry: &StdlibRegistry,
+) -> Result<(), Vec<ValidationError>> {
     if let NeuronBody::Graph {
         ref mut context_bindings,
         ref mut connections,
@@ -41,6 +52,8 @@ fn desugar_neuron_wraps(neuron: &mut NeuronDef) -> Result<(), Vec<ValidationErro
                 &mut conn.source,
                 &mut new_bindings,
                 &mut wrap_counter,
+                neuron_defs,
+                registry,
             ) {
                 errors.push(e);
             }
@@ -48,6 +61,8 @@ fn desugar_neuron_wraps(neuron: &mut NeuronDef) -> Result<(), Vec<ValidationErro
                 &mut conn.destination,
                 &mut new_bindings,
                 &mut wrap_counter,
+                neuron_defs,
+                registry,
             ) {
                 errors.push(e);
             }
@@ -69,9 +84,51 @@ fn desugar_endpoint_wraps(
     endpoint: &mut Endpoint,
     new_bindings: &mut Vec<Binding>,
     counter: &mut usize,
+    neuron_defs: &std::collections::HashMap<String, Vec<Param>>,
+    registry: &StdlibRegistry,
 ) -> Result<(), ValidationError> {
     match endpoint {
         Endpoint::Wrap(wrap_expr) => {
+            // Validate that the wrapper neuron's first parameter has `: Neuron` type annotation.
+            // We can only check this for neurons defined in the program (not primitives from
+            // the stdlib registry, which don't carry parameter type info).
+            let wrapper_name = &wrap_expr.wrapper_name;
+            if let Some(params) = neuron_defs.get(wrapper_name) {
+                match params.first() {
+                    Some(first_param) => {
+                        if first_param.type_annotation.as_ref() != Some(&ParamType::Neuron) {
+                            return Err(ValidationError::Custom(format!(
+                                "@wrap({}, ...): the first parameter '{}' of neuron '{}' must have \
+                                 type annotation ': Neuron', but it {}",
+                                wrapper_name,
+                                first_param.name,
+                                wrapper_name,
+                                match &first_param.type_annotation {
+                                    None => "has no type annotation".to_string(),
+                                    Some(other) => format!("has type annotation '{:?}'", other),
+                                }
+                            )));
+                        }
+                    }
+                    None => {
+                        return Err(ValidationError::Custom(format!(
+                            "@wrap({}, ...): neuron '{}' has no parameters, \
+                             but @wrap requires the first parameter to accept a Neuron",
+                            wrapper_name, wrapper_name
+                        )));
+                    }
+                }
+            } else if !registry.contains(wrapper_name) {
+                // Not in program neurons and not a primitive -- will be caught by the
+                // validator's MissingNeuron check later, but we can flag it here too.
+                return Err(ValidationError::MissingNeuron {
+                    name: wrapper_name.clone(),
+                    context: format!("@wrap({}, ...)", wrapper_name),
+                });
+            }
+            // If it's a primitive from the registry, we skip the check since primitives
+            // don't carry parameter type information in the registry.
+
             let wrap_id = *counter;
             *counter += 1;
 
@@ -162,19 +219,19 @@ fn desugar_endpoint_wraps(
         Endpoint::Match(match_expr) => {
             for arm in &mut match_expr.arms {
                 for ep in &mut arm.pipeline {
-                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
+                    desugar_endpoint_wraps(ep, new_bindings, counter, neuron_defs, registry)?;
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &mut if_expr.branches {
                 for ep in &mut branch.pipeline {
-                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
+                    desugar_endpoint_wraps(ep, new_bindings, counter, neuron_defs, registry)?;
                 }
             }
             if let Some(else_branch) = &mut if_expr.else_branch {
                 for ep in else_branch {
-                    desugar_endpoint_wraps(ep, new_bindings, counter)?;
+                    desugar_endpoint_wraps(ep, new_bindings, counter, neuron_defs, registry)?;
                 }
             }
         }
@@ -189,9 +246,61 @@ fn desugar_endpoint_wraps(
 mod tests {
     use super::*;
 
+    /// Helper: create a minimal HyperConnect neuron definition with `layer: Neuron` first param.
+    fn make_hyper_connect_def() -> NeuronDef {
+        NeuronDef {
+            name: "HyperConnect".to_string(),
+            params: vec![
+                Param {
+                    name: "layer".to_string(),
+                    default: None,
+                    type_annotation: Some(ParamType::Neuron),
+                },
+                Param {
+                    name: "n".to_string(),
+                    default: None,
+                    type_annotation: None,
+                },
+                Param {
+                    name: "dim".to_string(),
+                    default: None,
+                    type_annotation: None,
+                },
+                Param {
+                    name: "layer_idx".to_string(),
+                    default: None,
+                    type_annotation: None,
+                },
+            ],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            max_cycle_depth: None,
+            doc: None,
+            body: NeuronBody::Graph {
+                context_bindings: vec![],
+                context_unrolls: vec![],
+                connections: vec![Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Ref(PortRef::new("out")),
+                }],
+            },
+        }
+    }
+
     #[test]
     fn test_desugar_wrap_ref() {
         let mut program = Program::new();
+        program
+            .neurons
+            .insert("HyperConnect".to_string(), make_hyper_connect_def());
         let neuron = NeuronDef {
             name: "Test".to_string(),
             params: vec![Param {
@@ -268,6 +377,9 @@ mod tests {
     #[test]
     fn test_desugar_wrap_pipeline() {
         let mut program = Program::new();
+        program
+            .neurons
+            .insert("HyperConnect".to_string(), make_hyper_connect_def());
         let neuron = NeuronDef {
             name: "Test".to_string(),
             params: vec![Param {
@@ -362,5 +474,188 @@ mod tests {
         } else {
             panic!("Expected Graph body");
         }
+    }
+
+    #[test]
+    fn test_wrap_rejects_non_neuron_first_param() {
+        // Create a wrapper neuron whose first param does NOT have `: Neuron`
+        let mut program = Program::new();
+        let bad_wrapper = NeuronDef {
+            name: "BadWrapper".to_string(),
+            params: vec![
+                Param {
+                    name: "input_dim".to_string(),
+                    default: None,
+                    type_annotation: None, // Missing `: Neuron`!
+                },
+                Param {
+                    name: "dim".to_string(),
+                    default: None,
+                    type_annotation: None,
+                },
+            ],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            max_cycle_depth: None,
+            doc: None,
+            body: NeuronBody::Graph {
+                context_bindings: vec![],
+                context_unrolls: vec![],
+                connections: vec![Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Ref(PortRef::new("out")),
+                }],
+            },
+        };
+        program
+            .neurons
+            .insert("BadWrapper".to_string(), bad_wrapper);
+
+        let neuron = NeuronDef {
+            name: "Test".to_string(),
+            params: vec![Param {
+                name: "dim".to_string(),
+                default: None,
+                type_annotation: None,
+            }],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+                variadic: false,
+            }],
+            max_cycle_depth: None,
+            doc: None,
+            body: NeuronBody::Graph {
+                context_bindings: vec![Binding {
+                    name: "attn".to_string(),
+                    call_name: "MultiHeadSelfAttention".to_string(),
+                    args: vec![Value::Name("dim".to_string()), Value::Int(8)],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: false },
+                    frozen: false,
+                    unroll_group: None,
+                }],
+                context_unrolls: vec![],
+                connections: vec![Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Wrap(WrapExpr {
+                        wrapper_name: "BadWrapper".to_string(),
+                        wrapper_args: vec![Value::Name("dim".to_string())],
+                        wrapper_kwargs: vec![],
+                        content: WrapContent::Ref("attn".to_string()),
+                        id: 99,
+                    }),
+                }],
+            },
+        };
+        program.neurons.insert("Test".to_string(), neuron);
+
+        let result = desugar_wraps(&mut program);
+        assert!(result.is_err(), "Should reject @wrap when first param lacks `: Neuron`");
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        let msg = format!("{}", errors[0]);
+        assert!(
+            msg.contains("must have type annotation ': Neuron'"),
+            "Error message should mention ': Neuron', got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_wrap_rejects_no_params() {
+        // Create a wrapper neuron with zero params
+        let mut program = Program::new();
+        let no_param_wrapper = NeuronDef {
+            name: "NoParamWrapper".to_string(),
+            params: vec![],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard]),
+                variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard]),
+                variadic: false,
+            }],
+            max_cycle_depth: None,
+            doc: None,
+            body: NeuronBody::Graph {
+                context_bindings: vec![],
+                context_unrolls: vec![],
+                connections: vec![Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Ref(PortRef::new("out")),
+                }],
+            },
+        };
+        program
+            .neurons
+            .insert("NoParamWrapper".to_string(), no_param_wrapper);
+
+        let neuron = NeuronDef {
+            name: "Test".to_string(),
+            params: vec![],
+            inputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard]),
+                variadic: false,
+            }],
+            outputs: vec![Port {
+                name: "default".to_string(),
+                shape: Shape::new(vec![Dim::Wildcard]),
+                variadic: false,
+            }],
+            max_cycle_depth: None,
+            doc: None,
+            body: NeuronBody::Graph {
+                context_bindings: vec![Binding {
+                    name: "layer".to_string(),
+                    call_name: "Linear".to_string(),
+                    args: vec![Value::Int(10), Value::Int(10)],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: false },
+                    frozen: false,
+                    unroll_group: None,
+                }],
+                context_unrolls: vec![],
+                connections: vec![Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Wrap(WrapExpr {
+                        wrapper_name: "NoParamWrapper".to_string(),
+                        wrapper_args: vec![],
+                        wrapper_kwargs: vec![],
+                        content: WrapContent::Ref("layer".to_string()),
+                        id: 50,
+                    }),
+                }],
+            },
+        };
+        program.neurons.insert("Test".to_string(), neuron);
+
+        let result = desugar_wraps(&mut program);
+        assert!(result.is_err(), "Should reject @wrap when wrapper has no params");
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        let msg = format!("{}", errors[0]);
+        assert!(
+            msg.contains("has no parameters"),
+            "Error message should mention no parameters, got: {}",
+            msg
+        );
     }
 }

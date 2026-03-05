@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::bindings;
 use super::cycles;
 use super::shapes;
@@ -34,7 +36,19 @@ impl Validator {
             }
         }
 
-        // 2. Validate variadic port declarations
+        // 2. Reject reserved dunder neuron names (e.g., __sequential__)
+        for neuron in program.neurons.values() {
+            let name = &neuron.name;
+            if name.starts_with("__") && name.ends_with("__") && name.len() > 4 {
+                errors.push(ValidationError::Custom(format!(
+                    "Neuron name '{}' is reserved: names starting and ending with double underscores \
+                     are reserved for internal use",
+                    name
+                )));
+            }
+        }
+
+        // 3. Validate variadic port declarations
         for neuron in program.neurons.values() {
             // Variadic ports on outputs are not supported
             for port in &neuron.outputs {
@@ -67,7 +81,7 @@ impl Validator {
             }
         }
 
-        // 3. Check each neuron (read-only pass for structure)
+        // 4. Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
         {
             for neuron in program.neurons.values() {
@@ -126,7 +140,7 @@ impl Validator {
         let mut errors = Vec::new();
 
         // Collect neuron-typed parameter names for higher-order neuron support
-        let neuron_param_names: std::collections::HashSet<&str> = neuron
+        let neuron_param_names: HashSet<&str> = neuron
             .params
             .iter()
             .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
@@ -200,6 +214,9 @@ impl Validator {
             }
         }
 
+        // Check @reduce target dims are reachable from the neuron's known dimensions
+        errors.extend(Self::validate_reduce_dim_reachability(neuron, connections));
+
         // Check for cycles (respecting max_cycle_depth if set)
         errors.extend(cycles::detect_cycles(
             connections,
@@ -211,13 +228,232 @@ impl Validator {
         errors
     }
 
+    /// Collect all named dimension identifiers that are "known" within a neuron definition.
+    /// This includes dim names from input/output port shapes and neuron parameter names.
+    fn collect_known_dims(neuron: &NeuronDef) -> HashSet<String> {
+        let mut known = HashSet::new();
+
+        // Add all param names (params can be used as dimension values)
+        for param in &neuron.params {
+            known.insert(param.name.clone());
+        }
+
+        // Add named dims from input port shapes
+        for port in &neuron.inputs {
+            Self::collect_dims_from_shape(&port.shape, &mut known);
+        }
+
+        // Add named dims from output port shapes
+        for port in &neuron.outputs {
+            Self::collect_dims_from_shape(&port.shape, &mut known);
+        }
+
+        known
+    }
+
+    /// Extract named dimension identifiers from a Shape into the given set.
+    fn collect_dims_from_shape(shape: &Shape, known: &mut HashSet<String>) {
+        for dim in &shape.dims {
+            match dim {
+                Dim::Named(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Variadic(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Expr(expr) => {
+                    Self::collect_dims_from_dim(&expr.left, known);
+                    Self::collect_dims_from_dim(&expr.right, known);
+                }
+                Dim::Global(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Literal(_) | Dim::Wildcard => {}
+            }
+        }
+    }
+
+    /// Extract named dimension identifiers from a single Dim.
+    fn collect_dims_from_dim(dim: &Dim, known: &mut HashSet<String>) {
+        match dim {
+            Dim::Named(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Variadic(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Expr(expr) => {
+                Self::collect_dims_from_dim(&expr.left, known);
+                Self::collect_dims_from_dim(&expr.right, known);
+            }
+            Dim::Global(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Literal(_) | Dim::Wildcard => {}
+        }
+    }
+
+    /// Validate that all named dimensions in @reduce target shapes are reachable
+    /// from the neuron's known dimensions (input shapes + parameters).
+    fn validate_reduce_dim_reachability(
+        neuron: &NeuronDef,
+        connections: &[Connection],
+    ) -> Vec<ValidationError> {
+        let known_dims = Self::collect_known_dims(neuron);
+        let mut errors = Vec::new();
+
+        for connection in connections {
+            Self::check_reduce_dims_in_endpoint(
+                &connection.source,
+                &neuron.name,
+                &known_dims,
+                &mut errors,
+            );
+            Self::check_reduce_dims_in_endpoint(
+                &connection.destination,
+                &neuron.name,
+                &known_dims,
+                &mut errors,
+            );
+        }
+
+        errors
+    }
+
+    /// Recursively check @reduce reshape endpoints for unreachable dimension names.
+    fn check_reduce_dims_in_endpoint(
+        endpoint: &Endpoint,
+        context_neuron: &str,
+        known_dims: &HashSet<String>,
+        errors: &mut Vec<ValidationError>,
+    ) {
+        match endpoint {
+            Endpoint::Reshape(reshape) => {
+                if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+                    // For @reduce, every named dim in the target shape must be
+                    // reachable from the source (i.e., present in the neuron's
+                    // known dims from input/output shapes and params).
+                    for dim in &reshape.dims {
+                        let unreachable_names = match dim {
+                            ReshapeDim::Named(name) => {
+                                if known_dims.contains(name) {
+                                    vec![]
+                                } else {
+                                    vec![name.clone()]
+                                }
+                            }
+                            ReshapeDim::Binding { expr, .. } => {
+                                // The binding name (LHS) introduces a new variable;
+                                // validate the RHS expression dims instead.
+                                let mut names = Vec::new();
+                                Self::collect_unreachable_from_value(expr, known_dims, &mut names);
+                                names
+                            }
+                            ReshapeDim::Expr(expr) => {
+                                let mut names = Vec::new();
+                                Self::collect_unreachable_from_dim_expr(expr, known_dims, &mut names);
+                                names
+                            }
+                            _ => vec![],
+                        };
+                        for name in unreachable_names {
+                            errors.push(ValidationError::InvalidAnnotation {
+                                annotation: reshape.annotation.as_ref().unwrap().to_string(),
+                                reason: format!(
+                                    "dimension '{}' in @reduce target shape is not defined in any input/output port shape or parameter of neuron '{}'",
+                                    name, context_neuron
+                                ),
+                                context: format!("in {}", context_neuron),
+                                span: None,
+                            });
+                        }
+                    }
+                }
+            }
+            Endpoint::Match(match_expr) => {
+                for arm in &match_expr.arms {
+                    for ep in &arm.pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            Endpoint::If(if_expr) => {
+                for branch in &if_expr.branches {
+                    for ep in &branch.pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+                if let Some(else_branch) = &if_expr.else_branch {
+                    for ep in else_branch {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            Endpoint::Wrap(wrap_expr) => {
+                if let WrapContent::Pipeline(pipeline) = &wrap_expr.content {
+                    for ep in pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect unreachable dim names from a Value expression (used by Binding RHS).
+    fn collect_unreachable_from_value(
+        value: &Value,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        match value {
+            Value::Name(name) => {
+                if !known_dims.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+            Value::BinOp { left, right, .. } => {
+                Self::collect_unreachable_from_value(left, known_dims, out);
+                Self::collect_unreachable_from_value(right, known_dims, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect unreachable dim names from a DimExpr.
+    fn collect_unreachable_from_dim_expr(
+        expr: &DimExpr,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        Self::collect_unreachable_from_dim(&expr.left, known_dims, out);
+        Self::collect_unreachable_from_dim(&expr.right, known_dims, out);
+    }
+
+    /// Collect unreachable dim names from a single Dim.
+    fn collect_unreachable_from_dim(
+        dim: &Dim,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        match dim {
+            Dim::Named(name) => {
+                if !known_dims.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+            Dim::Expr(expr) => Self::collect_unreachable_from_dim_expr(expr, known_dims, out),
+            _ => {}
+        }
+    }
+
     /// Check that all neurons referenced in an endpoint exist
     fn check_neurons_exist(
         endpoint: &Endpoint,
         context_neuron: &str,
         program: &Program,
         registry: &StdlibRegistry,
-        neuron_param_names: &std::collections::HashSet<&str>,
+        neuron_param_names: &HashSet<&str>,
     ) -> Vec<ValidationError> {
         match endpoint {
             Endpoint::Call { name, .. } => {
@@ -275,6 +511,7 @@ impl Validator {
                     errors.push(ValidationError::InvalidReshape {
                         message: "reshape expression must have at least one dimension".to_string(),
                         context: format!("in {}", context_neuron),
+                        span: None, // TODO: propagate source span from ReshapeExpr
                     });
                 }
                 // Validate at most one 'others' dimension (PyTorch allows only one -1)
@@ -290,6 +527,7 @@ impl Validator {
                             others_count
                         ),
                         context: format!("in {}", context_neuron),
+                        span: None, // TODO: propagate source span from ReshapeExpr
                     });
                 }
                 if let Some(ref annotation) = reshape.annotation {
@@ -328,6 +566,7 @@ impl Validator {
                                         valid_intrinsics.join(", ")
                                     ),
                                     context: format!("in {}", context_neuron),
+                                    span: None, // TODO: propagate source span from annotation
                                 });
                             }
                         }

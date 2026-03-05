@@ -156,10 +156,9 @@ fn find_entry_point(program: &Program) -> Option<String> {
 
     let mut roots: Vec<String> = program
         .neurons
-        .keys()
-        .filter(|name| !called.contains(*name))
-        .filter(|name| !program.neurons.get(*name).unwrap().is_primitive())
-        .cloned()
+        .iter()
+        .filter(|(name, neuron)| !called.contains(*name) && !neuron.is_primitive())
+        .map(|(name, _)| name.clone())
         .collect();
 
     roots.sort();
@@ -233,7 +232,9 @@ pub fn analyze(source: &str) -> Result<String, String> {
     neuron_names.sort();
 
     for name in neuron_names {
-        let neuron = program.neurons.get(&name).unwrap();
+        let Some(neuron) = program.neurons.get(&name) else {
+            continue;
+        };
 
         let params: Vec<ParamInfo> = neuron
             .params
@@ -325,6 +326,7 @@ fn format_dim(dim: &Dim) -> String {
         Dim::Literal(n) => n.to_string(),
         Dim::Named(name) => name.clone(),
         Dim::Wildcard => "*".to_string(),
+        Dim::Inferred => "...".to_string(),
         Dim::Variadic(name) => format!("*{}", name),
         Dim::Expr(expr) => {
             let op = match expr.op {

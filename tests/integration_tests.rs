@@ -141,6 +141,7 @@ fn format_shape(shape: &Shape) -> String {
             Dim::Literal(n) => n.to_string(),
             Dim::Named(name) => name.clone(),
             Dim::Wildcard => "*".to_string(),
+            Dim::Inferred => "...".to_string(),
             Dim::Variadic(name) => format!("*{}", name),
             Dim::Expr(expr) => format_dim_expr(expr),
             Dim::Global(name) => format!("@global {}", name),
@@ -164,6 +165,7 @@ fn format_dim(dim: &Dim) -> String {
         Dim::Literal(n) => n.to_string(),
         Dim::Named(name) => name.clone(),
         Dim::Wildcard => "*".to_string(),
+        Dim::Inferred => "...".to_string(),
         Dim::Variadic(name) => format!("*{}", name),
         Dim::Expr(expr) => format_dim_expr(expr),
         Dim::Global(name) => format!("@global {}", name),
@@ -720,6 +722,24 @@ fn snapshot_fat_arrow_repeat() {
 }
 
 #[test]
+fn snapshot_fat_arrow_match() {
+    let source = fs::read_to_string("examples/fat_arrow_match.ns")
+        .expect("Failed to read fat_arrow_match.ns");
+    let program = parse(&source).expect("should parse");
+    insta::assert_snapshot!("parser_ir_fat_arrow_match", format_program_ir(&program));
+}
+
+#[test]
+fn snapshot_codegen_fat_arrow_match() {
+    let source = fs::read_to_string("examples/fat_arrow_match.ns")
+        .expect("Failed to read fat_arrow_match.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "ReshapeRouter").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_match", code);
+}
+
+#[test]
 fn snapshot_codegen_fat_arrow_basic() {
     let source = fs::read_to_string("examples/fat_arrow_basic.ns")
         .expect("Failed to read fat_arrow_basic.ns");
@@ -727,6 +747,16 @@ fn snapshot_codegen_fat_arrow_basic() {
     validate(&mut program).expect("Validation failed");
     let code = generate_pytorch(&program, "MultiHeadReshape").expect("Codegen failed");
     insta::assert_snapshot!("codegen_fat_arrow_basic", code);
+}
+
+#[test]
+fn snapshot_codegen_fat_arrow_flatten_tail() {
+    let source = fs::read_to_string("examples/fat_arrow_basic.ns")
+        .expect("Failed to read fat_arrow_basic.ns");
+    let mut program = parse(&source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code = generate_pytorch(&program, "FlattenTail").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_fat_arrow_flatten_tail", code);
 }
 
 #[test]

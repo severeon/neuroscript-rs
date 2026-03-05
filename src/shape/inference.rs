@@ -73,10 +73,66 @@ impl InferenceContext {
                     ))
                 }
             }
-            _ => {
-                // TODO: Handle more complex unifications (e.g. named vs expr)
+            // Variadic-Variadic: record equivalence (like Named-Named)
+            (Dim::Variadic(v1), Dim::Variadic(v2)) => {
+                if v1 != v2 {
+                    self.equivalences.insert(v1.clone(), v2.clone());
+                }
                 Ok(())
             }
+            // Variadic vs any non-Variadic: error
+            (Dim::Variadic(v), other) | (other, Dim::Variadic(v)) => {
+                Err(format!(
+                    "Cannot unify variadic dimension *{} with non-variadic dimension {}",
+                    v, other
+                ))
+            }
+            // Named vs Expr: try to solve if named is resolved, otherwise record constraint
+            (Dim::Named(n), Dim::Expr(expr)) | (Dim::Expr(expr), Dim::Named(n)) => {
+                if let Some(val) = self.resolved_dims.get(n).copied() {
+                    self.solve_expr_for_unknown(expr, val)
+                } else {
+                    // Cannot solve yet — record as pending constraint
+                    self.pending_constraints.push((
+                        Dim::Named(n.clone()),
+                        (**expr).clone(),
+                        format!("Named({}) ~ Expr({:?})", n, expr),
+                    ));
+                    Ok(())
+                }
+            }
+            // TODO(SHAPE-5): Expr vs Expr — too complex to solve generically;
+            // could attempt structural equality or partial evaluation in the future.
+            (Dim::Expr(_), Dim::Expr(_)) => Ok(()),
+            // Global vs Named: resolve named to global's value if possible
+            (Dim::Global(g), Dim::Named(n)) | (Dim::Named(n), Dim::Global(g)) => {
+                if let Some(val) = self.resolved_dims.get(g).copied() {
+                    self.resolve_dim(n.clone(), val)
+                } else if let Some(val) = self.resolved_dims.get(n).copied() {
+                    self.resolve_dim(g.clone(), val)
+                } else {
+                    self.equivalences.insert(n.clone(), g.clone());
+                    Ok(())
+                }
+            }
+            // Global vs Literal: resolve global
+            (Dim::Global(g), Dim::Literal(n)) | (Dim::Literal(n), Dim::Global(g)) => {
+                self.resolve_dim(g.clone(), *n as usize)
+            }
+            // Global vs Expr: solve if global is resolved
+            (Dim::Global(g), Dim::Expr(expr)) | (Dim::Expr(expr), Dim::Global(g)) => {
+                if let Some(val) = self.resolved_dims.get(g).copied() {
+                    self.solve_expr_for_unknown(expr, val)
+                } else {
+                    self.pending_constraints.push((
+                        Dim::Global(g.clone()),
+                        (**expr).clone(),
+                        format!("Global({}) ~ Expr({:?})", g, expr),
+                    ));
+                    Ok(())
+                }
+            }
+            // All Dim variant combinations are covered above
         }
     }
 
@@ -888,9 +944,13 @@ impl ShapeInferenceEngine {
                     })?;
                 }
 
-                // 3. Check for obvious conflicts (e.g. constant vs constant) in the middle?
-                // For MVP, we assume variadics are flexible enough to handle the rest.
-                // TODO: More rigorous overlap check
+                // 3. Middle gap: fixed dims between each variadic and the
+                // prefix/suffix boundaries are absorbed by the other shape's
+                // variadic. Prefix unification already checks dims before
+                // min(pos1, pos2), and suffix unification checks dims after
+                // each variadic's tail. Any remaining fixed dims in the gap
+                // (e.g., [A, C, *y, B] vs [A, *x, B] — C is absorbed by *x)
+                // are unconstrained and valid by construction.
 
                 Ok(())
             }
@@ -1284,6 +1344,8 @@ pub(crate) fn is_dim_resolvable(dim: &Dim, ctx: &InferenceContext) -> bool {
         Dim::Literal(_) => true,
         Dim::Named(name) => ctx.resolved_dims.contains_key(name),
         Dim::Wildcard => true,
+        // Treated as resolvable: PyTorch computes the actual size at runtime from total element count
+        Dim::Inferred => true,
         Dim::Variadic(_) => true,
         Dim::Expr(expr) => {
             is_dim_resolvable(&expr.left, ctx) && is_dim_resolvable(&expr.right, ctx)

@@ -92,21 +92,33 @@ fn test_shape_size_very_large() {
 fn test_flatten_multidim() {
     let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(24)])));
 }
 
 #[test]
 fn test_flatten_already_flat() {
     let s = Shape::new(vec![Dim::Literal(24)]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(24)])));
 }
 
 #[test]
 fn test_flatten_empty() {
     let s = Shape::new(vec![]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(1)])); // Empty shape has size 1
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(1)]))); // Empty shape has size 1 (product of no dims)
+}
+
+#[test]
+fn test_flatten_named_dims_returns_none() {
+    let s = Shape::new(vec![Dim::Named("batch".to_string()), Dim::Literal(256)]);
+    assert_eq!(s.flatten(), None); // Cannot flatten when dimensions are unknown
+}
+
+#[test]
+fn test_flatten_wildcard_returns_none() {
+    let s = Shape::new(vec![Dim::Wildcard, Dim::Literal(64)]);
+    assert_eq!(s.flatten(), None); // Cannot flatten when dimensions are unknown
 }
 
 // ========================================
@@ -429,4 +441,155 @@ fn test_shapes_compatible() {
     let s7 = literal_shape(vec![512]);
     let s8 = literal_shape(vec![512, 256]);
     assert!(!engine.shapes_compatible(&s7, &s8));
+}
+
+#[test]
+fn test_both_variadic_unification() {
+    let engine = ShapeInferenceEngine::new();
+
+    // Compatible: [A, *x, B] vs [A, *y, C, B] — C absorbed by *x
+    let s1 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(64),
+    ]);
+    let s2 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(128),
+        Dim::Literal(64),
+    ]);
+    assert!(engine.shapes_compatible(&s1, &s2));
+
+    // Compatible: [*x, D] vs [*y, D] — matching suffixes
+    let s3 = Shape::new(vec![
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(256),
+    ]);
+    let s4 = Shape::new(vec![
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(256),
+    ]);
+    assert!(engine.shapes_compatible(&s3, &s4));
+
+    // Incompatible: [*x, A, B] vs [*y, C, B] where A != C
+    // Suffix unification catches this: [A, B] vs [C, B] with A=512, C=128
+    let s5 = Shape::new(vec![
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(512),
+        Dim::Literal(64),
+    ]);
+    let s6 = Shape::new(vec![
+        Dim::Variadic("y".to_string()),
+        Dim::Literal(128),
+        Dim::Literal(64),
+    ]);
+    assert!(!engine.shapes_compatible(&s5, &s6));
+
+    // Compatible: [*x] vs [*y] — both fully variadic
+    let s7 = Shape::new(vec![Dim::Variadic("x".to_string())]);
+    let s8 = Shape::new(vec![Dim::Variadic("y".to_string())]);
+    assert!(engine.shapes_compatible(&s7, &s8));
+}
+
+// ========================================
+// Exhaustive Unify Arm Regression Tests
+// ========================================
+
+#[test]
+fn test_unify_variadic_vs_non_variadic_errors() {
+    let mut ctx = InferenceContext::new();
+    // Variadic vs Literal should error
+    assert!(ctx
+        .unify(&Dim::Variadic("x".into()), &Dim::Literal(42))
+        .is_err());
+    // Variadic vs Named should error
+    assert!(ctx
+        .unify(&Dim::Variadic("x".into()), &Dim::Named("n".into()))
+        .is_err());
+    // Named vs Variadic (reversed) should also error
+    assert!(ctx
+        .unify(&Dim::Named("n".into()), &Dim::Variadic("x".into()))
+        .is_err());
+}
+
+#[test]
+fn test_unify_variadic_variadic_equivalence() {
+    let mut ctx = InferenceContext::new();
+    assert!(ctx
+        .unify(&Dim::Variadic("a".into()), &Dim::Variadic("b".into()))
+        .is_ok());
+    assert_eq!(ctx.equivalences.get("a"), Some(&"b".to_string()));
+}
+
+#[test]
+fn test_unify_named_expr_resolved() {
+    let mut ctx = InferenceContext::new();
+    // Resolve "dim" = 2048, then unify Named("dim") with Expr(x * 4)
+    ctx.resolved_dims.insert("dim".into(), 2048);
+    let expr = Dim::Expr(Box::new(DimExpr {
+        left: Dim::Named("x".into()),
+        op: BinOp::Mul,
+        right: Dim::Literal(4),
+    }));
+    assert!(ctx.unify(&Dim::Named("dim".into()), &expr).is_ok());
+    assert_eq!(ctx.resolved_dims.get("x"), Some(&512));
+}
+
+#[test]
+fn test_unify_named_expr_unresolved_records_pending() {
+    let mut ctx = InferenceContext::new();
+    let expr = Dim::Expr(Box::new(DimExpr {
+        left: Dim::Named("x".into()),
+        op: BinOp::Add,
+        right: Dim::Literal(1),
+    }));
+    // "dim" not resolved — should record pending constraint, not error
+    assert!(ctx.unify(&Dim::Named("dim".into()), &expr).is_ok());
+    assert_eq!(ctx.pending_constraints.len(), 1);
+}
+
+#[test]
+fn test_unify_global_named_resolution() {
+    let mut ctx = InferenceContext::new();
+    // Global resolved, named not — should propagate
+    ctx.resolved_dims.insert("g".into(), 128);
+    assert!(ctx
+        .unify(&Dim::Global("g".into()), &Dim::Named("n".into()))
+        .is_ok());
+    assert_eq!(ctx.resolved_dims.get("n"), Some(&128));
+}
+
+#[test]
+fn test_unify_global_literal_resolution() {
+    let mut ctx = InferenceContext::new();
+    assert!(ctx
+        .unify(&Dim::Global("g".into()), &Dim::Literal(256))
+        .is_ok());
+    assert_eq!(ctx.resolved_dims.get("g"), Some(&256));
+}
+
+#[test]
+fn test_unify_global_expr_resolved() {
+    let mut ctx = InferenceContext::new();
+    ctx.resolved_dims.insert("g".into(), 1024);
+    let expr = Dim::Expr(Box::new(DimExpr {
+        left: Dim::Named("y".into()),
+        op: BinOp::Mul,
+        right: Dim::Literal(2),
+    }));
+    assert!(ctx.unify(&Dim::Global("g".into()), &expr).is_ok());
+    assert_eq!(ctx.resolved_dims.get("y"), Some(&512));
+}
+
+#[test]
+fn test_unify_global_expr_unresolved_records_pending() {
+    let mut ctx = InferenceContext::new();
+    let expr = Dim::Expr(Box::new(DimExpr {
+        left: Dim::Named("y".into()),
+        op: BinOp::Add,
+        right: Dim::Literal(1),
+    }));
+    assert!(ctx.unify(&Dim::Global("g".into()), &expr).is_ok());
+    assert_eq!(ctx.pending_constraints.len(), 1);
 }

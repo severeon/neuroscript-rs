@@ -4,37 +4,35 @@ sidebar_label: ConstScale
 
 # ConstScale
 
-ConstScale
-
-Multiplies input by a **non-learnable** scale vector. Element-wise multiplicative
-scaling applied along the last dimension.
+Multiplies input by a fixed **non-learnable** scalar factor. A pure constant
+scaling operation with no trainable parameters.
 
 Parameters:
-- dim: Size of the scale vector (must match last dimension of input)
+- factor: The constant scalar multiplier
 
 Shape Contract:
-- Input: [*, dim] tensor with last dimension matching scale size
-- Output: [*, dim] same shape as input
+- Input: [*shape] any tensor
+- Output: [*shape] same shape, scaled by factor
 
 Notes:
-- **Non-Learnable** parameter: scale vector of shape [dim], initialized to 1
-- Applied element-wise: out = input * scale
-- Used in normalization layers (gamma parameter)
-- Can be used for learned feature weighting
+- **No learnable parameters** — purely multiplies by a constant scalar
+- Applied element-wise: out = input * factor
+- Common use: half-step FFN in Conformer (factor=0.5)
+- Useful for constant scaling in residual connections
 
 ## Signature
 
 ```neuroscript
-neuron ConstScale(dim)
+neuron ConstScale(factor)
 ```
 
 ## Ports
 
 **Inputs:**
-- `default`: `[*, dim]`
+- `default`: `[*shape]`
 
 **Outputs:**
-- `default`: `[*, dim]`
+- `default`: `[*shape]`
 
 ## Implementation
 
