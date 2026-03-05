@@ -61,12 +61,13 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 /// 5. Resolve neuron contract match expressions (`match(param): ...`)
 ///    for higher-order neurons with `: Neuron` typed parameters
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
-    // Desugar @wrap annotations into standard Call endpoints
-    // Must run before validation so validator only sees standard IR
-    desugar::desugar_wraps(program)?;
-
-    // Expand unroll constructs before any validation
+    // Expand unroll constructs first so any @wrap nodes inside
+    // unroll templates are flattened into connections
     unroll::expand_unrolls(program)?;
+
+    // Desugar @wrap annotations into standard Call endpoints
+    // Must run after unroll expansion and before validation
+    desugar::desugar_wraps(program)?;
 
     // First run basic validation
     validator::Validator::validate(program)?;

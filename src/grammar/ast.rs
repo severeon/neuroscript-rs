@@ -1170,15 +1170,18 @@ impl AstBuilder {
         let (all_args, kwargs) = self.build_call_args(call_args_pair)?;
 
         // First arg must be the wrapper neuron name (a bare identifier).
-        // The grammar's call_args rule parses `Name(args)` as Value::Call,
-        // so if the user writes `@wrap(Name(...), ...)` we'd hit the Call
-        // branch below. This is not a valid @wrap invocation (the first arg
-        // should be a plain name, not a call), but we extract the name
-        // defensively rather than crashing. The call's own args are
-        // intentionally discarded — they are not meaningful here.
         let wrapper_name = match all_args.first() {
             Some(Value::Name(n)) => n.clone(),
-            Some(Value::Call { name, .. }) => name.clone(),
+            Some(Value::Call { name, .. }) => {
+                // The grammar's call_args rule parses `Name(args)` as
+                // Value::Call. Reject this form explicitly — @wrap expects
+                // a bare name, not a call expression.
+                return Err(crate::grammar::error::expected(
+                    "bare neuron name as first @wrap argument (not a call)",
+                    &format!("{}(...)", name),
+                    span_start,
+                ));
+            }
             _ => {
                 return Err(crate::grammar::error::expected(
                     "neuron name as first @wrap argument",
