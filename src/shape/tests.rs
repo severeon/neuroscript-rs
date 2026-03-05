@@ -92,21 +92,33 @@ fn test_shape_size_very_large() {
 fn test_flatten_multidim() {
     let s = Shape::new(vec![Dim::Literal(2), Dim::Literal(3), Dim::Literal(4)]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(24)])));
 }
 
 #[test]
 fn test_flatten_already_flat() {
     let s = Shape::new(vec![Dim::Literal(24)]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(24)]));
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(24)])));
 }
 
 #[test]
 fn test_flatten_empty() {
     let s = Shape::new(vec![]);
     let flat = s.flatten();
-    assert_eq!(flat, Shape::new(vec![Dim::Literal(1)])); // Empty shape has size 1
+    assert_eq!(flat, Some(Shape::new(vec![Dim::Literal(1)]))); // Empty shape has size 1 (product of no dims)
+}
+
+#[test]
+fn test_flatten_named_dims_returns_none() {
+    let s = Shape::new(vec![Dim::Named("batch".to_string()), Dim::Literal(256)]);
+    assert_eq!(s.flatten(), None); // Cannot flatten when dimensions are unknown
+}
+
+#[test]
+fn test_flatten_wildcard_returns_none() {
+    let s = Shape::new(vec![Dim::Wildcard, Dim::Literal(64)]);
+    assert_eq!(s.flatten(), None); // Cannot flatten when dimensions are unknown
 }
 
 // ========================================
