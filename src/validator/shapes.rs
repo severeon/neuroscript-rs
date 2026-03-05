@@ -2,7 +2,26 @@ use crate::interfaces::*;
 use std::collections::HashMap;
 
 /// Check if two shapes are compatible
+///
+/// Tracks named dimension bindings within the scope of a single compatibility check.
+/// If a named dimension (e.g., `dim`) is first matched against a concrete literal (e.g., 512),
+/// subsequent occurrences of that same named dimension must match the same literal value.
+/// This catches contradictions like `[dim, dim]` vs `[512, 256]` within a single shape pair.
+///
+/// Note: This tracking is local to each `shapes_compatible` call. Cross-connection dimension
+/// tracking (e.g., ensuring `dim` means the same thing across multiple connections in a graph)
+/// is handled by the more sophisticated `InferenceContext::unify` in `shape/inference.rs`.
 pub(crate) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
+    let mut dim_bindings: HashMap<String, i64> = HashMap::new();
+    shapes_compatible_with_bindings(source, dest, &mut dim_bindings)
+}
+
+/// Inner implementation of shapes_compatible that threads dimension bindings through all checks.
+fn shapes_compatible_with_bindings(
+    source: &Shape,
+    dest: &Shape,
+    dim_bindings: &mut HashMap<String, i64>,
+) -> bool {
     // Find variadic dimensions in both shapes
     let source_variadic_pos = source
         .dims
@@ -17,9 +36,13 @@ pub(crate) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
             true
         }
         // Source has variadic, dest does not
-        (Some(var_pos), None) => match_variadic_shape(&source.dims, var_pos, &dest.dims),
+        (Some(var_pos), None) => {
+            match_variadic_shape_with_bindings(&source.dims, var_pos, &dest.dims, dim_bindings)
+        }
         // Dest has variadic, source does not
-        (None, Some(var_pos)) => match_variadic_shape(&dest.dims, var_pos, &source.dims),
+        (None, Some(var_pos)) => {
+            match_variadic_shape_with_bindings(&dest.dims, var_pos, &source.dims, dim_bindings)
+        }
         // Neither has variadic - must match exactly
         (None, None) => {
             if source.dims.len() != dest.dims.len() {
@@ -27,7 +50,7 @@ pub(crate) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
             }
             // Check each dimension pair
             for (src_dim, dst_dim) in source.dims.iter().zip(dest.dims.iter()) {
-                if !dims_compatible(src_dim, dst_dim) {
+                if !dims_compatible_with_bindings(src_dim, dst_dim, dim_bindings) {
                     return false;
                 }
             }
@@ -36,8 +59,17 @@ pub(crate) fn shapes_compatible(source: &Shape, dest: &Shape) -> bool {
     }
 }
 
-/// Check if two dimensions are compatible
-pub(super) fn dims_compatible(source: &Dim, dest: &Dim) -> bool {
+/// Check if two dimensions are compatible, tracking named dimension bindings.
+///
+/// When a named dimension is matched against a literal, the binding is recorded
+/// in `dim_bindings`. If the same named dimension later appears matched against
+/// a different literal, the check fails. This catches contradictions like
+/// `dim=512` in one position but `dim=256` in another within the same shape pair.
+fn dims_compatible_with_bindings(
+    source: &Dim,
+    dest: &Dim,
+    dim_bindings: &mut HashMap<String, i64>,
+) -> bool {
     match (source, dest) {
         // Wildcards match anything
         (Dim::Wildcard, _) | (_, Dim::Wildcard) => true,
@@ -47,28 +79,47 @@ pub(super) fn dims_compatible(source: &Dim, dest: &Dim) -> bool {
         (Dim::Variadic(_), _) | (_, Dim::Variadic(_)) => true,
         // Exact matches
         (Dim::Literal(a), Dim::Literal(b)) => a == b,
-        // Named dimensions: assume compatible (parameter binding handles unification)
-        // Full shape inference would need parameter context
-        (Dim::Named(_), Dim::Named(_)) => true,
+        // Named vs Named: if both have known bindings, they must agree
+        (Dim::Named(n1), Dim::Named(n2)) => {
+            let v1 = dim_bindings.get(n1).copied();
+            let v2 = dim_bindings.get(n2).copied();
+            match (v1, v2) {
+                (Some(val1), Some(val2)) => val1 == val2,
+                (Some(val), None) => {
+                    dim_bindings.insert(n2.clone(), val);
+                    true
+                }
+                (None, Some(val)) => {
+                    dim_bindings.insert(n1.clone(), val);
+                    true
+                }
+                // Both unknown - compatible (they could be equal)
+                (None, None) => true,
+            }
+        }
         // Expressions: would need evaluation context, for now assume compatible
         (Dim::Expr(_), _) | (_, Dim::Expr(_)) => true,
-        // Mixed named/literal: incompatible (can't unify 512 with a variable)
-        // UPDATE: For validator without full inference, we must be optimistic
-        // A Named dimension *could* bind to this Literal at runtime/inference time.
-        (Dim::Named(_), Dim::Literal(_)) | (Dim::Literal(_), Dim::Named(_)) => true,
+        // Named vs Literal: record the binding, or check consistency if already bound
+        (Dim::Named(name), Dim::Literal(val)) | (Dim::Literal(val), Dim::Named(name)) => {
+            if let Some(existing) = dim_bindings.get(name) {
+                *existing == *val
+            } else {
+                dim_bindings.insert(name.clone(), *val);
+                true
+            }
+        }
         // Global dimensions: compatible if same name (conservative)
         (Dim::Global(n1), Dim::Global(n2)) => n1 == n2,
         (Dim::Global(_), _) | (_, Dim::Global(_)) => true,
     }
 }
 
-/// Match a shape with a variadic against a concrete shape
-/// pattern_dims: the dims with a variadic at var_pos
-/// concrete_dims: the dims without variadic
-pub(super) fn match_variadic_shape(
+/// Match a shape with a variadic against a concrete shape, tracking dimension bindings.
+fn match_variadic_shape_with_bindings(
     pattern_dims: &[Dim],
     var_pos: usize,
     concrete_dims: &[Dim],
+    dim_bindings: &mut HashMap<String, i64>,
 ) -> bool {
     // Pattern: [prefix..., *variadic, suffix...]
     // Concrete: [concrete_dims...]
@@ -84,7 +135,7 @@ pub(super) fn match_variadic_shape(
 
     // Match prefix (before variadic)
     for i in 0..var_pos {
-        if !dims_compatible(&pattern_dims[i], &concrete_dims[i]) {
+        if !dims_compatible_with_bindings(&pattern_dims[i], &concrete_dims[i], dim_bindings) {
             return false;
         }
     }
@@ -96,7 +147,11 @@ pub(super) fn match_variadic_shape(
     for i in 0..suffix_count {
         let pattern_idx = var_pos + 1 + i;
         let concrete_idx = concrete_suffix_start + i;
-        if !dims_compatible(&pattern_dims[pattern_idx], &concrete_dims[concrete_idx]) {
+        if !dims_compatible_with_bindings(
+            &pattern_dims[pattern_idx],
+            &concrete_dims[concrete_idx],
+            dim_bindings,
+        ) {
             return false;
         }
     }
