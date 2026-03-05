@@ -315,8 +315,7 @@ fn cmd_init(
             Ok(())
         }
         Err(e) => {
-            eprintln!("✗ Failed to initialize package: {}", e);
-            std::process::exit(1);
+            return Err(miette::miette!("Failed to initialize package: {}", e));
         }
     }
 }
@@ -612,11 +611,16 @@ fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) ->
             Ok(())
         }
         Err(errors) => {
-            println!("✗ Validation failed with {} error(s):", errors.len());
-            for error in errors {
-                println!("  {}", error);
-            }
-            std::process::exit(1);
+            let detail = errors
+                .iter()
+                .map(|e| format!("  {}", e))
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Err(miette::miette!(
+                "Validation failed with {} error(s):\n{}",
+                errors.len(),
+                detail
+            ));
         }
     }
 }
@@ -698,11 +702,16 @@ fn cmd_compile(
 
     // Validate
     if let Err(errors) = validate(&mut program) {
-        println!("✗ Validation failed with {} error(s):", errors.len());
-        for error in errors {
-            println!("  {}", error);
-        }
-        std::process::exit(1);
+        let detail = errors
+            .iter()
+            .map(|e| format!("  {}", e))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(miette::miette!(
+            "Validation failed with {} error(s):\n{}",
+            errors.len(),
+            detail
+        ));
     }
     if verbose {
         println!("✓ Validation passed");
@@ -718,9 +727,11 @@ fn cmd_compile(
     // Check neuron exists
     if !program.neurons.contains_key(&neuron_name) {
         let available: Vec<&str> = program.neurons.keys().map(|s| s.as_str()).collect();
-        eprintln!("✗ Neuron '{}' not found", neuron_name);
-        eprintln!("  Available neurons: {}", available.join(", "));
-        std::process::exit(1);
+        return Err(miette::miette!(
+            "Neuron '{}' not found\n  Available neurons: {}",
+            neuron_name,
+            available.join(", ")
+        ));
     }
 
     // Optimize
@@ -766,8 +777,7 @@ fn cmd_compile(
             Ok(())
         }
         Err(e) => {
-            eprintln!("✗ Codegen failed: {}", e);
-            std::process::exit(1);
+            return Err(miette::miette!("Codegen failed: {}", e));
         }
     }
 }
@@ -817,8 +827,7 @@ fn cmd_list(
         Some(f) => f,
         None => {
             if !list_stdlib && list_package.is_none() && !available {
-                eprintln!("Error: a file argument is required unless --stdlib, --package, or --available is used");
-                std::process::exit(1);
+                return Err(miette::miette!("a file argument is required unless --stdlib, --package, or --available is used"));
             }
             return Ok(());
         }
@@ -1218,8 +1227,7 @@ fn cmd_verify(path: Option<PathBuf>, verbose: bool) -> miette::Result<()> {
         println!("\n✓ Package verification passed");
         Ok(())
     } else {
-        eprintln!("\n✗ Package verification FAILED");
-        std::process::exit(1);
+        return Err(miette::miette!("Package verification FAILED"));
     }
 }
 
@@ -1357,15 +1365,15 @@ fn infer_neuron_name(file: &Path, program: &neuroscript::Program) -> miette::Res
     } else {
         // Provide helpful message with available neurons
         let available: Vec<&str> = program.neurons.keys().map(|s| s.as_str()).collect();
-        eprintln!(
-            "✗ No neuron matching filename '{}' found (tried: '{}')",
+        let mut msg = format!(
+            "No neuron matching filename '{}' found (tried: '{}')",
             file.display(),
             neuron_name
         );
         if !available.is_empty() {
-            eprintln!("  Available neurons: {}", available.join(", "));
+            msg.push_str(&format!("\n  Available neurons: {}", available.join(", ")));
         }
-        eprintln!("  Use --neuron <NAME> to specify explicitly");
-        std::process::exit(1);
+        msg.push_str("\n  Use --neuron <NAME> to specify explicitly");
+        return Err(miette::miette!("{}", msg));
     }
 }
