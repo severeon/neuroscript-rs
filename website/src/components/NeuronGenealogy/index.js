@@ -97,6 +97,7 @@ function NeuronGenealogyInner() {
       const decoded = decodeURIComponent(hash);
       if (neuronMap.has(decoded)) {
         setSelectedNeuron(decoded);
+        setMobileShowDetail(true);
       }
     }
 
@@ -106,6 +107,7 @@ function NeuronGenealogyInner() {
         const d = decodeURIComponent(h);
         if (neuronMap.has(d)) {
           setSelectedNeuron(d);
+          setMobileShowDetail(true);
         }
       }
     };
