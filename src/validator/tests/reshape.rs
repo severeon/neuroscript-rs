@@ -541,16 +541,97 @@ fn test_validate_reduce_dim_from_param_is_ok() {
     let source = r#"
 neuron ParamPool(x):
   in: [b, c, h, w]
-  out: [b, c]
+  out: [b, x]
   graph:
-    in => @reduce(mean) [b, c] -> out
+    in => @reduce(mean) [b, x] -> out
 "#;
     let mut program = crate::parse(source).unwrap();
     let result = crate::validate(&mut program);
     assert!(
         result.is_ok(),
-        "@reduce with dims from input shape should pass: {:?}",
+        "@reduce with dim from param should pass: {:?}",
         result
+    );
+}
+
+#[test]
+fn test_validate_reduce_binding_checks_rhs_not_lhs() {
+    // Binding h=dim/heads: h is new, dim and heads must be known.
+    // Using unknown dim "zz" in the RHS should fail.
+    let source = r#"
+neuron BadBinding:
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, h=zz/c] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_err(),
+        "@reduce binding with unknown RHS dim 'zz' should fail"
+    );
+    let errors = result.unwrap_err();
+    assert!(
+        errors.iter().any(|e| {
+            matches!(
+                e,
+                ValidationError::InvalidAnnotation { reason, .. }
+                    if reason.contains("zz") && reason.contains("not defined")
+            )
+        }),
+        "expected error about unreachable dim 'zz', got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_validate_reduce_binding_with_known_rhs_is_ok() {
+    // Binding h=dim/heads where dim and heads are known should pass.
+    // h is a new name introduced by the binding — not checked against known_dims.
+    let source = r#"
+neuron GoodBinding(heads):
+  in: [b, c, dim]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, h=dim/heads] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_ok(),
+        "@reduce binding with known RHS dims should pass: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_validate_reduce_expr_unknown_dim() {
+    // Expression dim h*w where h is unknown should fail.
+    let source = r#"
+neuron BadExpr:
+  in: [b, c, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, unknown_dim*w] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_err(),
+        "@reduce expr with unknown dim should fail"
+    );
+    let errors = result.unwrap_err();
+    assert!(
+        errors.iter().any(|e| {
+            matches!(
+                e,
+                ValidationError::InvalidAnnotation { reason, .. }
+                    if reason.contains("unknown_dim") && reason.contains("not defined")
+            )
+        }),
+        "expected error about unreachable dim 'unknown_dim', got: {:?}",
+        errors
     );
 }
 

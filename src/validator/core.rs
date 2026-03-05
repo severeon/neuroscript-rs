@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::bindings;
 use super::cycles;
 use super::shapes;
@@ -126,7 +128,7 @@ impl Validator {
         let mut errors = Vec::new();
 
         // Collect neuron-typed parameter names for higher-order neuron support
-        let neuron_param_names: std::collections::HashSet<&str> = neuron
+        let neuron_param_names: HashSet<&str> = neuron
             .params
             .iter()
             .filter(|p| p.type_annotation.as_ref() == Some(&ParamType::Neuron))
@@ -216,8 +218,8 @@ impl Validator {
 
     /// Collect all named dimension identifiers that are "known" within a neuron definition.
     /// This includes dim names from input/output port shapes and neuron parameter names.
-    fn collect_known_dims(neuron: &NeuronDef) -> std::collections::HashSet<String> {
-        let mut known = std::collections::HashSet::new();
+    fn collect_known_dims(neuron: &NeuronDef) -> HashSet<String> {
+        let mut known = HashSet::new();
 
         // Add all param names (params can be used as dimension values)
         for param in &neuron.params {
@@ -238,7 +240,7 @@ impl Validator {
     }
 
     /// Extract named dimension identifiers from a Shape into the given set.
-    fn collect_dims_from_shape(shape: &Shape, known: &mut std::collections::HashSet<String>) {
+    fn collect_dims_from_shape(shape: &Shape, known: &mut HashSet<String>) {
         for dim in &shape.dims {
             match dim {
                 Dim::Named(name) => {
@@ -260,7 +262,7 @@ impl Validator {
     }
 
     /// Extract named dimension identifiers from a single Dim.
-    fn collect_dims_from_dim(dim: &Dim, known: &mut std::collections::HashSet<String>) {
+    fn collect_dims_from_dim(dim: &Dim, known: &mut HashSet<String>) {
         match dim {
             Dim::Named(name) => {
                 known.insert(name.clone());
@@ -310,7 +312,7 @@ impl Validator {
     fn check_reduce_dims_in_endpoint(
         endpoint: &Endpoint,
         context_neuron: &str,
-        known_dims: &std::collections::HashSet<String>,
+        known_dims: &HashSet<String>,
         errors: &mut Vec<ValidationError>,
     ) {
         match endpoint {
@@ -320,29 +322,31 @@ impl Validator {
                     // reachable from the source (i.e., present in the neuron's
                     // known dims from input/output shapes and params).
                     for dim in &reshape.dims {
-                        let unreachable_name = match dim {
+                        let unreachable_names = match dim {
                             ReshapeDim::Named(name) => {
-                                if !known_dims.contains(name) {
-                                    Some(name.clone())
+                                if known_dims.contains(name) {
+                                    vec![]
                                 } else {
-                                    None
+                                    vec![name.clone()]
                                 }
                             }
-                            ReshapeDim::Binding { name, .. } => {
-                                if !known_dims.contains(name) {
-                                    Some(name.clone())
-                                } else {
-                                    None
-                                }
+                            ReshapeDim::Binding { expr, .. } => {
+                                // The binding name (LHS) introduces a new variable;
+                                // validate the RHS expression dims instead.
+                                let mut names = Vec::new();
+                                Self::collect_unreachable_from_value(expr, known_dims, &mut names);
+                                names
                             }
-                            _ => None,
+                            ReshapeDim::Expr(expr) => {
+                                let mut names = Vec::new();
+                                Self::collect_unreachable_from_dim_expr(expr, known_dims, &mut names);
+                                names
+                            }
+                            _ => vec![],
                         };
-                        if let Some(name) = unreachable_name {
+                        for name in unreachable_names {
                             errors.push(ValidationError::InvalidAnnotation {
-                                annotation: format!(
-                                    "{}",
-                                    reshape.annotation.as_ref().unwrap()
-                                ),
+                                annotation: reshape.annotation.as_ref().unwrap().to_string(),
                                 reason: format!(
                                     "dimension '{}' in @reduce target shape is not defined in any input/output port shape or parameter of neuron '{}'",
                                     name, context_neuron
@@ -372,6 +376,60 @@ impl Validator {
                     }
                 }
             }
+            Endpoint::Wrap(wrap_expr) => {
+                if let WrapContent::Pipeline(pipeline) = &wrap_expr.content {
+                    for ep in pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect unreachable dim names from a Value expression (used by Binding RHS).
+    fn collect_unreachable_from_value(
+        value: &Value,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        match value {
+            Value::Name(name) => {
+                if !known_dims.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+            Value::BinOp { left, right, .. } => {
+                Self::collect_unreachable_from_value(left, known_dims, out);
+                Self::collect_unreachable_from_value(right, known_dims, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect unreachable dim names from a DimExpr.
+    fn collect_unreachable_from_dim_expr(
+        expr: &DimExpr,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        Self::collect_unreachable_from_dim(&expr.left, known_dims, out);
+        Self::collect_unreachable_from_dim(&expr.right, known_dims, out);
+    }
+
+    /// Collect unreachable dim names from a single Dim.
+    fn collect_unreachable_from_dim(
+        dim: &Dim,
+        known_dims: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        match dim {
+            Dim::Named(name) => {
+                if !known_dims.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+            Dim::Expr(expr) => Self::collect_unreachable_from_dim_expr(expr, known_dims, out),
             _ => {}
         }
     }
@@ -382,7 +440,7 @@ impl Validator {
         context_neuron: &str,
         program: &Program,
         registry: &StdlibRegistry,
-        neuron_param_names: &std::collections::HashSet<&str>,
+        neuron_param_names: &HashSet<&str>,
     ) -> Vec<ValidationError> {
         match endpoint {
             Endpoint::Call { name, .. } => {
