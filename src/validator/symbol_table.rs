@@ -386,7 +386,9 @@ where
                 }
             }
 
-            // Return ports from first arm (they should be consistent in number)
+            // Validate that all arms produce the same port signature
+            check_arm_port_consistency(&all_arm_ports, "match")?;
+
             Ok(all_arm_ports[0].clone())
         }
         Endpoint::If(if_expr) => {
@@ -421,6 +423,9 @@ where
                 }
             }
 
+            // Validate that all branches produce the same port signature
+            check_arm_port_consistency(&all_branch_ports, "if")?;
+
             Ok(all_branch_ports[0].clone())
         }
         Endpoint::Reshape(reshape) => {
@@ -439,6 +444,39 @@ where
             Ok(vec![])
         }
     }
+}
+
+/// Check that all arms/branches of a match or if expression produce the same port signature.
+/// Compares port count and port names across all arms against the first arm.
+fn check_arm_port_consistency(
+    all_arm_ports: &[Vec<Port>],
+    expr_kind: &str,
+) -> Result<(), Box<ValidationError>> {
+    if all_arm_ports.len() <= 1 {
+        return Ok(());
+    }
+
+    let first = &all_arm_ports[0];
+    let first_names: Vec<&str> = first.iter().map(|p| p.name.as_str()).collect();
+
+    for (i, arm_ports) in all_arm_ports.iter().enumerate().skip(1) {
+        if arm_ports.len() != first.len() {
+            return Err(Box::new(ValidationError::Custom(format!(
+                "Inconsistent port signature in {} expression: arm 0 produces {} port(s) but arm {} produces {} port(s)",
+                expr_kind, first.len(), i, arm_ports.len()
+            ))));
+        }
+
+        let arm_names: Vec<&str> = arm_ports.iter().map(|p| p.name.as_str()).collect();
+        if arm_names != first_names {
+            return Err(Box::new(ValidationError::Custom(format!(
+                "Inconsistent port names in {} expression: arm 0 has ports {:?} but arm {} has ports {:?}",
+                expr_kind, first_names, i, arm_names
+            ))));
+        }
+    }
+
+    Ok(())
 }
 
 /// Check if two port lists are compatible
