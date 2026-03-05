@@ -8,4 +8,5 @@ mod match_expressions;
 mod missing_neuron;
 mod reshape;
 mod shape_mismatch;
+mod reserved_names;
 mod valid_cases;

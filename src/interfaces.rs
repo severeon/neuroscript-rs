@@ -689,6 +689,13 @@ pub enum ValidationError {
         reason: String,
         context: String,
     },
+    ReservedName {
+        name: String,
+    },
+    InvalidWrapTarget {
+        wrapper: String,
+        reason: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -799,6 +806,16 @@ impl std::fmt::Display for ValidationError {
                     "Invalid annotation {}: {} ({})",
                     annotation, reason, context
                 )
+            }
+            ValidationError::ReservedName { name } => {
+                write!(
+                    f,
+                    "Neuron name '{}' is reserved: names starting and ending with double underscores are reserved for internal use",
+                    name
+                )
+            }
+            ValidationError::InvalidWrapTarget { wrapper, reason } => {
+                write!(f, "@wrap target '{}': {}", wrapper, reason)
             }
             ValidationError::Custom(msg) => {
                 write!(f, "{}", msg)

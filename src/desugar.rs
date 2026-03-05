@@ -126,11 +126,13 @@ fn desugar_endpoint_wraps(
                                 }
                             }
                             other => {
-                                return Err(ValidationError::Custom(format!(
-                                    "@wrap pipeline form only supports Call and Ref endpoints, \
-                                     got: {:?}",
-                                    other
-                                )));
+                                return Err(ValidationError::InvalidWrapTarget {
+                                    wrapper: wrap_expr.wrapper_name.clone(),
+                                    reason: format!(
+                                        "pipeline form only supports Call and Ref endpoints, got: {:?}",
+                                        other
+                                    ),
+                                });
                             }
                         }
                     }

@@ -67,6 +67,16 @@ impl Validator {
             }
         }
 
+        // 2b. Check for reserved (dunder) neuron names
+        for neuron in program.neurons.values() {
+            let name = &neuron.name;
+            if name.len() > 4 && name.starts_with("__") && name.ends_with("__") {
+                errors.push(ValidationError::ReservedName {
+                    name: name.clone(),
+                });
+            }
+        }
+
         // 3. Check each neuron (read-only pass for structure)
         // We use a scope to limit the borrow of program
         {
