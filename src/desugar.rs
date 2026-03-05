@@ -96,7 +96,7 @@ fn desugar_endpoint_wraps(
                     // Desugars to:
                     //   context: _wrap_N = __sequential__(X, Y)
                     //   Wrapper(_wrap_N, a, b)
-                    let anon_name = format!("_wrap_{}", wrap_id);
+                    let anon_name = format!("__wrap_{}__", wrap_id);
 
                     // Create synthetic binding for the sequential pipeline.
                     // Each endpoint in the pipeline becomes a Value::Call or Value::Name arg
@@ -178,6 +178,8 @@ fn desugar_endpoint_wraps(
                 }
             }
         }
+        // Tuple holds Vec<PortRef>, not Vec<Endpoint>, so it cannot
+        // contain Wrap nodes — no recursion needed.
         _ => {}
     }
     Ok(())
@@ -337,8 +339,8 @@ mod tests {
             assert!(
                 context_bindings
                     .iter()
-                    .any(|b| b.call_name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON && b.name == "_wrap_0"),
-                "Should have __sequential__ binding named _wrap_0"
+                    .any(|b| b.call_name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON && b.name == "__wrap_0__"),
+                "Should have __sequential__ binding named __wrap_0__"
             );
 
             let seq_binding = context_bindings
@@ -352,7 +354,7 @@ mod tests {
                 Endpoint::Call { name, args, .. } => {
                     assert_eq!(name, "HyperConnect");
                     // First arg is the synthesized binding name
-                    assert_eq!(args[0], Value::Name("_wrap_0".to_string()));
+                    assert_eq!(args[0], Value::Name("__wrap_0__".to_string()));
                     assert_eq!(args[1], Value::Int(4));
                 }
                 other => panic!("Expected Call endpoint, got {:?}", other),

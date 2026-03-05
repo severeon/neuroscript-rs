@@ -36,6 +36,9 @@ class HyperCollapse(nn.Module):
     Output: [*batch, dim]
     """
 
+    def __init__(self):
+        super().__init__()
+
     def forward(self, x):
         # x: [*batch, n, dim] -> [*batch, dim]
         return x.sum(dim=-2)
