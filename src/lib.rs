@@ -45,13 +45,37 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
     grammar::NeuroScriptParser::parse_program(source)
 }
 
+/// Prepare a parsed program for validation by applying IR transformations.
+///
+/// This function mutates the program in place:
+/// - Expands `unroll` constructs into repeated bindings
+/// - Desugars `@wrap` annotations into standard `Call` endpoints
+///
+/// After calling this, `Endpoint::Wrap` nodes will no longer appear in the IR
+/// and all `unroll` blocks will be fully expanded.
+///
+/// This is automatically called by [`validate`], but is exposed as a separate
+/// step for callers who need explicit control over the pipeline (e.g., for
+/// inspection or custom tooling between preparation and validation).
+pub fn prepare(program: &mut Program) -> Result<(), Vec<ValidationError>> {
+    // Expand unroll constructs first so any @wrap nodes inside
+    // unroll templates are flattened into connections
+    unroll::expand_unrolls(program)?;
+
+    // Desugar @wrap annotations into standard Call endpoints
+    // Must run after unroll expansion and before validation
+    desugar::desugar_wraps(program)?;
+
+    Ok(())
+}
+
 /// Validate a NeuroScript program for correctness.
 ///
-/// **Note:** This function mutates the program as a side effect:
-/// - Desugars `@wrap` annotations into standard `Call` endpoints
-/// - Expands `unroll` constructs into repeated bindings
-///
-/// After calling this, `Endpoint::Wrap` nodes will no longer appear in the IR.
+/// This function first calls [`prepare`] to expand unrolls and desugar `@wrap`
+/// annotations, then runs all validation checks. If you need to inspect or
+/// modify the IR between preparation and validation, call [`prepare`] yourself
+/// and then pass the prepared program to this function (it is safe to call
+/// `prepare` multiple times — the transformations are idempotent).
 ///
 /// Validation checks:
 /// 1. All referenced neurons exist
@@ -61,13 +85,8 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 /// 5. Resolve neuron contract match expressions (`match(param): ...`)
 ///    for higher-order neurons with `: Neuron` typed parameters
 pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
-    // Expand unroll constructs first so any @wrap nodes inside
-    // unroll templates are flattened into connections
-    unroll::expand_unrolls(program)?;
-
-    // Desugar @wrap annotations into standard Call endpoints
-    // Must run after unroll expansion and before validation
-    desugar::desugar_wraps(program)?;
+    // Prepare the IR (expand unrolls, desugar @wrap)
+    prepare(program)?;
 
     // First run basic validation
     validator::Validator::validate(program)?;
