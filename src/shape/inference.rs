@@ -356,7 +356,7 @@ impl InferenceContext {
             Dim::Literal(n) => Some(*n as usize),
             Dim::Named(name) => self.resolved_dims.get(name).copied(),
             Dim::Expr(e) => self.evaluate_expr(e),
-            Dim::Global(_name) => None, // TODO
+            Dim::Global(name) => self.resolved_dims.get(name).copied(),
             _ => None,
         }
     }

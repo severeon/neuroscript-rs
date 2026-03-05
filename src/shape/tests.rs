@@ -593,3 +593,27 @@ fn test_unify_global_expr_unresolved_records_pending() {
     assert!(ctx.unify(&Dim::Global("g".into()), &expr).is_ok());
     assert_eq!(ctx.pending_constraints.len(), 1);
 }
+
+#[test]
+fn test_global_dim_evaluates_via_resolved_dims() {
+    let mut ctx = InferenceContext::new();
+    ctx.resolve_dim("batch".to_string(), 32).unwrap();
+    assert_eq!(ctx.evaluate_dim(&Dim::Global("batch".into())), Some(32));
+    assert_eq!(ctx.evaluate_dim(&Dim::Global("unknown".into())), None);
+}
+
+#[test]
+fn test_global_global_same_name_ok() {
+    let mut ctx = InferenceContext::new();
+    assert!(ctx
+        .unify(&Dim::Global("g".into()), &Dim::Global("g".into()))
+        .is_ok());
+}
+
+#[test]
+fn test_global_global_different_names_err() {
+    let mut ctx = InferenceContext::new();
+    assert!(ctx
+        .unify(&Dim::Global("a".into()), &Dim::Global("b".into()))
+        .is_err());
+}
