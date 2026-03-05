@@ -41,16 +41,6 @@ impl Dim {
         }
     }
 
-    /// Check if this dimension is compatible with another for broadcasting
-    #[allow(dead_code)]
-    pub fn broadcastable_with(&self, other: &Dim) -> bool {
-        match (self, other) {
-            (Dim::Literal(a), Dim::Literal(b)) => *a == *b || *a == 1 || *b == 1,
-            (Dim::Wildcard, _) | (_, Dim::Wildcard) => true,
-            (Dim::Inferred, _) | (_, Dim::Inferred) => true,
-            _ => false, // Named, Variadic, Expr can't be broadcast at runtime
-        }
-    }
 }
 
 /// Binary operation on dimensions

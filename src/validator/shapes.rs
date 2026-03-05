@@ -209,11 +209,11 @@ pub fn is_catch_all_pattern(pattern: &Shape) -> bool {
     }
 
     // Non-variadic patterns are catch-all if all dims are wildcards or named (no literals/globals)
-    // Note: Inferred cannot appear in match patterns (only in reshape exprs), included defensively
+    // Inferred is excluded: unreachable!() in ast.rs enforces it never appears in match patterns
     pattern
         .dims
         .iter()
-        .all(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Named(_)))
+        .all(|d| matches!(d, Dim::Wildcard | Dim::Named(_)))
 }
 
 /// Check if pattern `general` subsumes (is more general than) pattern `specific`

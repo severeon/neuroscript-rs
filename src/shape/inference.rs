@@ -1284,6 +1284,7 @@ pub(crate) fn is_dim_resolvable(dim: &Dim, ctx: &InferenceContext) -> bool {
         Dim::Literal(_) => true,
         Dim::Named(name) => ctx.resolved_dims.contains_key(name),
         Dim::Wildcard => true,
+        // Treated as resolvable: PyTorch computes the actual size at runtime from total element count
         Dim::Inferred => true,
         Dim::Variadic(_) => true,
         Dim::Expr(expr) => {
