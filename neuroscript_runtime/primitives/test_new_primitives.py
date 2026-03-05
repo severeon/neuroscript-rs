@@ -21,6 +21,7 @@ from neuroscript_runtime.primitives.convolutions import (
 )
 from neuroscript_runtime.primitives.pooling import AdaptiveMaxPool, GlobalMaxPool
 from neuroscript_runtime.primitives.structural import Split, Slice, Pad
+from neuroscript_runtime.primitives.embeddings import ALiBi
 
 
 class TestCoreOperations:
@@ -172,6 +173,45 @@ class TestStructural:
         x = torch.randn(32, 64, 28, 28)
         out = pad(x)
         assert out.shape == (32, 64, 30, 30)
+
+
+class TestALiBiCausal:
+    def test_causal_upper_triangular_is_neg_inf(self):
+        alibi = ALiBi(num_heads=4, max_seq_len=8, causal=True)
+        scores = torch.zeros(1, 4, 8, 8)
+        biased = alibi(scores)
+        # Upper triangular (j > i) should be -inf
+        for i in range(8):
+            for j in range(i + 1, 8):
+                assert biased[0, 0, i, j] == float("-inf")
+
+    def test_causal_lower_triangular_is_finite(self):
+        alibi = ALiBi(num_heads=4, max_seq_len=8, causal=True)
+        scores = torch.zeros(1, 4, 8, 8)
+        biased = alibi(scores)
+        # Diagonal and lower triangular (j <= i) should be finite
+        for i in range(8):
+            for j in range(i + 1):
+                assert torch.isfinite(biased[0, 0, i, j])
+
+    def test_causal_diagonal_is_zero(self):
+        alibi = ALiBi(num_heads=4, max_seq_len=8, causal=True)
+        scores = torch.zeros(1, 4, 8, 8)
+        biased = alibi(scores)
+        # Diagonal (i == j) means distance=0, so bias=0
+        for i in range(8):
+            for h in range(4):
+                assert biased[0, h, i, i] == 0.0
+
+    def test_extra_repr_includes_causal(self):
+        alibi = ALiBi(num_heads=4, causal=True)
+        assert "causal=True" in alibi.extra_repr()
+
+    def test_causal_output_shape(self):
+        alibi = ALiBi(num_heads=8, causal=True)
+        scores = torch.randn(2, 8, 128, 128)
+        biased = alibi(scores)
+        assert biased.shape == torch.Size([2, 8, 128, 128])
 
 
 if __name__ == "__main__":
