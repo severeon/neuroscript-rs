@@ -453,14 +453,27 @@ class ALiBi(nn.Module):
     Args:
         num_heads: Number of attention heads
         max_seq_len: Maximum sequence length for precomputed bias matrix. Default: 2048
+        causal: If True, use causal (decoder) distances where each position only
+            attends to earlier positions (distance[i,j] = i - j for i >= j, masked
+            to -inf for j > i). If False (default), use absolute distances
+            (distance[i,j] = |i - j|) appropriate for bidirectional (encoder)
+            attention. Default: False
 
     Shape:
         - Input: [batch, num_heads, seq_len, seq_len] (attention scores)
         - Output: [batch, num_heads, seq_len, seq_len] (biased attention scores)
 
     Examples:
+        >>> # Bidirectional (encoder) attention — default
         >>> alibi = ALiBi(num_heads=8)
         >>> scores = torch.randn(2, 8, 128, 128)  # [batch, heads, seq, seq]
+        >>> biased = alibi(scores)
+        >>> biased.shape
+        torch.Size([2, 8, 128, 128])
+
+        >>> # Causal (decoder) attention
+        >>> alibi = ALiBi(num_heads=8, causal=True)
+        >>> scores = torch.randn(2, 8, 128, 128)
         >>> biased = alibi(scores)
         >>> biased.shape
         torch.Size([2, 8, 128, 128])
@@ -477,9 +490,14 @@ class ALiBi(nn.Module):
         - Non-power-of-2 heads use interpolation between two closest powers
         - Bias is registered as a buffer (no gradients, moves with model)
         - Supports sequences up to max_seq_len without recomputation
+        - **Causal vs bidirectional**: The original ALiBi paper targets causal
+          (decoder) models where distances are non-negative (distance[i,j] = i - j
+          for i >= j). Set ``causal=True`` for decoder / autoregressive models.
+          The default ``causal=False`` uses symmetric absolute distances, suitable
+          for bidirectional / encoder models.
     """
 
-    def __init__(self, num_heads: int, max_seq_len: int = 2048) -> None:
+    def __init__(self, num_heads: int, max_seq_len: int = 2048, causal: bool = False) -> None:
         super().__init__()
 
         if num_heads <= 0:
@@ -490,6 +508,7 @@ class ALiBi(nn.Module):
 
         self.num_heads = num_heads
         self.max_seq_len = max_seq_len
+        self.causal = causal  # informational only; behaviour is baked into the precomputed bias buffer
 
         # Compute per-head slopes
         slopes = self._get_slopes(num_heads)
@@ -497,15 +516,29 @@ class ALiBi(nn.Module):
         slopes = torch.tensor(slopes, dtype=torch.float32)
 
         # Precompute distance matrix [max_seq_len, max_seq_len]
-        # distance[i, j] = |i - j|
         positions = torch.arange(max_seq_len, dtype=torch.float32)
-        distance = torch.abs(positions.unsqueeze(1) - positions.unsqueeze(0))
-
-        # Compute bias: [1, num_heads, max_seq_len, max_seq_len]
-        # bias[h, i, j] = -slope_h * |i - j|
-        bias = -slopes.view(1, num_heads, 1, 1) * distance.view(
-            1, 1, max_seq_len, max_seq_len
-        )
+        if causal:
+            # Causal (decoder) distances: distance[i, j] = i - j (non-negative
+            # for i >= j). Future positions (j > i) get -inf so they are masked
+            # out after softmax.
+            distance = positions.unsqueeze(1) - positions.unsqueeze(0)  # i - j
+            # distance[i, j] = i - j  (positive when i > j, i.e. query after key)
+            # ALiBi bias = -slope * distance, so attending to earlier keys gives
+            # a negative (penalising) bias that grows with distance — matching
+            # the original paper's formulation for causal models.
+            bias = -slopes.view(1, num_heads, 1, 1) * distance.view(
+                1, 1, max_seq_len, max_seq_len
+            )
+            # Mask future positions with -inf
+            causal_mask = (distance < 0).view(1, 1, max_seq_len, max_seq_len)
+            bias = bias.masked_fill(causal_mask, float("-inf"))
+        else:
+            # Bidirectional (encoder) distances: distance[i, j] = |i - j|
+            distance = torch.abs(positions.unsqueeze(1) - positions.unsqueeze(0))
+            # bias[h, i, j] = -slope_h * |i - j|
+            bias = -slopes.view(1, num_heads, 1, 1) * distance.view(
+                1, 1, max_seq_len, max_seq_len
+            )
 
         self.register_buffer("bias", bias)
 
@@ -587,4 +620,4 @@ class ALiBi(nn.Module):
 
     def extra_repr(self) -> str:
         """String representation for debugging."""
-        return f"num_heads={self.num_heads}, max_seq_len={self.max_seq_len}"
+        return f"num_heads={self.num_heads}, max_seq_len={self.max_seq_len}, causal={self.causal}"
