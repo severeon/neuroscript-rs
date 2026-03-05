@@ -170,7 +170,10 @@ impl InferenceContext {
                     BinOp::Div => {
                         self.resolve_dim(left_name.clone(), target * (*right_val as usize))
                     }
-                    _ => Ok(()), // TODO
+                    _ => Err(format!(
+                        "Unsupported operator '{}' in dimension constraint solving: {} {} {} = {}",
+                        expr.op, left_name, expr.op, right_val, target
+                    )),
                 }
             }
             (Dim::Literal(left_val), Dim::Named(right_name)) => {
@@ -216,7 +219,10 @@ impl InferenceContext {
                             Ok(())
                         }
                     }
-                    _ => Ok(()), // TODO
+                    _ => Err(format!(
+                        "Unsupported operator '{}' in dimension constraint solving: {} {} {} = {}",
+                        expr.op, left_val, expr.op, right_name, target
+                    )),
                 }
             }
             // Solve recursive expressions
@@ -242,13 +248,21 @@ impl InferenceContext {
                         Some(target / (*right_val as usize))
                     }
                     BinOp::Div => Some(target * (*right_val as usize)),
-                    _ => None,
+                    _ => {
+                        return Err(format!(
+                            "Unsupported operator '{}' in dimension constraint solving for expression",
+                            expr.op
+                        ));
+                    }
                 };
 
                 if let Some(val) = left_val {
                     self.solve_expr_for_unknown(left_expr, val)
                 } else {
-                    Ok(()) // or error
+                    Err(format!(
+                        "Cannot solve dimension constraint: expr {} {} = {}",
+                        expr.op, right_val, target
+                    ))
                 }
             }
             (Dim::Literal(left_val), Dim::Expr(right_expr)) => {
@@ -287,16 +301,28 @@ impl InferenceContext {
                             None
                         }
                     }
-                    _ => None,
+                    _ => {
+                        return Err(format!(
+                            "Unsupported operator '{}' in dimension constraint solving for expression",
+                            expr.op
+                        ));
+                    }
                 };
 
                 if let Some(val) = right_val {
                     self.solve_expr_for_unknown(right_expr, val)
                 } else {
-                    Ok(())
+                    Err(format!(
+                        "Cannot solve dimension constraint: {} {} expr = {}",
+                        left_val, expr.op, target
+                    ))
                 }
             }
-            _ => Ok(()), // Too complex to solve for now
+            _ => Err(format!(
+                "Cannot solve dimension constraint: expression with operator '{}' is too complex \
+                 (only single-unknown equations with +, -, *, / are supported)",
+                expr.op
+            )),
         }
     }
 
