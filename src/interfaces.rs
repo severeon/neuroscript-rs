@@ -570,8 +570,10 @@ pub struct InferenceContext {
     /// e.g. "shape" -> [batch, seq]
     pub resolved_variadics: HashMap<String, Vec<Dim>>,
 
-    /// Pending expression constraints to be solved
+    /// Pending expression constraints to be solved later when more dims are known.
     /// Format: (result_dim, expression, context)
+    /// TODO(SHAPE-4): these are pushed but never drained — add a flush pass that
+    /// retries resolution after all direct unifications complete.
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
 }
 

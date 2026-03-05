@@ -95,13 +95,14 @@ impl InferenceContext {
                     // Cannot solve yet — record as pending constraint
                     self.pending_constraints.push((
                         Dim::Named(n.clone()),
-                        *expr.clone(),
+                        (**expr).clone(),
                         format!("Named({}) ~ Expr({:?})", n, expr),
                     ));
                     Ok(())
                 }
             }
-            // Expr vs Expr: too complex to solve generically
+            // TODO(SHAPE-5): Expr vs Expr — too complex to solve generically;
+            // could attempt structural equality or partial evaluation in the future.
             (Dim::Expr(_), Dim::Expr(_)) => Ok(()),
             // Global vs Named: resolve named to global's value if possible
             (Dim::Global(g), Dim::Named(n)) | (Dim::Named(n), Dim::Global(g)) => {
@@ -125,7 +126,7 @@ impl InferenceContext {
                 } else {
                     self.pending_constraints.push((
                         Dim::Global(g.clone()),
-                        *expr.clone(),
+                        (**expr).clone(),
                         format!("Global({}) ~ Expr({:?})", g, expr),
                     ));
                     Ok(())
