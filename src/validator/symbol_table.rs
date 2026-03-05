@@ -388,7 +388,7 @@ where
 
             // Validate that all arms produce the same port signature.
             // Shape compatibility across arms is handled separately by the shape inference pass.
-            check_arm_port_consistency(&all_arm_ports, "match", &ctx.neuron.name)?;
+            check_arm_port_consistency(&all_arm_ports, "match", all_arm_ports.len(), &ctx.neuron.name)?;
 
             // Safe: empty arms case returns early above
             Ok(all_arm_ports[0].clone())
@@ -428,7 +428,8 @@ where
             // Validate that all branches produce the same port signature.
             // When else_branch is absent, only if/elif branches are compared — the
             // missing else is a separate validation concern (exhaustiveness).
-            check_arm_port_consistency(&all_branch_ports, "if", &ctx.neuron.name)?;
+            let num_branches = if_expr.branches.len();
+            check_arm_port_consistency(&all_branch_ports, "if", num_branches, &ctx.neuron.name)?;
 
             Ok(all_branch_ports[0].clone())
         }
@@ -453,9 +454,11 @@ where
 /// Check that all arms/branches of a match or if expression produce the same port signature.
 /// Compares port count and port names across all arms against the first arm.
 /// Shape compatibility is handled separately by the shape inference pass.
+/// `num_numbered` is how many entries are numbered arms (vs an else branch at the end).
 fn check_arm_port_consistency(
     all_arm_ports: &[Vec<Port>],
     expr_kind: &str,
+    num_numbered: usize,
     context: &str,
 ) -> Result<(), Box<ValidationError>> {
     if all_arm_ports.len() <= 1 {
@@ -469,9 +472,11 @@ fn check_arm_port_consistency(
         let arm_names: Vec<String> = arm_ports.iter().map(|p| p.name.clone()).collect();
 
         if arm_ports.len() != first.len() || arm_names != first_names {
+            // For if expressions, the entry after all numbered branches is the else
+            let arm_index = if i >= num_numbered { 0 } else { i + 1 };
             return Err(Box::new(ValidationError::InconsistentArmPorts {
                 expr_kind: expr_kind.to_string(),
-                arm_index: i + 1, // 1-based for user-facing messages
+                arm_index, // 1-based for numbered arms, 0 = else branch
                 expected_count: first.len(),
                 got_count: arm_ports.len(),
                 expected_names: first_names,

@@ -821,17 +821,23 @@ impl std::fmt::Display for ValidationError {
                 got_names,
                 context,
             } => {
+                // arm_index 0 means else branch; otherwise 1-based arm number
+                let arm_label = if *arm_index == 0 {
+                    "else branch".to_string()
+                } else {
+                    format!("arm {}", arm_index)
+                };
                 if expected_count != got_count {
                     write!(
                         f,
-                        "Inconsistent port signature in {} expression: arm 1 produces {} port(s) but arm {} produces {} port(s) (in {})",
-                        expr_kind, expected_count, arm_index, got_count, context
+                        "Inconsistent port signature in {} expression: arm 1 produces {} port(s) but {} produces {} port(s) (in {})",
+                        expr_kind, expected_count, arm_label, got_count, context
                     )
                 } else {
                     write!(
                         f,
-                        "Inconsistent port names in {} expression: arm 1 has ports [{}] but arm {} has ports [{}] (in {})",
-                        expr_kind, expected_names.join(", "), arm_index, got_names.join(", "), context
+                        "Inconsistent port names in {} expression: arm 1 has ports [{}] but {} has ports [{}] (in {})",
+                        expr_kind, expected_names.join(", "), arm_label, got_names.join(", "), context
                     )
                 }
             }

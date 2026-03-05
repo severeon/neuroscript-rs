@@ -205,7 +205,37 @@ fn test_if_inconsistent_port_count() {
         .build();
 
     assert_validation_error(&mut program, |e| {
-        matches!(e, ValidationError::InconsistentArmPorts { expr_kind, .. } if expr_kind == "if")
+        matches!(e, ValidationError::InconsistentArmPorts { expr_kind, arm_index, .. }
+            if expr_kind == "if" && *arm_index == 0) // 0 = else branch
+    });
+}
+
+#[test]
+fn test_if_inconsistent_port_names() {
+    // If branch produces port "out", else branch produces port "extra"
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestIf",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(wildcard()), port("extra", wildcard())],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::If(IfExpr {
+                    branches: vec![IfBranch {
+                        condition: Value::Name("cond".to_string()),
+                        pipeline: vec![ref_endpoint("out")],
+                    }],
+                    else_branch: Some(vec![ref_endpoint("extra")]),
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_error(&mut program, |e| {
+        matches!(e, ValidationError::InconsistentArmPorts { expr_kind, arm_index, .. }
+            if expr_kind == "if" && *arm_index == 0)
     });
 }
 
