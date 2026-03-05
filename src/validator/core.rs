@@ -200,6 +200,9 @@ impl Validator {
             }
         }
 
+        // Check @reduce target dims are reachable from the neuron's known dimensions
+        errors.extend(Self::validate_reduce_dim_reachability(neuron, connections));
+
         // Check for cycles (respecting max_cycle_depth if set)
         errors.extend(cycles::detect_cycles(
             connections,
@@ -209,6 +212,168 @@ impl Validator {
         ));
 
         errors
+    }
+
+    /// Collect all named dimension identifiers that are "known" within a neuron definition.
+    /// This includes dim names from input/output port shapes and neuron parameter names.
+    fn collect_known_dims(neuron: &NeuronDef) -> std::collections::HashSet<String> {
+        let mut known = std::collections::HashSet::new();
+
+        // Add all param names (params can be used as dimension values)
+        for param in &neuron.params {
+            known.insert(param.name.clone());
+        }
+
+        // Add named dims from input port shapes
+        for port in &neuron.inputs {
+            Self::collect_dims_from_shape(&port.shape, &mut known);
+        }
+
+        // Add named dims from output port shapes
+        for port in &neuron.outputs {
+            Self::collect_dims_from_shape(&port.shape, &mut known);
+        }
+
+        known
+    }
+
+    /// Extract named dimension identifiers from a Shape into the given set.
+    fn collect_dims_from_shape(shape: &Shape, known: &mut std::collections::HashSet<String>) {
+        for dim in &shape.dims {
+            match dim {
+                Dim::Named(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Variadic(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Expr(expr) => {
+                    Self::collect_dims_from_dim(&expr.left, known);
+                    Self::collect_dims_from_dim(&expr.right, known);
+                }
+                Dim::Global(name) => {
+                    known.insert(name.clone());
+                }
+                Dim::Literal(_) | Dim::Wildcard => {}
+            }
+        }
+    }
+
+    /// Extract named dimension identifiers from a single Dim.
+    fn collect_dims_from_dim(dim: &Dim, known: &mut std::collections::HashSet<String>) {
+        match dim {
+            Dim::Named(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Variadic(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Expr(expr) => {
+                Self::collect_dims_from_dim(&expr.left, known);
+                Self::collect_dims_from_dim(&expr.right, known);
+            }
+            Dim::Global(name) => {
+                known.insert(name.clone());
+            }
+            Dim::Literal(_) | Dim::Wildcard => {}
+        }
+    }
+
+    /// Validate that all named dimensions in @reduce target shapes are reachable
+    /// from the neuron's known dimensions (input shapes + parameters).
+    fn validate_reduce_dim_reachability(
+        neuron: &NeuronDef,
+        connections: &[Connection],
+    ) -> Vec<ValidationError> {
+        let known_dims = Self::collect_known_dims(neuron);
+        let mut errors = Vec::new();
+
+        for connection in connections {
+            Self::check_reduce_dims_in_endpoint(
+                &connection.source,
+                &neuron.name,
+                &known_dims,
+                &mut errors,
+            );
+            Self::check_reduce_dims_in_endpoint(
+                &connection.destination,
+                &neuron.name,
+                &known_dims,
+                &mut errors,
+            );
+        }
+
+        errors
+    }
+
+    /// Recursively check @reduce reshape endpoints for unreachable dimension names.
+    fn check_reduce_dims_in_endpoint(
+        endpoint: &Endpoint,
+        context_neuron: &str,
+        known_dims: &std::collections::HashSet<String>,
+        errors: &mut Vec<ValidationError>,
+    ) {
+        match endpoint {
+            Endpoint::Reshape(reshape) => {
+                if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+                    // For @reduce, every named dim in the target shape must be
+                    // reachable from the source (i.e., present in the neuron's
+                    // known dims from input/output shapes and params).
+                    for dim in &reshape.dims {
+                        let unreachable_name = match dim {
+                            ReshapeDim::Named(name) => {
+                                if !known_dims.contains(name) {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            ReshapeDim::Binding { name, .. } => {
+                                if !known_dims.contains(name) {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        };
+                        if let Some(name) = unreachable_name {
+                            errors.push(ValidationError::InvalidAnnotation {
+                                annotation: format!(
+                                    "{}",
+                                    reshape.annotation.as_ref().unwrap()
+                                ),
+                                reason: format!(
+                                    "dimension '{}' in @reduce target shape is not defined in any input/output port shape or parameter of neuron '{}'",
+                                    name, context_neuron
+                                ),
+                                context: format!("in {}", context_neuron),
+                            });
+                        }
+                    }
+                }
+            }
+            Endpoint::Match(match_expr) => {
+                for arm in &match_expr.arms {
+                    for ep in &arm.pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            Endpoint::If(if_expr) => {
+                for branch in &if_expr.branches {
+                    for ep in &branch.pipeline {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+                if let Some(else_branch) = &if_expr.else_branch {
+                    for ep in else_branch {
+                        Self::check_reduce_dims_in_endpoint(ep, context_neuron, known_dims, errors);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Check that all neurons referenced in an endpoint exist
