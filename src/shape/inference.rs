@@ -65,15 +65,7 @@ impl InferenceContext {
             (Dim::Wildcard, _) | (_, Dim::Wildcard) => Ok(()), // Wildcard matches anything
             (Dim::Global(g1), Dim::Global(g2)) => {
                 if g1 == g2 {
-                    // If one has a resolved value, propagate to the other
-                    let v1 = self.resolved_dims.get(g1).copied();
-                    let v2 = self.resolved_dims.get(g2).copied();
-                    match (v1, v2) {
-                        (Some(val1), Some(val2)) if val1 != val2 => {
-                            Err(format!("Global dimension mismatch: {} != {}", val1, val2))
-                        }
-                        _ => Ok(()),
-                    }
+                    Ok(())
                 } else {
                     Err(format!(
                         "Global dimension mismatch: @global {} != @global {}",
