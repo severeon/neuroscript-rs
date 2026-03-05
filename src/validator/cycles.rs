@@ -49,7 +49,7 @@ pub(super) fn detect_cycles(
 
                 if let Some(max_depth) = neuron.max_cycle_depth {
                     if cycle_depth <= max_depth {
-                        // Cycle is within allowed depth, skip error
+                        rec_stack.clear();
                         continue;
                     }
                 }
@@ -58,6 +58,10 @@ pub(super) fn detect_cycles(
                     cycle,
                     context: context_neuron.to_string(),
                 });
+                // Clear rec_stack after early return from DFS —
+                // dfs_cycle_detect skips cleanup on the cycle path,
+                // leaving stale entries that would cause false positives.
+                rec_stack.clear();
             }
         }
     }
