@@ -69,639 +69,108 @@ impl StdlibRegistry {
         registry
     }
 
-    /// Register all standard library primitives.
+    /// Register all standard library primitives using a table-driven approach.
+    ///
+    /// Each entry is `(name, module_path, class_name, description)`.
+    /// Grouped by category for readability.
     fn register_all_primitives(&mut self) {
-        // Level 0: Core Operations
-        self.register(
-            "Linear",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.linear",
-                "Linear",
-                "Dense/fully-connected layer with shape tracking",
-            ),
-        );
-
-        self.register(
-            "Bias",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.operations",
-                "Bias",
-                "Additive bias",
-            ),
-        );
-
-        self.register(
-            "Scale",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.operations",
-                "Scale",
-                "Multiplicative scale",
-            ),
-        );
-
-        self.register(
-            "ConstScale",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.operations",
-                "ConstScale",
-                "Constant scalar multiplication",
-            ),
-        );
-
-        self.register(
-            "MatMul",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.operations",
-                "MatMul",
-                "Matrix multiplication",
-            ),
-        );
-
-        self.register(
-            "Einsum",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.operations",
-                "Einsum",
-                "Einstein summation",
-            ),
-        );
-
-        // Level 0: Activations
-        self.register(
-            "GELU",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "GELU",
-                "Gaussian Error Linear Unit activation",
-            ),
-        );
-
-        self.register(
-            "ReLU",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "ReLU",
-                "Rectified Linear Unit activation",
-            ),
-        );
-
-        self.register(
-            "Tanh",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "Tanh",
-                "Hyperbolic tangent activation",
-            ),
-        );
-
-        self.register(
-            "Sigmoid",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "Sigmoid",
-                "Sigmoid activation function",
-            ),
-        );
-
-        self.register(
-            "SiLU",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "SiLU",
-                "Sigmoid Linear Unit (Swish) activation",
-            ),
-        );
-
-        self.register(
-            "Softmax",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "Softmax",
-                "Softmax activation (normalizes to probability distribution)",
-            ),
-        );
-
-        self.register(
-            "Mish",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "Mish",
-                "Mish activation",
-            ),
-        );
-
-        self.register(
-            "PReLU",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "PReLU",
-                "Parametric ReLU",
-            ),
-        );
-
-        self.register(
-            "ELU",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.activations",
-                "ELU",
-                "Exponential Linear Unit",
-            ),
-        );
-
-        // Level 0: Normalizations
-        self.register(
-            "LayerNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "LayerNorm",
-                "Layer normalization (used in transformers)",
-            ),
-        );
-
-        self.register(
-            "RMSNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "RMSNorm",
-                "Root Mean Square normalization (efficient variant)",
-            ),
-        );
-
-        self.register(
-            "GroupNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "GroupNorm",
-                "Group normalization (works well with small batches)",
-            ),
-        );
-
-        self.register(
-            "BatchNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "BatchNorm",
-                "Batch normalization",
-            ),
-        );
-
-        self.register(
-            "InstanceNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "InstanceNorm",
-                "Instance normalization",
-            ),
-        );
-
-        self.register(
-            "WeightNorm",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.normalization",
-                "WeightNorm",
-                "Weight normalization (decouples magnitude from direction)",
-            ),
-        );
-
-        // Level 0: Regularization
-        self.register(
-            "Dropout",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.regularization",
-                "Dropout",
-                "Dropout regularization with training/eval modes",
-            ),
-        );
-
-        self.register(
-            "DropPath",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.regularization",
-                "DropPath",
-                "Stochastic depth / drop path regularization",
-            ),
-        );
-
-        self.register(
-            "DropConnect",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.regularization",
-                "DropConnect",
-                "Connection dropout (drops weights)",
-            ),
-        );
-
-        self.register(
-            "Dropblock",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.regularization",
-                "Dropblock",
-                "Structured dropout for CNNs (drops contiguous regions)",
-            ),
-        );
-
-        self.register(
-            "SpecAugment",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.regularization",
-                "SpecAugment",
-                "Frequency/time masking for audio spectrograms",
-            ),
-        );
-
-        // Level 0: Convolutions
-        self.register(
-            "Conv1d",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "Conv1d",
-                "1D convolution layer",
-            ),
-        );
-
-        self.register(
-            "Conv2d",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "Conv2d",
-                "2D convolution layer",
-            ),
-        );
-
-        self.register(
-            "Conv3d",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "Conv3d",
-                "3D convolution layer",
-            ),
-        );
-
-        self.register(
-            "DepthwiseConv",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "DepthwiseConv",
-                "Depthwise convolution layer",
-            ),
-        );
-
-        self.register(
-            "SeparableConv",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "SeparableConv",
-                "Separable convolution layer",
-            ),
-        );
-
-        self.register(
-            "TransposedConv",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "TransposedConv",
-                "Transposed convolution layer",
-            ),
-        );
-
-        self.register(
-            "DilatedConv",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.convolutions",
-                "DilatedConv",
-                "Dilated (atrous) convolution for expanded receptive fields",
-            ),
-        );
-
-        // Level 0: Pooling
-        self.register(
-            "MaxPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "MaxPool",
-                "Max pooling",
-            ),
-        );
-
-        self.register(
-            "AvgPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "AvgPool",
-                "Average pooling",
-            ),
-        );
-
-        self.register(
-            "AdaptiveAvgPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "AdaptiveAvgPool",
-                "Adaptive average pooling (output size fixed)",
-            ),
-        );
-
-        self.register(
-            "GlobalAvgPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "GlobalAvgPool",
-                "Global average pooling (reduces spatial dims to 1x1)",
-            ),
-        );
-
-        self.register(
-            "AdaptiveMaxPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "AdaptiveMaxPool",
-                "Adaptive max pooling (output size fixed)",
-            ),
-        );
-
-        self.register(
-            "GlobalMaxPool",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.pooling",
-                "GlobalMaxPool",
-                "Global max pooling (reduces spatial dims to 1x1)",
-            ),
-        );
-
-        // Level 0: Embeddings
-        self.register(
-            "Embedding",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.embeddings",
-                "Embedding",
-                "Token embedding layer (discrete → dense)",
-            ),
-        );
-
-        self.register(
-            "PositionalEncoding",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.embeddings",
-                "PositionalEncoding",
-                "Sinusoidal positional encoding (Attention is All You Need)",
-            ),
-        );
-
-        self.register(
-            "LearnedPositionalEmbedding",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.embeddings",
-                "LearnedPositionalEmbedding",
-                "Learned positional embeddings (BERT/GPT style)",
-            ),
-        );
-
-        self.register(
-            "RotaryEmbedding",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.embeddings",
-                "RotaryEmbedding",
-                "Rotary Position Embedding (RoPE)",
-            ),
-        );
-
-        self.register(
-            "ALiBi",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.embeddings",
-                "ALiBi",
-                "Attention with Linear Biases (length extrapolation)",
-            ),
-        );
-
-        // Level 0: Structural Operations
-        self.register(
-            "Identity",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Identity",
-                "Identity operation (pass-through, no-op)",
-            ),
-        );
-
-        self.register(
-            "Fork",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Fork",
-                "Split tensor into two references (multi-output for residual connections)",
-            ),
-        );
-
-        self.register(
-            "Fork3",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Fork3",
-                "Split tensor into three references (multi-output)",
-            ),
-        );
-
-        self.register(
-            "ForkN",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "ForkN",
-                "Split tensor into N references (generic multi-output)",
-            ),
-        );
-
-        self.register(
-            "Add",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Add",
-                "Element-wise addition (multi-input for residual connections)",
-            ),
-        );
-
-        self.register(
-            "Multiply",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Multiply",
-                "Element-wise multiplication (for gating mechanisms)",
-            ),
-        );
-
-        self.register(
-            "Subtract",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Subtract",
-                "Element-wise subtraction (for complement/residual operations)",
-            ),
-        );
-
-        self.register(
-            "Divide",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Divide",
-                "Element-wise division (for normalization/scaling operations)",
-            ),
-        );
-
-        self.register(
-            "Concat",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Concat",
-                "Concatenate tensors along a dimension",
-            ),
-        );
-
-        self.register(
-            "Reshape",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Reshape",
-                "Reshape tensor to a new shape (preserves element count)",
-            ),
-        );
-
-        self.register(
-            "Transpose",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Transpose",
-                "Permute tensor dimensions (transpose/permute operation)",
-            ),
-        );
-
-        self.register(
-            "Flatten",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Flatten",
-                "Flattens a contiguous range of dims into a tensor",
-            ),
-        );
-
-        self.register(
-            "Split",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Split",
-                "Split tensor into chunks",
-            ),
-        );
-
-        self.register(
-            "Slice",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Slice",
-                "Slice tensor along a dimension",
-            ),
-        );
-
-        self.register(
-            "Pad",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Pad",
-                "Pad tensor with value",
-            ),
-        );
-
-        self.register(
-            "Crop",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Crop",
-                "Crop tensor to target spatial dimensions",
-            ),
-        );
-
-        self.register(
-            "Cast",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Cast",
-                "Convert tensor dtype",
-            ),
-        );
-
-        self.register(
-            "Clone",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.structural",
-                "Clone",
-                "Create independent copy of tensor",
-            ),
-        );
-
-        // Level 0: Attention
-        self.register(
-            "ScaledDotProductAttention",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.attention",
-                "ScaledDotProductAttention",
-                "Scaled dot-product attention (transformer building block)",
-            ),
-        );
-
-        self.register(
-            "MultiHeadSelfAttention",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.attention",
-                "MultiHeadSelfAttention",
-                "Multi-head self-attention (complete attention mechanism)",
-            ),
-        );
-
-        // Level 0: Debug/Logging
-        self.register(
-            "Log",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.logging",
-                "Log",
-                "Debug logging with colored output and tensor info (pass-through)",
-            ),
-        );
-
-        // Level 0: Connections (Hyper-Connections)
-        self.register(
-            "HyperExpand",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.connections",
-                "HyperExpand",
-                "Expand single hidden to n copies for hyper-connections",
-            ),
-        );
-
-        self.register(
-            "HyperCollapse",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.connections",
-                "HyperCollapse",
-                "Collapse n copies via sum for hyper-connections",
-            ),
-        );
-
-        self.register(
-            "HCWidth",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.connections",
-                "HCWidth",
-                "Width connection for hyper-connections (mix hidden copies)",
-            ),
-        );
-
-        self.register(
-            "HCDepth",
-            ImplRef::with_desc(
-                "neuroscript_runtime.primitives.connections",
-                "HCDepth",
-                "Depth connection for hyper-connections (merge layer output)",
-            ),
-        );
+        /// Primitive registration table: (name, module, class, description).
+        const PRIMITIVES: &[(&str, &str, &str, &str)] = &[
+            // ── Core Operations ──────────────────────────────────────────
+            ("Linear",     "neuroscript_runtime.primitives.linear",     "Linear",     "Dense/fully-connected layer with shape tracking"),
+            ("Bias",       "neuroscript_runtime.primitives.operations", "Bias",       "Additive bias"),
+            ("Scale",      "neuroscript_runtime.primitives.operations", "Scale",      "Multiplicative scale"),
+            ("ConstScale", "neuroscript_runtime.primitives.operations", "ConstScale", "Constant scalar multiplication"),
+            ("MatMul",     "neuroscript_runtime.primitives.operations", "MatMul",     "Matrix multiplication"),
+            ("Einsum",     "neuroscript_runtime.primitives.operations", "Einsum",     "Einstein summation"),
+
+            // ── Activations ──────────────────────────────────────────────
+            ("GELU",    "neuroscript_runtime.primitives.activations", "GELU",    "Gaussian Error Linear Unit activation"),
+            ("ReLU",    "neuroscript_runtime.primitives.activations", "ReLU",    "Rectified Linear Unit activation"),
+            ("Tanh",    "neuroscript_runtime.primitives.activations", "Tanh",    "Hyperbolic tangent activation"),
+            ("Sigmoid", "neuroscript_runtime.primitives.activations", "Sigmoid", "Sigmoid activation function"),
+            ("SiLU",    "neuroscript_runtime.primitives.activations", "SiLU",    "Sigmoid Linear Unit (Swish) activation"),
+            ("Softmax", "neuroscript_runtime.primitives.activations", "Softmax", "Softmax activation (normalizes to probability distribution)"),
+            ("Mish",    "neuroscript_runtime.primitives.activations", "Mish",    "Mish activation"),
+            ("PReLU",   "neuroscript_runtime.primitives.activations", "PReLU",   "Parametric ReLU"),
+            ("ELU",     "neuroscript_runtime.primitives.activations", "ELU",     "Exponential Linear Unit"),
+
+            // ── Normalizations ───────────────────────────────────────────
+            ("LayerNorm",    "neuroscript_runtime.primitives.normalization", "LayerNorm",    "Layer normalization (used in transformers)"),
+            ("RMSNorm",      "neuroscript_runtime.primitives.normalization", "RMSNorm",      "Root Mean Square normalization (efficient variant)"),
+            ("GroupNorm",    "neuroscript_runtime.primitives.normalization", "GroupNorm",     "Group normalization (works well with small batches)"),
+            ("BatchNorm",    "neuroscript_runtime.primitives.normalization", "BatchNorm",     "Batch normalization"),
+            ("InstanceNorm", "neuroscript_runtime.primitives.normalization", "InstanceNorm",  "Instance normalization"),
+            ("WeightNorm",   "neuroscript_runtime.primitives.normalization", "WeightNorm",    "Weight normalization (decouples magnitude from direction)"),
+
+            // ── Regularization ───────────────────────────────────────────
+            ("Dropout",     "neuroscript_runtime.primitives.regularization", "Dropout",     "Dropout regularization with training/eval modes"),
+            ("DropPath",    "neuroscript_runtime.primitives.regularization", "DropPath",    "Stochastic depth / drop path regularization"),
+            ("DropConnect", "neuroscript_runtime.primitives.regularization", "DropConnect", "Connection dropout (drops weights)"),
+            ("Dropblock",   "neuroscript_runtime.primitives.regularization", "Dropblock",   "Structured dropout for CNNs (drops contiguous regions)"),
+            ("SpecAugment", "neuroscript_runtime.primitives.regularization", "SpecAugment", "Frequency/time masking for audio spectrograms"),
+
+            // ── Convolutions ─────────────────────────────────────────────
+            ("Conv1d",         "neuroscript_runtime.primitives.convolutions", "Conv1d",         "1D convolution layer"),
+            ("Conv2d",         "neuroscript_runtime.primitives.convolutions", "Conv2d",         "2D convolution layer"),
+            ("Conv3d",         "neuroscript_runtime.primitives.convolutions", "Conv3d",         "3D convolution layer"),
+            ("DepthwiseConv",  "neuroscript_runtime.primitives.convolutions", "DepthwiseConv",  "Depthwise convolution layer"),
+            ("SeparableConv",  "neuroscript_runtime.primitives.convolutions", "SeparableConv",  "Separable convolution layer"),
+            ("TransposedConv", "neuroscript_runtime.primitives.convolutions", "TransposedConv", "Transposed convolution layer"),
+            ("DilatedConv",    "neuroscript_runtime.primitives.convolutions", "DilatedConv",    "Dilated (atrous) convolution for expanded receptive fields"),
+
+            // ── Pooling ──────────────────────────────────────────────────
+            ("MaxPool",         "neuroscript_runtime.primitives.pooling", "MaxPool",         "Max pooling"),
+            ("AvgPool",         "neuroscript_runtime.primitives.pooling", "AvgPool",         "Average pooling"),
+            ("AdaptiveAvgPool", "neuroscript_runtime.primitives.pooling", "AdaptiveAvgPool", "Adaptive average pooling (output size fixed)"),
+            ("GlobalAvgPool",   "neuroscript_runtime.primitives.pooling", "GlobalAvgPool",   "Global average pooling (reduces spatial dims to 1x1)"),
+            ("AdaptiveMaxPool", "neuroscript_runtime.primitives.pooling", "AdaptiveMaxPool", "Adaptive max pooling (output size fixed)"),
+            ("GlobalMaxPool",   "neuroscript_runtime.primitives.pooling", "GlobalMaxPool",   "Global max pooling (reduces spatial dims to 1x1)"),
+
+            // ── Embeddings ───────────────────────────────────────────────
+            ("Embedding",                  "neuroscript_runtime.primitives.embeddings", "Embedding",                  "Token embedding layer (discrete → dense)"),
+            ("PositionalEncoding",         "neuroscript_runtime.primitives.embeddings", "PositionalEncoding",         "Sinusoidal positional encoding (Attention is All You Need)"),
+            ("LearnedPositionalEmbedding", "neuroscript_runtime.primitives.embeddings", "LearnedPositionalEmbedding", "Learned positional embeddings (BERT/GPT style)"),
+            ("RotaryEmbedding",            "neuroscript_runtime.primitives.embeddings", "RotaryEmbedding",            "Rotary Position Embedding (RoPE)"),
+            ("ALiBi",                      "neuroscript_runtime.primitives.embeddings", "ALiBi",                      "Attention with Linear Biases (length extrapolation)"),
+
+            // ── Structural Operations ────────────────────────────────────
+            ("Identity",  "neuroscript_runtime.primitives.structural", "Identity",  "Identity operation (pass-through, no-op)"),
+            ("Fork",      "neuroscript_runtime.primitives.structural", "Fork",      "Split tensor into two references (multi-output for residual connections)"),
+            ("Fork3",     "neuroscript_runtime.primitives.structural", "Fork3",     "Split tensor into three references (multi-output)"),
+            ("ForkN",     "neuroscript_runtime.primitives.structural", "ForkN",     "Split tensor into N references (generic multi-output)"),
+            ("Add",       "neuroscript_runtime.primitives.structural", "Add",       "Element-wise addition (multi-input for residual connections)"),
+            ("Multiply",  "neuroscript_runtime.primitives.structural", "Multiply",  "Element-wise multiplication (for gating mechanisms)"),
+            ("Subtract",  "neuroscript_runtime.primitives.structural", "Subtract",  "Element-wise subtraction (for complement/residual operations)"),
+            ("Divide",    "neuroscript_runtime.primitives.structural", "Divide",    "Element-wise division (for normalization/scaling operations)"),
+            ("Concat",    "neuroscript_runtime.primitives.structural", "Concat",    "Concatenate tensors along a dimension"),
+            ("Reshape",   "neuroscript_runtime.primitives.structural", "Reshape",   "Reshape tensor to a new shape (preserves element count)"),
+            ("Transpose", "neuroscript_runtime.primitives.structural", "Transpose", "Permute tensor dimensions (transpose/permute operation)"),
+            ("Flatten",   "neuroscript_runtime.primitives.structural", "Flatten",   "Flattens a contiguous range of dims into a tensor"),
+            ("Split",     "neuroscript_runtime.primitives.structural", "Split",     "Split tensor into chunks"),
+            ("Slice",     "neuroscript_runtime.primitives.structural", "Slice",     "Slice tensor along a dimension"),
+            ("Pad",       "neuroscript_runtime.primitives.structural", "Pad",       "Pad tensor with value"),
+            ("Crop",      "neuroscript_runtime.primitives.structural", "Crop",      "Crop tensor to target spatial dimensions"),
+            ("Cast",      "neuroscript_runtime.primitives.structural", "Cast",      "Convert tensor dtype"),
+            ("Clone",     "neuroscript_runtime.primitives.structural", "Clone",     "Create independent copy of tensor"),
+
+            // ── Attention ────────────────────────────────────────────────
+            ("ScaledDotProductAttention", "neuroscript_runtime.primitives.attention", "ScaledDotProductAttention", "Scaled dot-product attention (transformer building block)"),
+            ("MultiHeadSelfAttention",   "neuroscript_runtime.primitives.attention", "MultiHeadSelfAttention",   "Multi-head self-attention (complete attention mechanism)"),
+
+            // ── Debug/Logging ────────────────────────────────────────────
+            ("Log", "neuroscript_runtime.primitives.logging", "Log", "Debug logging with colored output and tensor info (pass-through)"),
+
+            // ── Connections (Hyper-Connections) ──────────────────────────
+            ("HyperExpand",   "neuroscript_runtime.primitives.connections", "HyperExpand",   "Expand single hidden to n copies for hyper-connections"),
+            ("HyperCollapse", "neuroscript_runtime.primitives.connections", "HyperCollapse", "Collapse n copies via sum for hyper-connections"),
+            ("HCWidth",       "neuroscript_runtime.primitives.connections", "HCWidth",       "Width connection for hyper-connections (mix hidden copies)"),
+            ("HCDepth",       "neuroscript_runtime.primitives.connections", "HCDepth",       "Depth connection for hyper-connections (merge layer output)"),
+        ];
+
+        for &(name, module, class, desc) in PRIMITIVES {
+            self.register(name, ImplRef::with_desc(module, class, desc));
+        }
     }
 
     /// Register a primitive neuron implementation.
