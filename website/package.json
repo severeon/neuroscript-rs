@@ -7,7 +7,7 @@
     "start": "docusaurus start",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
-    "deploy": "cp -r build/* /Users/tquick/projects/neuroscript-docs/",
+    "deploy": "cp -r build/* ${NEUROSCRIPT_DOCS_DIR:-../neuroscript-docs}/",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",

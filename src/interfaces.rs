@@ -685,11 +685,15 @@ pub enum ValidationError {
     InvalidReshape {
         message: String,
         context: String,
+        /// Source span for diagnostic reporting
+        span: Option<SourceSpan>,
     },
     InvalidAnnotation {
         annotation: String,
         reason: String,
         context: String,
+        /// Source span for diagnostic reporting
+        span: Option<SourceSpan>,
     },
     /// Match/if arms produce different port signatures.
     InconsistentArmPorts {
@@ -798,13 +802,14 @@ impl std::fmt::Display for ValidationError {
                     neuron, reason
                 )
             }
-            ValidationError::InvalidReshape { message, context } => {
+            ValidationError::InvalidReshape { message, context, .. } => {
                 write!(f, "Invalid reshape: {} (in {})", message, context)
             }
             ValidationError::InvalidAnnotation {
                 annotation,
                 reason,
                 context,
+                ..
             } => {
                 write!(
                     f,

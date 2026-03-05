@@ -1,4 +1,6 @@
 use crate::interfaces::*;
+use num_bigint::BigUint;
+use num_traits::One;
 use std::collections::HashMap;
 
 /// Symbol table tracking intermediate nodes in a composite neuron graph
@@ -641,28 +643,21 @@ pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
 
 /// Compute the product of all dims in a shape when all are Literal.
 /// Returns None if any dim is not a Literal.
-fn shape_literal_product(shape: &Shape) -> Option<i64> {
-    let mut product: i64 = 1;
-    for dim in &shape.dims {
-        match dim {
-            Dim::Literal(n) => {
-                product = product.checked_mul(*n)?;
-            }
-            _ => return None,
-        }
-    }
-    Some(product)
+/// Uses BigUint to avoid overflow, consistent with the shape algebra module.
+fn shape_literal_product(shape: &Shape) -> Option<BigUint> {
+    shape.size()
 }
 
 /// Compute the product of all dims across all port shapes when all are Literal.
 /// Returns None if any dim is not a Literal or if there are no ports.
-fn literal_product(ports: &[Port]) -> Option<i64> {
+/// Uses BigUint to avoid overflow, consistent with the shape algebra module.
+fn literal_product(ports: &[Port]) -> Option<BigUint> {
     if ports.is_empty() {
         return None;
     }
-    let mut product: i64 = 1;
+    let mut product = BigUint::one();
     for port in ports {
-        product = product.checked_mul(shape_literal_product(&port.shape)?)?;
+        product *= shape_literal_product(&port.shape)?;
     }
     Some(product)
 }

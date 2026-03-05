@@ -19,6 +19,23 @@ fn build_reshape_program(
     reshape_ep: Endpoint,
     extra_neurons: Vec<(&str, Shape, Shape)>,
 ) -> Program {
+    build_reshape_program_with_ports(
+        name,
+        reshape_ep,
+        extra_neurons,
+        vec![default_port(shape_two_wildcard())],
+        vec![default_port(shape_two_wildcard())],
+    )
+}
+
+// Helper that allows specifying custom input/output port shapes
+fn build_reshape_program_with_ports(
+    name: &str,
+    reshape_ep: Endpoint,
+    extra_neurons: Vec<(&str, Shape, Shape)>,
+    inputs: Vec<Port>,
+    outputs: Vec<Port>,
+) -> Program {
     // Create a second reshape endpoint with a distinct id for the source connection,
     // so each connection has a unique endpoint (matching real parsed programs).
     let reshape_ep_source = match &reshape_ep {
@@ -36,8 +53,8 @@ fn build_reshape_program(
     builder
         .with_composite_ports(
             name,
-            vec![default_port(shape_two_wildcard())],
-            vec![default_port(shape_two_wildcard())],
+            inputs,
+            outputs,
             vec![
                 connection(ref_endpoint("in"), reshape_ep),
                 connection(reshape_ep_source, ref_endpoint("out")),
@@ -65,7 +82,7 @@ fn test_validate_reshape_basic() {
 
 #[test]
 fn test_validate_reshape_with_reduce_mean() {
-    // Reshape with @reduce(mean) annotation should pass
+    // Reshape with @reduce(mean) annotation should pass when target dims exist in input shape
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![
             ReshapeDim::Named("batch".to_string()),
@@ -77,13 +94,29 @@ fn test_validate_reshape_with_reduce_mean() {
         id: 101,
     });
 
-    let mut program = build_reshape_program("ReduceTest", reshape_ep, vec![]);
+    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
+    let input_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("seq".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let output_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let mut program = build_reshape_program_with_ports(
+        "ReduceTest",
+        reshape_ep,
+        vec![],
+        vec![default_port(input_shape)],
+        vec![default_port(output_shape)],
+    );
     assert_validation_ok(&mut program);
 }
 
 #[test]
 fn test_validate_reshape_with_reduce_sum() {
-    // Reshape with @reduce(sum) annotation should pass
+    // Reshape with @reduce(sum) annotation should pass when target dims exist in input shape
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![
             ReshapeDim::Named("batch".to_string()),
@@ -95,7 +128,23 @@ fn test_validate_reshape_with_reduce_sum() {
         id: 102,
     });
 
-    let mut program = build_reshape_program("ReduceSumTest", reshape_ep, vec![]);
+    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
+    let input_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("seq".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let output_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let mut program = build_reshape_program_with_ports(
+        "ReduceSumTest",
+        reshape_ep,
+        vec![],
+        vec![default_port(input_shape)],
+        vec![default_port(output_shape)],
+    );
     assert_validation_ok(&mut program);
 }
 
@@ -188,10 +237,22 @@ fn test_validate_reshape_with_neuron_annotation_existing() {
         id: 106,
     });
 
-    let mut program = build_reshape_program(
+    // Use input shape with named dims [batch, seq, dim] so batch and dim are reachable
+    let input_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("seq".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let output_shape = Shape::new(vec![
+        Dim::Named("batch".to_string()),
+        Dim::Named("dim".to_string()),
+    ]);
+    let mut program = build_reshape_program_with_ports(
         "NeuronAnnotationTest",
         reshape_ep,
         vec![("PoolNeuron", wildcard(), wildcard())],
+        vec![default_port(input_shape)],
+        vec![default_port(output_shape)],
     );
     assert_validation_ok(&mut program);
 }
@@ -440,6 +501,138 @@ neuron Pool(dim):
             result
         );
     }
+}
+
+#[test]
+fn test_validate_reduce_unreachable_dim() {
+    // @reduce target with a dim not in input/output shapes or params should fail
+    let source = r#"
+neuron BadPool:
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, c, x] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_err(),
+        "@reduce with unreachable dim 'x' should fail validation"
+    );
+    let errors = result.unwrap_err();
+    assert!(
+        errors.iter().any(|e| {
+            matches!(
+                e,
+                ValidationError::InvalidAnnotation {
+                    reason,
+                    ..
+                } if reason.contains("x") && reason.contains("not defined")
+            )
+        }),
+        "expected error about unreachable dim 'x', got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_validate_reduce_dim_from_param_is_ok() {
+    // @reduce target dim that matches a param name should be allowed
+    let source = r#"
+neuron ParamPool(x):
+  in: [b, c, h, w]
+  out: [b, x]
+  graph:
+    in => @reduce(mean) [b, x] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_ok(),
+        "@reduce with dim from param should pass: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_validate_reduce_binding_checks_rhs_not_lhs() {
+    // Binding h=dim/heads: h is new, dim and heads must be known.
+    // Using unknown dim "zz" in the RHS should fail.
+    let source = r#"
+neuron BadBinding:
+  in: [b, c, h, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, h=zz/c] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_err(),
+        "@reduce binding with unknown RHS dim 'zz' should fail"
+    );
+    let errors = result.unwrap_err();
+    assert!(
+        errors.iter().any(|e| {
+            matches!(
+                e,
+                ValidationError::InvalidAnnotation { reason, .. }
+                    if reason.contains("zz") && reason.contains("not defined")
+            )
+        }),
+        "expected error about unreachable dim 'zz', got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_validate_reduce_binding_with_known_rhs_is_ok() {
+    // Binding h=dim/heads where dim and heads are known should pass.
+    // h is a new name introduced by the binding — not checked against known_dims.
+    let source = r#"
+neuron GoodBinding(heads):
+  in: [b, c, dim]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, h=dim/heads] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_ok(),
+        "@reduce binding with known RHS dims should pass: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_validate_reduce_expr_unknown_dim() {
+    // Expression dim h*w where h is unknown should fail.
+    let source = r#"
+neuron BadExpr:
+  in: [b, c, w]
+  out: [b, c]
+  graph:
+    in => @reduce(mean) [b, unknown_dim*w] -> out
+"#;
+    let mut program = crate::parse(source).unwrap();
+    let result = crate::validate(&mut program);
+    assert!(
+        result.is_err(),
+        "@reduce expr with unknown dim should fail"
+    );
+    let errors = result.unwrap_err();
+    assert!(
+        errors.iter().any(|e| {
+            matches!(
+                e,
+                ValidationError::InvalidAnnotation { reason, .. }
+                    if reason.contains("unknown_dim") && reason.contains("not defined")
+            )
+        }),
+        "expected error about unreachable dim 'unknown_dim', got: {:?}",
+        errors
+    );
 }
 
 #[test]

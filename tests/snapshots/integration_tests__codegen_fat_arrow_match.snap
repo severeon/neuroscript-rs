@@ -1,0 +1,39 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.linear import Linear
+from neuroscript_runtime.primitives.structural import Identity
+
+class ReshapeRouter(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.identity_0 = Identity()
+        self._linear_1 = None  # Lazy instantiation (captured)
+        self._linear_2 = None  # Lazy instantiation (captured)
+
+    def forward(self, x):
+        match_out = None
+        if x.ndim == 2:
+            batch = x.shape[0]
+            d = x.shape[1]
+            if d > 512:
+                identity_0 = self.identity_0(x)
+                x_2 = identity_0.reshape(batch, 4, d // 4)
+                x_3 = x_2.reshape(batch, d)
+                if self._linear_1 is None:
+                    self._linear_1 = Linear(d, 256)
+                linear_1 = self._linear_1(x_3)
+                match_out = linear_1
+        else:
+            batch = x.shape[0]
+            d = x.shape[1]
+            if self._linear_2 is None:
+                self._linear_2 = Linear(d, 256)
+            linear_2 = self._linear_2(x)
+            match_out = linear_2
+        else:
+            raise ValueError(f'No match found for shape { x.shape }')
+        return match_out
