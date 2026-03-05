@@ -6,8 +6,12 @@
 
 use crate::interfaces::*;
 
-/// Maximum allowed unroll count to prevent resource exhaustion.
+/// Maximum allowed unroll count per individual unroll block.
 const MAX_UNROLL_COUNT: usize = 1024;
+
+/// Maximum total expanded bindings across all unroll groups in a single neuron.
+/// Prevents combinatorial explosion (e.g., unroll(100) with 100 bindings = 10,000).
+const MAX_TOTAL_EXPANDED_BINDINGS: usize = 10_000;
 
 /// Expand all context-unroll constructs in a program.
 ///
@@ -45,9 +49,28 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
             let mut new_bindings = Vec::with_capacity(context_bindings.len() + estimated_new);
             new_bindings.extend_from_slice(context_bindings);
 
+            // Track total expanded bindings to prevent combinatorial explosion
+            let mut total_expanded: usize = context_bindings.len();
+
             for unroll in context_unrolls {
                 match resolve_count(&unroll.count, &params) {
                     Some(count) => {
+                        // Pre-check: will this unroll group exceed the total limit?
+                        let bindings_to_add: usize = unroll.bindings.iter()
+                            .map(|b| if matches!(b.scope, Scope::Static) { 1 } else { count })
+                            .sum();
+                        total_expanded = total_expanded.saturating_add(bindings_to_add);
+                        if total_expanded > MAX_TOTAL_EXPANDED_BINDINGS {
+                            errors.push(ValidationError::InvalidUnrollCount {
+                                neuron: name.clone(),
+                                reason: format!(
+                                    "Total expanded bindings ({}) exceeds maximum allowed ({})",
+                                    total_expanded, MAX_TOTAL_EXPANDED_BINDINGS
+                                ),
+                            });
+                            break;
+                        }
+
                         for binding in &unroll.bindings {
                             if matches!(binding.scope, Scope::Static) {
                                 // @static: single shared instance, keep unroll_group
@@ -575,6 +598,113 @@ mod tests {
             }
             other => panic!("Expected InvalidUnrollCount, got: {}", other),
         }
+    }
+
+    #[test]
+    fn test_total_expanded_bindings_limit() {
+        // Two unroll groups: unroll(100) with 51 bindings each = 10,200 total
+        // This should exceed the MAX_TOTAL_EXPANDED_BINDINGS limit of 10,000
+        let mut program = Program::new();
+        let mut bindings_a: Vec<Binding> = Vec::new();
+        for i in 0..51 {
+            bindings_a.push(Binding {
+                name: format!("a{}", i),
+                call_name: "Block".to_string(),
+                args: vec![],
+                kwargs: vec![],
+                scope: Scope::Instance { lazy: false },
+                frozen: false,
+                unroll_group: None,
+            });
+        }
+        let mut bindings_b: Vec<Binding> = Vec::new();
+        for i in 0..51 {
+            bindings_b.push(Binding {
+                name: format!("b{}", i),
+                call_name: "Block".to_string(),
+                args: vec![],
+                kwargs: vec![],
+                scope: Scope::Instance { lazy: false },
+                frozen: false,
+                unroll_group: None,
+            });
+        }
+        program.neurons.insert(
+            "Explosive".to_string(),
+            NeuronDef {
+                name: "Explosive".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![
+                        ContextUnroll {
+                            aggregate_name: "group_a".to_string(),
+                            count: Value::Int(100),
+                            bindings: bindings_a,
+                        },
+                        ContextUnroll {
+                            aggregate_name: "group_b".to_string(),
+                            count: Value::Int(100),
+                            bindings: bindings_b,
+                        },
+                    ],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_err(), "Should fail due to total binding limit");
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| matches!(e,
+            ValidationError::InvalidUnrollCount { reason, .. }
+            if reason.contains("Total expanded bindings")
+        )), "Error should mention total expanded bindings limit, got: {:?}", errors);
+    }
+
+    #[test]
+    fn test_total_expanded_bindings_just_under_limit() {
+        // Single unroll(1000) with 10 bindings = 10,000 total (exactly at limit)
+        let mut program = Program::new();
+        let mut bindings: Vec<Binding> = Vec::new();
+        for i in 0..10 {
+            bindings.push(Binding {
+                name: format!("block{}", i),
+                call_name: "Block".to_string(),
+                args: vec![],
+                kwargs: vec![],
+                scope: Scope::Instance { lazy: false },
+                frozen: false,
+                unroll_group: None,
+            });
+        }
+        program.neurons.insert(
+            "JustOk".to_string(),
+            NeuronDef {
+                name: "JustOk".to_string(),
+                params: vec![],
+                inputs: vec![],
+                outputs: vec![],
+                body: NeuronBody::Graph {
+                    context_bindings: vec![],
+                    context_unrolls: vec![ContextUnroll {
+                        aggregate_name: "blocks".to_string(),
+                        count: Value::Int(1000),
+                        bindings,
+                    }],
+                    connections: vec![],
+                },
+                max_cycle_depth: Some(10),
+                doc: None,
+            },
+        );
+
+        let result = expand_unrolls(&mut program);
+        assert!(result.is_ok(), "Should succeed at exactly the limit: {:?}", result);
     }
 
     #[test]
