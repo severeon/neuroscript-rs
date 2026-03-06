@@ -493,11 +493,16 @@ fn process_destination(
                     {
                         // Generate lazy instantiation code
                         let (call_name, args, kwargs) =
-                            gen.lazy_bindings.get(&port_ref.node).unwrap();
+                            gen.lazy_bindings.get(&port_ref.node).ok_or_else(|| {
+                                CodegenError::InvalidConnection(format!(
+                                    "Lazy binding '{}' not found in codegen context",
+                                    port_ref.node
+                                ))
+                            })?;
 
                         let args_str = args
                             .iter()
-                            .map(|v| gen.value_to_python_with_self(v))
+                            .map(|v| value_to_python_with_vars(v, &gen.var_names))
                             .collect::<Vec<_>>()
                             .join(", ");
 
@@ -506,7 +511,9 @@ fn process_destination(
                         } else {
                             let kw: Vec<String> = kwargs
                                 .iter()
-                                .map(|(k, v)| format!("{}={}", k, gen.value_to_python_with_self(v)))
+                                .map(|(k, v)| {
+                                    format!("{}={}", k, value_to_python_with_vars(v, &gen.var_names))
+                                })
                                 .collect();
                             if args.is_empty() {
                                 kw.join(", ")
