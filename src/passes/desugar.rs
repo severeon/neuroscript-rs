@@ -192,6 +192,14 @@ fn desugar_endpoint_wraps(
                         }
                     }
 
+                    if seq_args.is_empty() {
+                        return Err(ValidationError::Custom(format!(
+                            "@wrap({}, ...): pipeline form produced an empty sequence — \
+                             at least one non-port endpoint is required",
+                            wrap_expr.wrapper_name
+                        )));
+                    }
+
                     new_bindings.push(Binding {
                         name: anon_name.clone(),
                         call_name: crate::interfaces::SEQUENTIAL_PSEUDO_NEURON.to_string(),

@@ -147,14 +147,19 @@ pub struct PortRef {
     pub port: String, // "default" if not specified
 }
 
-/// An endpoint in a connection
+/// An endpoint in a connection — either a source or destination of data flow.
+///
+/// Endpoints form the nodes of the dataflow graph inside a composite neuron.
+/// They range from simple port references (`in`, `out`) to inline neuron calls
+/// (`Linear(512, 256)`), pattern matching (`match:`), conditionals (`if/elif/else`),
+/// shape transforms (`=>`), and wrapper annotations (`@wrap`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Endpoint {
-    /// Simple reference: in, out, my_neuron
+    /// Simple reference: `in`, `out`, `my_binding`
     Ref(PortRef),
-    /// Tuple of references: (a, b)
+    /// Tuple of references: `(a, b)` — for implicit fork
     Tuple(Vec<PortRef>),
-    /// Neuron instantiation: Linear(512, 256)
+    /// Neuron instantiation: `Linear(512, 256)`
     Call {
         name: String,
         args: Vec<Value>,
@@ -172,7 +177,11 @@ pub enum Endpoint {
     Wrap(WrapExpr),
 }
 
-/// A connection: source -> destination
+/// A connection in the dataflow graph: `source -> destination`.
+///
+/// Represents a single edge in the neuron's internal graph. Data flows from
+/// the source endpoint to the destination endpoint. Multiple connections form
+/// a pipeline (e.g., `in -> Linear(512, 256) -> ReLU() -> out`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Connection {
     pub source: Endpoint,
@@ -410,7 +419,12 @@ pub struct UnrollGroupInfo {
     pub aggregate_name: String,
 }
 
-/// A binding in a let: or set: block, or context: block
+/// A binding in a `context:` block — instantiates a sub-module.
+///
+/// Bindings define named sub-modules within a composite neuron. They are
+/// instantiated in `__init__` and referenced in `forward()`. Bindings can
+/// be `@lazy` (deferred instantiation), `@static` (class-level shared),
+/// or default eager instance-level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
     pub name: String,
@@ -482,18 +496,29 @@ impl Documentation {
     }
 }
 
-/// A complete neuron definition
+/// A complete neuron definition — the fundamental building block of NeuroScript.
+///
+/// A neuron is either **primitive** (backed by an external implementation like
+/// `nn.Linear`) or **composite** (defined by an internal dataflow graph of
+/// connections between other neurons). Composite neurons may have `context:`
+/// bindings that instantiate sub-modules and `graph:` connections that wire
+/// data flow.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NeuronDef {
+    /// Neuron name (e.g., `TransformerBlock`)
     pub name: String,
+    /// Constructor parameters (e.g., `d_model`, `num_heads`)
     pub params: Vec<Param>,
+    /// Input port declarations with shapes
     pub inputs: Vec<Port>,
+    /// Output port declarations with shapes
     pub outputs: Vec<Port>,
+    /// Body: either a primitive `impl:` reference or a composite `graph:`
     pub body: NeuronBody,
-    /// Allow cycles up to this depth (for unrolled loops/recursion)
-    /// None means no cycles allowed, Some(n) allows cycles up to depth n
+    /// Allow cycles up to this depth (for unrolled loops/recursion).
+    /// `None` means no cycles allowed, `Some(n)` allows cycles up to depth `n`.
     pub max_cycle_depth: Option<usize>,
-    /// Optional documentation from triple-slash comments
+    /// Optional documentation from `///` doc comments
     pub doc: Option<Documentation>,
 }
 
@@ -504,11 +529,18 @@ pub struct UseStmt {
     pub path: Vec<String>,
 }
 
-/// A complete NeuroScript program
+/// A complete NeuroScript program — the top-level compilation unit.
+///
+/// Contains use-imports, module-level `@global` declarations, and a map of
+/// neuron definitions keyed by name. This is the output of the parser and the
+/// input to validation, optimization, and code generation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
+    /// Module-level `use` imports (e.g., `use core,nn/*`)
     pub uses: Vec<UseStmt>,
-    pub globals: Vec<GlobalBinding>, // Module-level globals
+    /// Module-level `@global` declarations (e.g., `@global vocab_size = 50257`)
+    pub globals: Vec<GlobalBinding>,
+    /// All neuron definitions, keyed by name
     pub neurons: HashMap<String, NeuronDef>,
 }
 
@@ -621,7 +653,11 @@ pub struct StdlibRegistry {
     pub primitives: HashMap<String, ImplRef>,
 }
 
-/// Validation errors
+/// Validation errors collected during the validation pass.
+///
+/// The validator collects all errors rather than failing fast, so users see
+/// every problem in a single run. Variants cover missing neurons, shape
+/// mismatches, cycles, arity errors, binding issues, and more.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationError {
     MissingNeuron {

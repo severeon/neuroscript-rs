@@ -2,6 +2,14 @@
 //!
 //! Converts pest parse trees (Pair<Rule>) into NeuroScript IR types.
 //! Handles indentation validation during the conversion.
+//!
+//! # Safety of `.unwrap()` calls
+//!
+//! This module contains many `.unwrap()` calls on `inner.next()` (pest `Pairs` iterators).
+//! These are safe because the PEG grammar (`neuroscript.pest`) guarantees the required
+//! children exist — pest will not produce a successful parse tree missing mandatory
+//! sub-rules. Each `unwrap()` corresponds to a mandatory child in the grammar rule
+//! being destructured.
 
 use pest::iterators::Pair;
 
@@ -1879,7 +1887,11 @@ impl AstBuilder {
                         "*",
                         0,
                     )),
-                    Dim::Inferred => unreachable!("Dim::Inferred is only produced by ReshapeExpr::to_shape(), not by the parser"),
+                    Dim::Inferred => Err(error::expected(
+                        "named dimension, literal, or 'others'",
+                        "inferred dimension",
+                        0,
+                    )),
                     Dim::Variadic(_) => Err(error::expected(
                         "named dimension, literal, or 'others'",
                         first.as_str(),

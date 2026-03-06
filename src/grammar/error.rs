@@ -91,6 +91,12 @@ fn extract_found(message: &str) -> String {
     }
 }
 
+/// Clamp an offset to be within source bounds, preventing miette from
+/// producing garbled output when the offset exceeds the source length.
+pub fn clamp_offset(offset: usize, source_len: usize) -> usize {
+    offset.min(source_len)
+}
+
 /// Create a ParseError for duplicate neuron definitions
 pub fn duplicate_neuron(name: &str, offset: usize) -> ParseError {
     ParseError::DuplicateNeuron {
