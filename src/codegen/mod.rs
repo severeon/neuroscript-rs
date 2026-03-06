@@ -21,8 +21,10 @@ pub mod instantiation;
 pub mod utils;
 
 // Re-exports for public API
-pub use crate::interfaces::CodegenError;
-pub use generator::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
+pub use generator::{
+    generate_pytorch, generate_pytorch_with_options, CodeGenerator, CodegenError, CodegenOptions,
+    ShapeCheckResult,
+};
 
 #[cfg(test)]
 mod tests;

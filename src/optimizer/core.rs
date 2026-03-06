@@ -1,4 +1,5 @@
 use crate::interfaces::*;
+use crate::visitor;
 use std::cmp::Ordering;
 
 /// Optimize match expressions by removing unreachable arms.
@@ -61,45 +62,11 @@ fn optimize_endpoint(endpoint: &mut Endpoint) -> usize {
 /// This is useful for logging optimizer statistics.
 pub fn count_matches(program: &Program) -> usize {
     let mut count = 0;
-    for neuron in program.neurons.values() {
-        if let NeuronBody::Graph { connections, .. } = &neuron.body {
-            for connection in connections {
-                count += count_matches_in_endpoint(&connection.source);
-                count += count_matches_in_endpoint(&connection.destination);
-            }
-        }
-    }
-    count
-}
-
-fn count_matches_in_endpoint(endpoint: &Endpoint) -> usize {
-    let mut count = 0;
-    match endpoint {
-        Endpoint::Match(match_expr) => {
+    visitor::walk_endpoints(program, &mut |endpoint, _| {
+        if matches!(endpoint, Endpoint::Match(_)) {
             count += 1;
-            // Recurse into arms
-            for arm in &match_expr.arms {
-                for pipe_endpoint in &arm.pipeline {
-                    count += count_matches_in_endpoint(pipe_endpoint);
-                }
-            }
         }
-        Endpoint::If(if_expr) => {
-            // Recurse into if/elif branches
-            for branch in &if_expr.branches {
-                for pipe_endpoint in &branch.pipeline {
-                    count += count_matches_in_endpoint(pipe_endpoint);
-                }
-            }
-            // Recurse into else branch
-            if let Some(else_branch) = &if_expr.else_branch {
-                for pipe_endpoint in else_branch {
-                    count += count_matches_in_endpoint(pipe_endpoint);
-                }
-            }
-        }
-        _ => {}
-    }
+    });
     count
 }
 

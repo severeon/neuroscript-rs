@@ -3,8 +3,50 @@
 //! This module provides pure utility functions for value conversion,
 //! naming transformations, call analysis, and dimension checking.
 
+use super::generator::CodeGenerator;
 use crate::interfaces::*;
 use std::collections::HashSet;
+
+/// Python keywords that cannot be used as identifiers.
+const PYTHON_KEYWORDS: &[&str] = &[
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class",
+    "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global",
+    "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return",
+    "try", "while", "with", "yield",
+];
+
+/// Sanitize a string to be a valid Python identifier.
+/// Replaces invalid characters with underscores and prefixes Python keywords.
+///
+/// Currently applied to: reshape dimension names, unroll group/base names.
+/// TODO(CODEGEN-2): Extend to all user-provided strings emitted into Python
+/// (binding names, neuron call names, parameter names in forward.rs and
+/// instantiation.rs, kwargs keys in value_to_python_impl/value_to_python_with_vars).
+/// Those paths currently rely on the parser accepting only valid NeuroScript
+/// identifiers, but a defense-in-depth pass would be safer.
+pub(super) fn sanitize_python_ident(name: &str) -> String {
+    if name.is_empty() {
+        return "_empty".to_string();
+    }
+
+    let mut result = String::with_capacity(name.len());
+    for (i, ch) in name.chars().enumerate() {
+        if i == 0 && ch.is_ascii_digit() {
+            result.push('_');
+            result.push(ch);
+        } else if ch.is_ascii_alphanumeric() || ch == '_' {
+            result.push(ch);
+        } else {
+            result.push('_');
+        }
+    }
+
+    if PYTHON_KEYWORDS.contains(&result.as_str()) {
+        result.push('_');
+    }
+
+    result
+}
 
 /// Map a BinOp to its Python operator string.
 /// When `int_div` is true, `Div` maps to `//` (integer division for dimension arithmetic).
@@ -84,7 +126,7 @@ pub(super) fn value_to_python_with_vars(
 pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
-        Value::Float(f) => f.to_string(),
+        Value::Float(f) => format!("{:?}", f),
         Value::String(s) => format!("\"{}\"", s),
         Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
         Value::Name(n) => n.clone(),

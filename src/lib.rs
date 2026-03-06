@@ -17,28 +17,32 @@
 //! ```
 
 pub mod codegen;
-pub mod contract_resolver;
-pub mod desugar;
 pub mod doc_parser;
 pub mod grammar;
 pub mod interfaces;
-pub mod ir;
 pub mod optimizer;
 #[cfg(feature = "cli")]
 pub mod package;
+pub mod passes;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
-pub mod unroll;
 pub mod validator;
+pub mod visitor;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-// Re-export main IR types (avoiding glob to prevent conflicts)
+// Re-export main IR types explicitly (no glob re-exports)
 pub use codegen::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
-pub use interfaces::*;
-// Shape algebra and stdlib registry accessed via their modules to avoid conflicts
-pub use validator::*;
+pub use interfaces::{
+    BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Endpoint, GlobalBinding,
+    IfBranch, IfExpr, ImplRef, InferenceContext, MatchArm, MatchExpr, MatchPattern, MatchSubject,
+    Documentation, NeuronBody, NeuronDef, NeuronPortContract, Param, ParamType, ParseError, Port, PortRef,
+    Program, ReshapeDim, ReshapeExpr, Scope, Shape, ShapeError, StdlibRegistry,
+    TransformAnnotation, TransformStrategy, UnrollGroupInfo, UseStmt, ValidationError, Value,
+    WrapContent, WrapExpr, SEQUENTIAL_PSEUDO_NEURON,
+};
+pub use validator::Validator;
 
 /// Parse a NeuroScript source string into a Program using the pest grammar.
 pub fn parse(source: &str) -> Result<Program, ParseError> {
@@ -60,11 +64,11 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 pub fn prepare(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Expand unroll constructs first so any @wrap nodes inside
     // unroll templates are flattened into connections
-    unroll::expand_unrolls(program)?;
+    passes::unroll::expand_unrolls(program)?;
 
     // Desugar @wrap annotations into standard Call endpoints
     // Must run after unroll expansion and before validation
-    desugar::desugar_wraps(program)?;
+    passes::desugar::desugar_wraps(program)?;
 
     Ok(())
 }
@@ -106,7 +110,7 @@ pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     }
 
     // Resolve neuron contract match expressions (match(param): ...)
-    contract_resolver::resolve_neuron_contracts(program)?;
+    passes::contract_resolver::resolve_neuron_contracts(program)?;
 
     Ok(())
 }

@@ -533,8 +533,15 @@ fn cmd_parse(file: PathBuf, verbose: bool) -> miette::Result<()> {
 }
 
 /// Validate command: Parse and validate the program
-fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) -> miette::Result<()> {
-    let source = read_source(&file)?;
+/// Parse a source file, load deps/stdlib, and merge into a single program.
+/// Shared by cmd_validate and cmd_compile to avoid duplication.
+fn load_and_prepare_program(
+    file: &Path,
+    no_stdlib: bool,
+    no_deps: bool,
+    verbose: bool,
+) -> miette::Result<neuroscript::Program> {
+    let source = read_source(file)?;
     let user_program = parse(&source).map_err(|e| {
         let source_named = NamedSource::new(file.to_string_lossy(), source);
         miette::Report::from(e).with_source_code(source_named)
@@ -547,10 +554,10 @@ fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) ->
         }
         None
     } else {
-        try_load_dependencies(&file, verbose)
+        try_load_dependencies(file, verbose)
     };
 
-    // Load and merge stdlib if not disabled
+    // Load stdlib if not disabled
     let stdlib_program = if no_stdlib {
         if verbose {
             println!("Skipping stdlib loading (--no-stdlib)");
@@ -586,16 +593,22 @@ fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) ->
     // Merge: deps -> stdlib -> user
     let empty_stdlib = neuroscript::Program::new();
     let stdlib_prog = stdlib_program.unwrap_or(empty_stdlib);
-    let mut program = package::merge_with_deps(dep_ctx.as_ref(), stdlib_prog, user_program)
+    let program = package::merge_with_deps(dep_ctx.as_ref(), stdlib_prog, user_program)
         .map_err(|e| miette::miette!("Dependency merge error: {}", e))?;
 
     if verbose {
         println!(
-            "Parsed {} imports and {} neurons total\n",
+            "Parsed {} imports and {} neurons total",
             program.uses.len(),
             program.neurons.len()
         );
     }
+
+    Ok(program)
+}
+
+fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) -> miette::Result<()> {
+    let mut program = load_and_prepare_program(&file, no_stdlib, no_deps, verbose)?;
 
     if verbose {
         println!("Running validation...");
@@ -637,68 +650,7 @@ fn cmd_compile(
     no_deps: bool,
     bundle: bool,
 ) -> miette::Result<()> {
-    let source = read_source(&file)?;
-    let user_program = parse(&source).map_err(|e| {
-        let source_named = NamedSource::new(file.to_string_lossy(), source);
-        miette::Report::from(e).with_source_code(source_named)
-    })?;
-
-    // Try to load dependencies
-    let dep_ctx = if no_deps {
-        if verbose {
-            println!("Skipping dependency loading (--no-deps)");
-        }
-        None
-    } else {
-        try_load_dependencies(&file, verbose)
-    };
-
-    // Load stdlib if not disabled
-    let stdlib_program = if no_stdlib {
-        if verbose {
-            println!("Skipping stdlib loading (--no-stdlib)");
-        }
-        None
-    } else {
-        if verbose {
-            println!("Loading standard library...");
-        }
-        match stdlib::load_stdlib() {
-            Ok(stdlib_prog) => {
-                if verbose {
-                    println!("✓ Loaded {} stdlib neurons", stdlib_prog.neurons.len());
-                }
-                Some(stdlib_prog)
-            }
-            Err(e) => {
-                eprintln!("Warning: Failed to load stdlib: {}", e);
-                eprintln!("Continuing without stdlib...");
-                None
-            }
-        }
-    };
-
-    // Validate use statements against loaded deps
-    if let Some(ref ctx) = dep_ctx {
-        let use_errors = package::validate_use_stmts(&user_program, ctx);
-        for err in &use_errors {
-            eprintln!("Warning: {}", err);
-        }
-    }
-
-    // Merge: deps -> stdlib -> user
-    let empty_stdlib = neuroscript::Program::new();
-    let stdlib_prog = stdlib_program.unwrap_or(empty_stdlib);
-    let mut program = package::merge_with_deps(dep_ctx.as_ref(), stdlib_prog, user_program)
-        .map_err(|e| miette::miette!("Dependency merge error: {}", e))?;
-
-    if verbose {
-        println!(
-            "Parsed {} imports and {} neurons total",
-            program.uses.len(),
-            program.neurons.len()
-        );
-    }
+    let mut program = load_and_prepare_program(&file, no_stdlib, no_deps, verbose)?;
 
     // Validate
     if let Err(errors) = validate(&mut program) {
@@ -815,21 +767,14 @@ fn cmd_list(
         }
     }
 
-    // If --stdlib, --package, or --available was provided without a file, we're done
-    if list_stdlib || list_package.is_some() || available {
-        if file.is_none() {
-            return Ok(());
-        }
-    }
-
-    // Require a file if no special flags were provided
+    // If no file was provided, either we're done (flag-only mode) or it's an error
     let file = match file {
         Some(f) => f,
         None => {
-            if !list_stdlib && list_package.is_none() && !available {
-                return Err(miette::miette!("a file argument is required unless --stdlib, --package, or --available is used"));
+            if list_stdlib || list_package.is_some() || available {
+                return Ok(());
             }
-            return Ok(());
+            return Err(miette::miette!("a file argument is required unless --stdlib, --package, or --available is used"));
         }
     };
 
@@ -1296,7 +1241,7 @@ fn try_load_dependencies_from_cwd(verbose: bool) -> Option<DependencyContext> {
 // ============================================================================
 
 /// Read source file with error handling
-fn read_source(file: &PathBuf) -> miette::Result<String> {
+fn read_source(file: &Path) -> miette::Result<String> {
     fs::read_to_string(file)
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to read {}", file.display()))

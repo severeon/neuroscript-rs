@@ -103,6 +103,11 @@ fn collect_unresolved_contracts(
     depth: usize,
 ) {
     if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
+        errors.push(ValidationError::Custom(format!(
+            "Contract resolution depth limit ({}) exceeded in neuron '{}'. \
+             This may indicate deeply nested or circular contract definitions.",
+            MAX_CONTRACT_RESOLUTION_DEPTH, neuron_name
+        )));
         return;
     }
     match endpoint {

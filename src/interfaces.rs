@@ -5,8 +5,42 @@
 
 use miette::Diagnostic;
 use miette::SourceSpan;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::cell::Cell;
 use thiserror::Error;
+
+/// Global ID generator for unique endpoint IDs across parsing and IR passes.
+///
+/// Counter for generating unique endpoint IDs within a compilation.
+/// Uses interior mutability via Cell since the compiler is single-threaded.
+pub(crate) struct IdGenerator {
+    next: Cell<usize>,
+}
+
+impl IdGenerator {
+    pub fn new() -> Self {
+        Self {
+            next: Cell::new(0),
+        }
+    }
+
+    pub fn next_id(&self) -> usize {
+        let id = self.next.get();
+        self.next.set(id + 1);
+        id
+    }
+
+    /// Return the current counter value (for passing to later passes).
+    pub fn current(&self) -> usize {
+        self.next.get()
+    }
+}
+
+impl Default for IdGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// A dimension in a tensor shape
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -72,75 +106,6 @@ pub struct Shape {
     pub dims: Vec<Dim>,
 }
 
-#[derive(Debug)]
-pub enum CodegenError {
-    NeuronNotFound(String),
-    InvalidConnection(String),
-    UnsupportedFeature(String),
-}
-
-/// Result of shape check generation containing condition and dimension bindings
-#[derive(Debug)]
-pub struct ShapeCheckResult {
-    /// Boolean condition for runtime shape checking (e.g., "x.ndim == 2 and x.shape[1] == 512")
-    pub condition: String,
-    /// Dimension binding statements (e.g., vec!["d = x.shape[1]"])
-    /// These should be emitted before the pipeline code in a match arm
-    pub bindings: Vec<String>,
-    /// Guard expression (if present and uses captured dimensions, should be checked after bindings)
-    pub guard_condition: Option<String>,
-}
-
-/// Code generator state
-pub struct CodeGenerator<'a> {
-    pub program: &'a Program,
-    pub registry: StdlibRegistry,
-
-    /// Counter for generating unique node IDs
-    pub node_counter: usize,
-
-    /// Set of primitive neurons used (for imports)
-    pub used_primitives: HashSet<String>,
-
-    /// Mapping from IR endpoints to Python variable names
-    pub var_names: HashMap<String, String>,
-
-    /// Mapping from Call endpoint keys to module instance names
-    pub call_to_module: HashMap<String, String>,
-
-    /// Parameters of the current neuron being generated
-    pub current_neuron_params: HashSet<String>,
-
-    /// Names of parameters with `: Neuron` type annotation (higher-order neuron params)
-    pub neuron_typed_params: HashSet<String>,
-
-    /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
-    /// Used to resolve dimension references in match arm pipelines
-    pub binding_context: HashMap<String, String>,
-
-    /// Lazy bindings from let: blocks (name -> (call_name, args, kwargs))
-    pub lazy_bindings: HashMap<String, LazyBinding>,
-
-    /// Shape inference context (resolved dimensions and node output shapes)
-    /// Used for emitting shape assertions and documentation
-    pub inference_ctx: InferenceContext,
-
-    /// Mapping from binding name to the neuron it calls (e.g., "block_0" -> "TransformerBlock")
-    /// Used to look up output shapes for bound module calls
-    pub binding_to_call_name: HashMap<String, String>,
-
-    /// Mapping from binding name to its unroll group info
-    /// Used to generate nn.ModuleList and for loops
-    pub binding_to_unroll_group: HashMap<String, UnrollGroupInfo>,
-
-    /// Mapping from aggregate name to (base_name, count, is_static) for direct aggregate references in graph
-    /// is_static=true means weight-sharing: one class-level instance called N times
-    pub aggregate_to_group: HashMap<String, (String, Value, bool)>,
-
-    /// Last shape comment emitted, used to suppress duplicates
-    pub last_emitted_shape: Option<String>,
-}
-
 /// An input or output port of a neuron
 #[derive(Debug, Clone, PartialEq)]
 pub struct Port {
@@ -177,14 +142,19 @@ pub struct PortRef {
     pub port: String, // "default" if not specified
 }
 
-/// An endpoint in a connection
+/// An endpoint in a connection — either a source or destination of data flow.
+///
+/// Endpoints form the nodes of the dataflow graph inside a composite neuron.
+/// They range from simple port references (`in`, `out`) to inline neuron calls
+/// (`Linear(512, 256)`), pattern matching (`match:`), conditionals (`if/elif/else`),
+/// shape transforms (`=>`), and wrapper annotations (`@wrap`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Endpoint {
-    /// Simple reference: in, out, my_neuron
+    /// Simple reference: `in`, `out`, `my_binding`
     Ref(PortRef),
-    /// Tuple of references: (a, b)
+    /// Tuple of references: `(a, b)` — for implicit fork
     Tuple(Vec<PortRef>),
-    /// Neuron instantiation: Linear(512, 256)
+    /// Neuron instantiation: `Linear(512, 256)`
     Call {
         name: String,
         args: Vec<Value>,
@@ -202,7 +172,11 @@ pub enum Endpoint {
     Wrap(WrapExpr),
 }
 
-/// A connection: source -> destination
+/// A connection in the dataflow graph: `source -> destination`.
+///
+/// Represents a single edge in the neuron's internal graph. Data flows from
+/// the source endpoint to the destination endpoint. Multiple connections form
+/// a pipeline (e.g., `in -> Linear(512, 256) -> ReLU() -> out`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Connection {
     pub source: Endpoint,
@@ -426,7 +400,6 @@ pub enum Scope {
 pub(crate) type Kwarg = (String, Value);
 pub(crate) type CallArgs = (Vec<Value>, Vec<Kwarg>);
 pub(crate) type CallExpr = (String, Vec<Value>, Vec<Kwarg>);
-type LazyBinding = (String, Vec<Value>, Vec<Kwarg>);
 
 /// Metadata for bindings that were created by unroll expansion
 #[derive(Debug, Clone, PartialEq)]
@@ -441,7 +414,12 @@ pub struct UnrollGroupInfo {
     pub aggregate_name: String,
 }
 
-/// A binding in a let: or set: block, or context: block
+/// A binding in a `context:` block — instantiates a sub-module.
+///
+/// Bindings define named sub-modules within a composite neuron. They are
+/// instantiated in `__init__` and referenced in `forward()`. Bindings can
+/// be `@lazy` (deferred instantiation), `@static` (class-level shared),
+/// or default eager instance-level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
     pub name: String,
@@ -513,18 +491,29 @@ impl Documentation {
     }
 }
 
-/// A complete neuron definition
+/// A complete neuron definition — the fundamental building block of NeuroScript.
+///
+/// A neuron is either **primitive** (backed by an external implementation like
+/// `nn.Linear`) or **composite** (defined by an internal dataflow graph of
+/// connections between other neurons). Composite neurons may have `context:`
+/// bindings that instantiate sub-modules and `graph:` connections that wire
+/// data flow.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NeuronDef {
+    /// Neuron name (e.g., `TransformerBlock`)
     pub name: String,
+    /// Constructor parameters (e.g., `d_model`, `num_heads`)
     pub params: Vec<Param>,
+    /// Input port declarations with shapes
     pub inputs: Vec<Port>,
+    /// Output port declarations with shapes
     pub outputs: Vec<Port>,
+    /// Body: either a primitive `impl:` reference or a composite `graph:`
     pub body: NeuronBody,
-    /// Allow cycles up to this depth (for unrolled loops/recursion)
-    /// None means no cycles allowed, Some(n) allows cycles up to depth n
+    /// Allow cycles up to this depth (for unrolled loops/recursion).
+    /// `None` means no cycles allowed, `Some(n)` allows cycles up to depth `n`.
     pub max_cycle_depth: Option<usize>,
-    /// Optional documentation from triple-slash comments
+    /// Optional documentation from `///` doc comments
     pub doc: Option<Documentation>,
 }
 
@@ -535,11 +524,18 @@ pub struct UseStmt {
     pub path: Vec<String>,
 }
 
-/// A complete NeuroScript program
+/// A complete NeuroScript program — the top-level compilation unit.
+///
+/// Contains use-imports, module-level `@global` declarations, and a map of
+/// neuron definitions keyed by name. This is the output of the parser and the
+/// input to validation, optimization, and code generation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
+    /// Module-level `use` imports (e.g., `use core,nn/*`)
     pub uses: Vec<UseStmt>,
-    pub globals: Vec<GlobalBinding>, // Module-level globals
+    /// Module-level `@global` declarations (e.g., `@global vocab_size = 50257`)
+    pub globals: Vec<GlobalBinding>,
+    /// All neuron definitions, keyed by name
     pub neurons: HashMap<String, NeuronDef>,
 }
 
@@ -598,7 +594,7 @@ pub struct InferenceContext {
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum ShapeError {
     #[error("Shape mismatch: expected {expected}, got {got}")]
     Mismatch {
@@ -652,7 +648,11 @@ pub struct StdlibRegistry {
     pub primitives: HashMap<String, ImplRef>,
 }
 
-/// Validation errors
+/// Validation errors collected during the validation pass.
+///
+/// The validator collects all errors rather than failing fast, so users see
+/// every problem in a single run. Variants cover missing neurons, shape
+/// mismatches, cycles, arity errors, binding issues, and more.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationError {
     MissingNeuron {
@@ -868,5 +868,497 @@ impl std::fmt::Display for ValidationError {
                 write!(f, "Import error: {}", message)
             }
         }
+    }
+}
+
+// === Convenience constructors ===
+
+impl Shape {
+    pub fn scalar() -> Self {
+        Shape { dims: vec![] }
+    }
+
+    pub fn new(dims: Vec<Dim>) -> Self {
+        Shape { dims }
+    }
+}
+
+impl PortRef {
+    pub fn new(node: impl Into<String>) -> Self {
+        PortRef {
+            node: node.into(),
+            port: "default".into(),
+        }
+    }
+
+    pub fn with_port(node: impl Into<String>, port: impl Into<String>) -> Self {
+        PortRef {
+            node: node.into(),
+            port: port.into(),
+        }
+    }
+}
+
+impl NeuronDef {
+    pub fn is_primitive(&self) -> bool {
+        matches!(self.body, NeuronBody::Primitive(_))
+    }
+
+    pub fn is_composite(&self) -> bool {
+        matches!(self.body, NeuronBody::Graph { .. })
+    }
+}
+
+impl Program {
+    pub fn new() -> Self {
+        Program {
+            uses: vec![],
+            globals: vec![],
+            neurons: HashMap::new(),
+        }
+    }
+}
+
+impl Default for Program {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// === Display implementations for debugging ===
+
+impl std::fmt::Display for Dim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Dim::Literal(n) => write!(f, "{}", n),
+            Dim::Named(s) => write!(f, "{}", s),
+            Dim::Wildcard => write!(f, "*"),
+            Dim::Inferred => write!(f, "..."),
+            Dim::Variadic(s) => write!(f, "*{}", s),
+            Dim::Expr(e) => write!(f, "({} {} {})", e.left, e.op, e.right),
+            Dim::Global(s) => write!(f, "@global {}", s),
+        }
+    }
+}
+
+impl std::fmt::Display for BinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinOp::Add => write!(f, "+"),
+            BinOp::Sub => write!(f, "-"),
+            BinOp::Mul => write!(f, "*"),
+            BinOp::Div => write!(f, "/"),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Le => write!(f, "<="),
+            BinOp::Ge => write!(f, ">="),
+            BinOp::Eq => write!(f, "=="),
+            BinOp::Ne => write!(f, "!="),
+        }
+    }
+}
+
+impl std::fmt::Display for Shape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for (i, dim) in self.dims.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", dim)?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Int(n) => write!(f, "{}", n),
+            Value::Float(n) => write!(f, "{:?}", n),
+            Value::String(s) => write!(f, "`{}`", s),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Name(s) => write!(f, "{}", s),
+            Value::Global(s) => write!(f, "@global {}", s),
+            Value::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+            Value::Call { name, args, kwargs } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                for (i, (k, v)) in kwargs.iter().enumerate() {
+                    if !args.is_empty() || i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", k, v)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for PortRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.port == "default" {
+            write!(f, "{}", self.node)
+        } else {
+            write!(f, "{}.{}", self.node, self.port)
+        }
+    }
+}
+
+impl std::fmt::Display for Endpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Endpoint::Ref(p) => write!(f, "{}", p),
+            Endpoint::Tuple(ps) => {
+                write!(f, "(")?;
+                for (i, p) in ps.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", p)?;
+                }
+                write!(f, ")")
+            }
+            Endpoint::Call {
+                name,
+                args,
+                kwargs,
+                id: _,
+                frozen: _,
+            } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                for (i, (k, v)) in kwargs.iter().enumerate() {
+                    if !args.is_empty() || i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", k, v)?;
+                }
+                write!(f, ")")
+            }
+            Endpoint::Match(m) => write!(f, "{}", m),
+            Endpoint::If(expr) => write!(f, "{}", expr),
+            Endpoint::Reshape(r) => write!(f, "{}", r),
+            Endpoint::Wrap(w) => write!(f, "{}", w),
+        }
+    }
+}
+
+impl std::fmt::Display for IfExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, branch) in self.branches.iter().enumerate() {
+            if i == 0 {
+                write!(f, "if {}: ", branch.condition)?;
+            } else {
+                write!(f, "elif {}: ", branch.condition)?;
+            }
+            for (j, e) in branch.pipeline.iter().enumerate() {
+                if j > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+        }
+        if let Some(else_branch) = &self.else_branch {
+            write!(f, " else: ")?;
+            for (j, e) in else_branch.iter().enumerate() {
+                if j > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for WrapExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@wrap({}", self.wrapper_name)?;
+        for arg in &self.wrapper_args {
+            write!(f, ", {}", arg)?;
+        }
+        for (k, v) in &self.wrapper_kwargs {
+            write!(f, ", {}={}", k, v)?;
+        }
+        write!(f, "): ")?;
+        match &self.content {
+            WrapContent::Ref(name) => write!(f, "{}", name),
+            WrapContent::Pipeline(pipeline) => {
+                write!(f, "-> ")?;
+                for (i, ep) in pipeline.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " -> ")?;
+                    }
+                    write!(f, "{}", ep)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for MatchPattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MatchPattern::Shape(s) => write!(f, "{}", s),
+            MatchPattern::NeuronContract(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl std::fmt::Display for NeuronPortContract {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, (name, shape)) in self.input_ports.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            if name == "default" {
+                write!(f, "in {}", shape)?;
+            } else {
+                write!(f, "in {} {}", name, shape)?;
+            }
+        }
+        write!(f, " -> ")?;
+        for (i, (name, shape)) in self.output_ports.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            if name == "default" {
+                write!(f, "out {}", shape)?;
+            } else {
+                write!(f, "out {} {}", name, shape)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for MatchSubject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MatchSubject::Implicit => write!(f, ""),
+            MatchSubject::Named(name) => write!(f, "({})", name),
+        }
+    }
+}
+
+impl std::fmt::Display for MatchExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.subject {
+            MatchSubject::Implicit => writeln!(f, "match: ->")?,
+            MatchSubject::Named(name) => writeln!(f, "match({}):", name)?,
+        }
+        for arm in &self.arms {
+            write!(f, "    {} ", arm.pattern)?;
+            if let Some(g) = &arm.guard {
+                write!(f, "where {} ", g)?;
+            }
+            write!(f, ": ")?;
+            for (i, e) in arm.pipeline.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " -> ")?;
+                }
+                write!(f, "{}", e)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for ContextUnroll {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{} = unroll({}):", self.aggregate_name, self.count)?;
+        for b in &self.bindings {
+            writeln!(f, "      {}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let arrow = match &self.destination {
+            Endpoint::Reshape(_) => "=>",
+            _ => "->",
+        };
+        write!(f, "{} {} {}", self.source, arrow, self.destination)
+    }
+}
+
+impl std::fmt::Display for ReshapeDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReshapeDim::Named(name) => write!(f, "{}", name),
+            ReshapeDim::Literal(n) => write!(f, "{}", n),
+            ReshapeDim::Binding { name, expr } => write!(f, "{}={}", name, expr),
+            ReshapeDim::Others => write!(f, "others"),
+            ReshapeDim::Expr(expr) => write!(f, "({} {} {})", expr.left, expr.op, expr.right),
+        }
+    }
+}
+
+impl std::fmt::Display for ReshapeExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref ann) = self.annotation {
+            write!(f, "{} ", ann)?;
+        }
+        write!(f, "[")?;
+        for (i, dim) in self.dims.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", dim)?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl std::fmt::Display for TransformAnnotation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformAnnotation::Reduce(s) => write!(f, "@reduce({})", s),
+            TransformAnnotation::Repeat(s) => write!(f, "@repeat({})", s),
+        }
+    }
+}
+
+impl std::fmt::Display for TransformStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransformStrategy::Intrinsic(name) => write!(f, "{}", name),
+            TransformStrategy::Neuron { name, args, kwargs } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                for (i, (k, v)) in kwargs.iter().enumerate() {
+                    if !args.is_empty() || i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", k, v)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Scope::Instance { lazy: false } => Ok(()),
+            Scope::Instance { lazy: true } => write!(f, "@lazy "),
+            Scope::Static => write!(f, "@static "),
+            Scope::Global => write!(f, "@global "),
+        }
+    }
+}
+
+impl std::fmt::Display for Binding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{} = {}(", self.scope, self.name, self.call_name)?;
+        for (i, arg) in self.args.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", arg)?;
+        }
+        for (i, (k, v)) in self.kwargs.iter().enumerate() {
+            if !self.args.is_empty() || i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}={}", k, v)?;
+        }
+        write!(f, ")")
+    }
+}
+
+impl std::fmt::Display for GlobalBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@global {} = {}", self.name, self.value)
+    }
+}
+
+impl std::fmt::Display for NeuronDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "neuron {}(", self.name)?;
+        for (i, p) in self.params.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", p.name)?;
+            if let Some(ParamType::Neuron) = &p.type_annotation {
+                write!(f, ": Neuron")?;
+            }
+            if let Some(d) = &p.default {
+                write!(f, "={}", d)?;
+            }
+        }
+        writeln!(f, "):")?;
+
+        match &self.body {
+            NeuronBody::Primitive(imp) => {
+                writeln!(f, "  impl: {:?}", imp)?;
+            }
+            NeuronBody::Graph {
+                context_bindings,
+                context_unrolls,
+                connections,
+            } => {
+                if !context_bindings.is_empty() || !context_unrolls.is_empty() {
+                    writeln!(f, "  context:")?;
+                    for b in context_bindings {
+                        writeln!(f, "    {}", b)?;
+                    }
+                    for u in context_unrolls {
+                        write!(f, "    {}", u)?;
+                    }
+                }
+                writeln!(f, "  graph:")?;
+                for c in connections {
+                    writeln!(f, "    {}", c)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for u in &self.uses {
+            writeln!(f, "use {}, {}/*", u.source, u.path.join("/"))?;
+        }
+        if !self.uses.is_empty() {
+            writeln!(f)?;
+        }
+
+        for g in &self.globals {
+            writeln!(f, "{}", g)?;
+        }
+        if !self.globals.is_empty() {
+            writeln!(f)?;
+        }
+
+        for n in self.neurons.values() {
+            writeln!(f, "{}", n)?;
+        }
+        Ok(())
     }
 }

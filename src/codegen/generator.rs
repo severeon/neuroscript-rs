@@ -5,8 +5,86 @@
 
 use super::{forward, instantiation};
 use crate::interfaces::*;
-use std::collections::HashSet;
+use miette::Diagnostic;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+use thiserror::Error;
+
+/// Codegen error type
+#[derive(Debug, Error, Diagnostic)]
+pub enum CodegenError {
+    #[error("Neuron '{0}' not found")]
+    NeuronNotFound(String),
+    #[error("Invalid connection: {0}")]
+    InvalidConnection(String),
+    #[error("Unsupported feature: {0}")]
+    UnsupportedFeature(String),
+}
+
+/// Result of shape check generation containing condition and dimension bindings
+#[derive(Debug)]
+pub struct ShapeCheckResult {
+    /// Boolean condition for runtime shape checking (e.g., "x.ndim == 2 and x.shape[1] == 512")
+    pub condition: String,
+    /// Dimension binding statements (e.g., vec!["d = x.shape[1]"])
+    /// These should be emitted before the pipeline code in a match arm
+    pub bindings: Vec<String>,
+    /// Guard expression (if present and uses captured dimensions, should be checked after bindings)
+    pub guard_condition: Option<String>,
+}
+
+/// Lazy binding: (call_name, args, kwargs)
+pub(crate) type LazyBinding = (String, Vec<Value>, Vec<Kwarg>);
+
+/// Code generator state
+pub struct CodeGenerator<'a> {
+    pub program: &'a Program,
+    pub registry: StdlibRegistry,
+
+    /// Counter for generating unique node IDs
+    pub node_counter: usize,
+
+    /// Set of primitive neurons used (for imports)
+    pub used_primitives: HashSet<String>,
+
+    /// Mapping from IR endpoints to Python variable names
+    pub var_names: HashMap<String, String>,
+
+    /// Mapping from Call endpoint keys to module instance names
+    pub call_to_module: HashMap<String, String>,
+
+    /// Parameters of the current neuron being generated
+    pub current_neuron_params: HashSet<String>,
+
+    /// Names of parameters with `: Neuron` type annotation (higher-order neuron params)
+    pub neuron_typed_params: HashSet<String>,
+
+    /// Dimension bindings from match pattern captures (e.g., "d" -> "x.shape[1]")
+    /// Used to resolve dimension references in match arm pipelines
+    pub binding_context: HashMap<String, String>,
+
+    /// Lazy bindings from let: blocks (name -> (call_name, args, kwargs))
+    pub lazy_bindings: HashMap<String, LazyBinding>,
+
+    /// Shape inference context (resolved dimensions and node output shapes)
+    /// Used for emitting shape assertions and documentation
+    pub inference_ctx: InferenceContext,
+
+    /// Mapping from binding name to the neuron it calls (e.g., "block_0" -> "TransformerBlock")
+    /// Used to look up output shapes for bound module calls
+    pub binding_to_call_name: HashMap<String, String>,
+
+    /// Mapping from binding name to its unroll group info
+    /// Used to generate nn.ModuleList and for loops
+    pub binding_to_unroll_group: HashMap<String, UnrollGroupInfo>,
+
+    /// Mapping from aggregate name to (base_name, count, is_static) for direct aggregate references in graph
+    /// is_static=true means weight-sharing: one class-level instance called N times
+    pub aggregate_to_group: HashMap<String, (String, Value, bool)>,
+
+    /// Last shape comment emitted, used to suppress duplicates
+    pub last_emitted_shape: Option<String>,
+}
 
 /// Declare embedded primitive modules: generates constants and a lookup function.
 ///
@@ -110,17 +188,6 @@ impl Default for CodegenOptions {
     }
 }
 
-impl std::fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CodegenError::NeuronNotFound(name) => write!(f, "Neuron '{}' not found", name),
-            CodegenError::InvalidConnection(msg) => write!(f, "Invalid connection: {}", msg),
-            CodegenError::UnsupportedFeature(msg) => write!(f, "Unsupported feature: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for CodegenError {}
 
 impl<'a> CodeGenerator<'a> {
     /// Create a new code generator with an optional inference context

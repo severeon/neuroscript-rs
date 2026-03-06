@@ -139,5 +139,11 @@ pub(super) fn validate_bindings(
         }
     }
 
+    // NOTE: Mutual @lazy recursion detection requires cross-neuron call graph
+    // analysis (A calls B, B calls A across different neuron definitions), which
+    // is not available at this scope. Within a single neuron's bindings, two
+    // @lazy bindings that both call the same neuron are just independent
+    // self-recursive bindings, not mutual recursion.
+
     errors
 }
