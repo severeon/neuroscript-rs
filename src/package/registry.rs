@@ -159,20 +159,20 @@ impl Registry {
                             });
                         }
                         if let Some(false) = report.signature_valid {
-                            eprintln!(
-                                "Warning: Signature verification failed for package '{}'",
-                                name
-                            );
+                            return Err(RegistryError::SecurityVerificationFailed {
+                                name: name.to_string(),
+                                reason: "Ed25519 signature verification failed".to_string(),
+                            });
                         }
                         if report.signature_valid == Some(true) {
                             println!("  ✓ Signature verified for '{}'", name);
                         }
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Could not verify package '{}': {}",
-                            name, e
-                        );
+                        return Err(RegistryError::SecurityVerificationFailed {
+                            name: name.to_string(),
+                            reason: format!("verification error: {}", e),
+                        });
                     }
                 }
             }

@@ -139,11 +139,11 @@ impl Resolver {
         req: &VersionReq,
         visited: &mut HashSet<String>,
     ) -> Result<(), ResolverError> {
-        // Check for circular dependencies
+        // Check for circular dependencies — build full cycle path
         if visited.contains(name) {
-            return Err(ResolverError::CircularDependency {
-                cycle: vec![name.to_string()],
-            });
+            let mut cycle: Vec<String> = visited.iter().cloned().collect();
+            cycle.push(name.to_string());
+            return Err(ResolverError::CircularDependency { cycle });
         }
 
         // Check if already resolved

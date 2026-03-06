@@ -105,7 +105,17 @@ impl<'de> Deserialize<'de> for PackageSource {
         let s = String::deserialize(deserializer)?;
 
         if let Some(rest) = s.strip_prefix("path+") {
-            Ok(PackageSource::Path(PathBuf::from(rest)))
+            let path = PathBuf::from(rest);
+            // Reject paths with '..' components to prevent path traversal
+            for component in path.components() {
+                if matches!(component, std::path::Component::ParentDir) {
+                    return Err(serde::de::Error::custom(format!(
+                        "Path dependency '{}' contains '..' components, which is not allowed for security",
+                        rest
+                    )));
+                }
+            }
+            Ok(PackageSource::Path(path))
         } else if let Some(rest) = s.strip_prefix("git+") {
             // Parse "git+url?rev=hash"
             if let Some((url, query)) = rest.split_once('?') {
@@ -128,7 +138,17 @@ impl<'de> Deserialize<'de> for PackageSource {
         } else {
             // Legacy: bare path (no prefix) — treat as path if it looks like a filesystem path
             if s.starts_with('/') || s.starts_with('.') || s.contains('/') && !s.contains("://") {
-                Ok(PackageSource::Path(PathBuf::from(&s)))
+                let path = PathBuf::from(&s);
+                // Reject paths with '..' components to prevent path traversal
+                for component in path.components() {
+                    if matches!(component, std::path::Component::ParentDir) {
+                        return Err(serde::de::Error::custom(format!(
+                            "Path dependency '{}' contains '..' components, which is not allowed for security",
+                            s
+                        )));
+                    }
+                }
+                Ok(PackageSource::Path(path))
             } else {
                 // Assume registry
                 Ok(PackageSource::Registry(s))

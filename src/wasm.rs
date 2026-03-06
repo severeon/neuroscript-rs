@@ -32,6 +32,7 @@ pub struct AnalysisResult {
     pub match_expressions: Vec<MatchExprInfo>,
 }
 
+/// Information about a single neuron definition
 #[derive(Serialize, Deserialize)]
 pub struct NeuronInfo {
     pub name: String,
@@ -42,30 +43,35 @@ pub struct NeuronInfo {
     pub connections: Vec<ConnectionInfo>,
 }
 
+/// Parameter name and optional default value
 #[derive(Serialize, Deserialize)]
 pub struct ParamInfo {
     pub name: String,
     pub default_value: Option<String>,
 }
 
+/// Port name and shape string
 #[derive(Serialize, Deserialize)]
 pub struct PortInfo {
     pub name: String,
     pub shape: String,
 }
 
+/// Source-to-destination connection in the dataflow graph
 #[derive(Serialize, Deserialize)]
 pub struct ConnectionInfo {
     pub source: String,
     pub destination: String,
 }
 
+/// Match expression with its arms for analysis output
 #[derive(Serialize, Deserialize)]
 pub struct MatchExprInfo {
     pub neuron: String,
     pub arms: Vec<MatchArmInfo>,
 }
 
+/// A single match arm with pattern, guard, and reachability
 #[derive(Serialize, Deserialize)]
 pub struct MatchArmInfo {
     pub pattern: String,
