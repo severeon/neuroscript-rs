@@ -636,7 +636,15 @@ impl Validator {
 
         // Check for pattern shadowing and mark unreachable arms
         for i in 0..match_expr.arms.len() {
+            // An unreachable arm cannot shadow anything — skip it
+            if !match_expr.arms[i].is_reachable {
+                continue;
+            }
             for j in (i + 1)..match_expr.arms.len() {
+                // Already marked unreachable by an earlier arm — skip
+                if !match_expr.arms[j].is_reachable {
+                    continue;
+                }
                 // Check if arm i subsumes arm j (making j unreachable)
                 // A pattern with a guard does NOT subsume any pattern (guard can fail)
                 let subsumes = {
