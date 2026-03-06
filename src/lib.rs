@@ -20,7 +20,6 @@ pub mod codegen;
 pub mod doc_parser;
 pub mod grammar;
 pub mod interfaces;
-pub mod ir;
 pub mod optimizer;
 #[cfg(feature = "cli")]
 pub mod package;

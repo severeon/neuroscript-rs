@@ -4,6 +4,7 @@
 //! including deduplication of calls and lazy instantiation for modules with
 //! captured dimensions.
 
+use super::generator::{CodeGenerator, CodegenError};
 use super::utils::*;
 use crate::interfaces::Kwarg;
 use crate::interfaces::*;

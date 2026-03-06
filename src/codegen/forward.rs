@@ -4,6 +4,7 @@
 //! It handles all endpoint types including calls, match expressions, tuple unpacking,
 //! and references.
 
+use super::generator::{CodeGenerator, CodegenError, ShapeCheckResult};
 use super::utils::*;
 use crate::interfaces::*;
 use std::collections::{HashMap, HashSet};

@@ -3,6 +3,7 @@
 //! This module provides pure utility functions for value conversion,
 //! naming transformations, call analysis, and dimension checking.
 
+use super::generator::CodeGenerator;
 use crate::interfaces::*;
 use std::collections::HashSet;
 
