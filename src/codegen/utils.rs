@@ -21,8 +21,9 @@ const PYTHON_KEYWORDS: &[&str] = &[
 /// Currently applied to: reshape dimension names, unroll group/base names.
 /// TODO(CODEGEN-2): Extend to all user-provided strings emitted into Python
 /// (binding names, neuron call names, parameter names in forward.rs and
-/// instantiation.rs). Those paths currently rely on the parser accepting only
-/// valid NeuroScript identifiers, but a defense-in-depth pass would be safer.
+/// instantiation.rs, kwargs keys in value_to_python_impl/value_to_python_with_vars).
+/// Those paths currently rely on the parser accepting only valid NeuroScript
+/// identifiers, but a defense-in-depth pass would be safer.
 pub(super) fn sanitize_python_ident(name: &str) -> String {
     if name.is_empty() {
         return "_empty".to_string();
@@ -125,7 +126,7 @@ pub(super) fn value_to_python_with_vars(
 pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
-        Value::Float(f) => f.to_string(),
+        Value::Float(f) => format!("{:?}", f),
         Value::String(s) => format!("\"{}\"", s),
         Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
         Value::Name(n) => n.clone(),
