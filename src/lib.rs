@@ -32,11 +32,17 @@ pub mod visitor;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-// Re-export main IR types (avoiding glob to prevent conflicts)
+// Re-export main IR types explicitly (no glob re-exports)
 pub use codegen::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
-pub use interfaces::*;
-// Shape algebra and stdlib registry accessed via their modules to avoid conflicts
-pub use validator::*;
+pub use interfaces::{
+    BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Endpoint, GlobalBinding, IdGenerator,
+    IfBranch, IfExpr, ImplRef, InferenceContext, MatchArm, MatchExpr, MatchPattern, MatchSubject,
+    Documentation, NeuronBody, NeuronDef, NeuronPortContract, Param, ParamType, ParseError, Port, PortRef,
+    Program, ReshapeDim, ReshapeExpr, Scope, Shape, ShapeError, StdlibRegistry,
+    TransformAnnotation, TransformStrategy, UnrollGroupInfo, UseStmt, ValidationError, Value,
+    WrapContent, WrapExpr, SEQUENTIAL_PSEUDO_NEURON,
+};
+pub use validator::Validator;
 
 /// Parse a NeuroScript source string into a Program using the pest grammar.
 pub fn parse(source: &str) -> Result<Program, ParseError> {

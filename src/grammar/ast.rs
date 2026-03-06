@@ -23,9 +23,7 @@ use crate::interfaces::{
     ReshapeDim, ReshapeExpr, Shape, TransformAnnotation, TransformStrategy, UseStmt, Value,
     WrapContent, WrapExpr,
 };
-use crate::CallArgs;
-use crate::CallExpr;
-use crate::Kwarg;
+use crate::interfaces::{CallArgs, CallExpr, Kwarg};
 
 /// AST builder state
 pub struct AstBuilder {
