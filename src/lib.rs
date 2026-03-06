@@ -17,8 +17,6 @@
 //! ```
 
 pub mod codegen;
-pub mod contract_resolver;
-pub mod desugar;
 pub mod doc_parser;
 pub mod grammar;
 pub mod interfaces;
@@ -26,10 +24,10 @@ pub mod ir;
 pub mod optimizer;
 #[cfg(feature = "cli")]
 pub mod package;
+pub mod passes;
 pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
-pub mod unroll;
 pub mod validator;
 #[cfg(feature = "wasm")]
 pub mod wasm;
@@ -60,11 +58,11 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 pub fn prepare(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Expand unroll constructs first so any @wrap nodes inside
     // unroll templates are flattened into connections
-    unroll::expand_unrolls(program)?;
+    passes::unroll::expand_unrolls(program)?;
 
     // Desugar @wrap annotations into standard Call endpoints
     // Must run after unroll expansion and before validation
-    desugar::desugar_wraps(program)?;
+    passes::desugar::desugar_wraps(program)?;
 
     Ok(())
 }
@@ -106,7 +104,7 @@ pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     }
 
     // Resolve neuron contract match expressions (match(param): ...)
-    contract_resolver::resolve_neuron_contracts(program)?;
+    passes::contract_resolver::resolve_neuron_contracts(program)?;
 
     Ok(())
 }
