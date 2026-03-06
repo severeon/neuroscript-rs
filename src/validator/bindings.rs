@@ -139,50 +139,11 @@ pub(super) fn validate_bindings(
         }
     }
 
-    // Check for mutual @lazy recursion cycles across bindings
-    // Build a call graph: binding_name -> set of neurons it calls
-    let lazy_bindings: Vec<(&str, &str)> = context_bindings
-        .iter()
-        .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
-        .map(|b| (b.name.as_str(), b.call_name.as_str()))
-        .collect();
-
-    if lazy_bindings.len() > 1 {
-        // Build a graph: for each lazy binding, what other lazy bindings does its callee reference?
-        // If binding A calls neuron X, and binding B calls neuron Y, and X == B's call_name,
-        // and Y == A's call_name, that's a mutual recursion cycle.
-        let lazy_call_names: std::collections::HashMap<&str, &str> = lazy_bindings
-            .iter()
-            .map(|(name, call)| (*name, *call))
-            .collect();
-
-        // Check for cycles: binding A -> calls neuron that is called by binding B -> calls neuron that is A's call
-        for (name_a, call_a) in &lazy_bindings {
-            for (name_b, call_b) in &lazy_bindings {
-                if name_a == name_b {
-                    continue;
-                }
-                // A calls call_a, B calls call_b. If call_a == the name of a binding whose
-                // call_name targets back to A's callee, it's a cycle.
-                // Simple check: A calls X, B calls Y. If X is another lazy binding's call name
-                // and that binding calls A's neuron (or vice versa)
-                if call_a == call_b
-                    && lazy_call_names.values().any(|&v| v == *call_a)
-                {
-                    // Both lazy bindings call the same neuron with the same name — potential infinite loop
-                    // Only flag if they reference each other
-                    if *call_a == neuron.name && *call_b == neuron.name {
-                        errors.push(ValidationError::InvalidRecursion {
-                            binding: format!("{}, {}", name_a, name_b),
-                            neuron: neuron.name.clone(),
-                            reason: "Mutual @lazy recursion detected: both bindings recursively call the same neuron".to_string(),
-                        });
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    // NOTE: Mutual @lazy recursion detection requires cross-neuron call graph
+    // analysis (A calls B, B calls A across different neuron definitions), which
+    // is not available at this scope. Within a single neuron's bindings, two
+    // @lazy bindings that both call the same neuron are just independent
+    // self-recursive bindings, not mutual recursion.
 
     errors
 }

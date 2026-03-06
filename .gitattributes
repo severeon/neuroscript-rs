@@ -1,0 +1,4 @@
+# Mark non-production directories as generated so they are
+# collapsed by default in GitHub PR diffs.
+docs/reviews/** linguist-generated=true
+scripts/** linguist-generated=true

@@ -308,10 +308,11 @@ pub(super) fn generate_forward_body(
                             && !gen.binding_context.contains_key(name)
                         {
                             if let Some(&idx) = src_dim_indices.get(name) {
+                                let safe_name = sanitize_python_ident(name);
                                 writeln!(
                                     output,
                                     "{}{} = {}.size({})",
-                                    indent, name, source_var, idx
+                                    indent, safe_name, source_var, idx
                                 )
                                 .unwrap();
                             }
@@ -457,17 +458,19 @@ fn process_destination(
                             // First encounter of this group: emit a for loop
                             emitted_unroll_groups.insert(list_name.clone());
 
+                            let safe_base = sanitize_python_ident(base_name);
+                            let safe_list = sanitize_python_ident(&list_name);
                             // Use the source var as the loop variable (mutated in-place)
                             writeln!(
                                 output,
                                 "{}for {} in self.{}:",
-                                indent, base_name, list_name
+                                indent, safe_base, safe_list
                             )
                             .unwrap();
                             writeln!(
                                 output,
                                 "{}    {} = {}({})",
-                                indent, source_var, base_name, source_var
+                                indent, source_var, safe_base, source_var
                             )
                             .unwrap();
 

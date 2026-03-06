@@ -453,31 +453,45 @@ impl ShapeInferenceEngine {
     /// Retry solving pending constraints after all direct unifications complete.
     /// Constraints are deferred when one operand is unknown at the time of initial
     /// unification but may have been resolved by later connections.
+    /// Loops until no further progress is made, handling chains of 3+ dependencies.
     fn flush_pending_constraints(
         &self,
         ctx: &mut InferenceContext,
     ) -> Result<(), ShapeError> {
-        let constraints = std::mem::take(&mut ctx.pending_constraints);
-        let mut still_pending = Vec::new();
+        loop {
+            let constraints = std::mem::take(&mut ctx.pending_constraints);
+            if constraints.is_empty() {
+                break;
+            }
 
-        for (result_dim, expr, constraint_ctx) in constraints {
-            // Try to evaluate the result dimension now
-            let target = ctx.evaluate_dim(&result_dim);
-            if let Some(target_val) = target {
-                // Result dim is now known — solve the expression
-                if let Err(e) = ctx.solve_expr_for_unknown(&expr, target_val) {
-                    return Err(ShapeError::ConstraintViolation {
-                        message: format!("Deferred constraint failed: {}", e),
-                        context: constraint_ctx,
-                    });
+            let mut still_pending = Vec::new();
+            let mut made_progress = false;
+
+            for (result_dim, expr, constraint_ctx) in constraints {
+                // Try to evaluate the result dimension now
+                let target = ctx.evaluate_dim(&result_dim);
+                if let Some(target_val) = target {
+                    // Result dim is now known — solve the expression
+                    if let Err(e) = ctx.solve_expr_for_unknown(&expr, target_val) {
+                        return Err(ShapeError::ConstraintViolation {
+                            message: format!("Deferred constraint failed: {}", e),
+                            context: constraint_ctx,
+                        });
+                    }
+                    made_progress = true;
+                } else {
+                    // Still can't resolve — retry on next iteration
+                    still_pending.push((result_dim, expr, constraint_ctx));
                 }
-            } else {
-                // Still can't resolve — keep for future passes or accept as unresolvable
-                still_pending.push((result_dim, expr, constraint_ctx));
+            }
+
+            ctx.pending_constraints = still_pending;
+
+            if !made_progress {
+                // No constraints were resolved this pass — remaining are truly unresolvable
+                break;
             }
         }
-
-        ctx.pending_constraints = still_pending;
         Ok(())
     }
 

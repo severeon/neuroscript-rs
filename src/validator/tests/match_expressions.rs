@@ -144,6 +144,73 @@ fn test_match_pattern_shadowing() {
 }
 
 #[test]
+fn test_unreachable_arm_does_not_shadow_later_arms() {
+    // Regression: an arm already marked unreachable should not shadow subsequent arms.
+    // Arm 0: [*, d] (catch-all) — reachable, shadows arm 1
+    // Arm 1: [*, 512] — unreachable (shadowed by arm 0)
+    // Arm 2: [*, d] (catch-all) — should be marked unreachable by arm 0, NOT by arm 1
+    let mut program = ProgramBuilder::new()
+        .with_composite_ports(
+            "TestMatch",
+            vec![default_port(shape_two_wildcard())],
+            vec![default_port(Shape::new(vec![
+                Dim::Wildcard,
+                Dim::Literal(512),
+            ]))],
+            vec![connection(
+                ref_endpoint("in"),
+                Endpoint::Match(MatchExpr {
+                    subject: MatchSubject::Implicit,
+                    arms: vec![
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                named_dim("d"),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                Dim::Literal(512),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                        MatchArm {
+                            pattern: MatchPattern::Shape(Shape::new(vec![
+                                Dim::Wildcard,
+                                named_dim("x"),
+                            ])),
+                            guard: None,
+                            pipeline: vec![ref_endpoint("out")],
+                            is_reachable: true,
+                        },
+                    ],
+                    id: 0,
+                }),
+            )],
+            Some(10),
+        )
+        .build();
+
+    assert_validation_ok(&mut program);
+
+    // Verify: arm 0 reachable, arm 1 unreachable (shadowed by 0), arm 2 unreachable (shadowed by 0, not 1)
+    let neuron = program.neurons.get("TestMatch").unwrap();
+    if let NeuronBody::Graph { connections, .. } = &neuron.body {
+        if let Endpoint::Match(match_expr) = &connections[0].destination {
+            assert!(match_expr.arms[0].is_reachable, "Arm 0 should be reachable");
+            assert!(!match_expr.arms[1].is_reachable, "Arm 1 should be unreachable");
+            assert!(!match_expr.arms[2].is_reachable, "Arm 2 should be unreachable (by arm 0, not arm 1)");
+        }
+    }
+}
+
+#[test]
 fn test_pattern_subsumption() {
     let general = shape_two_wildcard();
     let specific = Shape::new(vec![Dim::Wildcard, Dim::Literal(512)]);
