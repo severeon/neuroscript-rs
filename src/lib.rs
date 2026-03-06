@@ -35,7 +35,7 @@ pub mod wasm;
 // Re-export main IR types explicitly (no glob re-exports)
 pub use codegen::{generate_pytorch, generate_pytorch_with_options, CodegenOptions};
 pub use interfaces::{
-    BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Endpoint, GlobalBinding, IdGenerator,
+    BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Endpoint, GlobalBinding,
     IfBranch, IfExpr, ImplRef, InferenceContext, MatchArm, MatchExpr, MatchPattern, MatchSubject,
     Documentation, NeuronBody, NeuronDef, NeuronPortContract, Param, ParamType, ParseError, Port, PortRef,
     Program, ReshapeDim, ReshapeExpr, Scope, Shape, ShapeError, StdlibRegistry,

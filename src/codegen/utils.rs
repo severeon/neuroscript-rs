@@ -17,6 +17,12 @@ const PYTHON_KEYWORDS: &[&str] = &[
 
 /// Sanitize a string to be a valid Python identifier.
 /// Replaces invalid characters with underscores and prefixes Python keywords.
+///
+/// Currently applied to: reshape dimension names, unroll group/base names.
+/// TODO(CODEGEN-2): Extend to all user-provided strings emitted into Python
+/// (binding names, neuron call names, parameter names in forward.rs and
+/// instantiation.rs). Those paths currently rely on the parser accepting only
+/// valid NeuroScript identifiers, but a defense-in-depth pass would be safer.
 pub(super) fn sanitize_python_ident(name: &str) -> String {
     if name.is_empty() {
         return "_empty".to_string();

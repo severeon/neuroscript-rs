@@ -4,7 +4,7 @@
 
 use crate::package::{Lockfile, LockedPackage, Manifest, PackageSource};
 use semver::{Version, VersionReq};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Errors that can occur during dependency resolution
@@ -110,8 +110,9 @@ impl Resolver {
             }
         }
 
-        // Resolve dependencies recursively
-        let mut visited = HashSet::new();
+        // Resolve dependencies recursively.
+        // Use a Vec to preserve traversal order for deterministic cycle paths.
+        let mut visited = Vec::new();
         for (name, req) in to_resolve {
             self.resolve_recursive(&name, &req, &mut visited)?;
         }
@@ -137,11 +138,11 @@ impl Resolver {
         &mut self,
         name: &str,
         req: &VersionReq,
-        visited: &mut HashSet<String>,
+        visited: &mut Vec<String>,
     ) -> Result<(), ResolverError> {
-        // Check for circular dependencies — build full cycle path
-        if visited.contains(name) {
-            let mut cycle: Vec<String> = visited.iter().cloned().collect();
+        // Check for circular dependencies — build cycle path from traversal order
+        if visited.contains(&name.to_string()) {
+            let mut cycle: Vec<String> = visited.clone();
             cycle.push(name.to_string());
             return Err(ResolverError::CircularDependency { cycle });
         }
@@ -158,7 +159,7 @@ impl Resolver {
             return Ok(());
         }
 
-        visited.insert(name.to_string());
+        visited.push(name.to_string());
 
         // Find matching versions
         let available = self
@@ -203,7 +204,7 @@ impl Resolver {
         };
 
         self.resolved.insert(name.to_string(), resolved);
-        visited.remove(name);
+        visited.pop();
 
         Ok(())
     }

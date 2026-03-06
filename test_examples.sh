@@ -13,9 +13,9 @@ if [ ! -f "$BINARY" ]; then
   cargo build --release
 fi
 
-echo "=== Parsing example files ==="
+echo "=== Validating example files ==="
 for f in examples/*.ns; do
-  if "$BINARY" parse "$f" >/dev/null 2>&1; then
+  if "$BINARY" validate "$f" >/dev/null 2>&1; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
@@ -24,9 +24,9 @@ for f in examples/*.ns; do
   fi
 done
 
-echo "=== Parsing stdlib files ==="
+echo "=== Validating stdlib files ==="
 for f in stdlib/*.ns; do
-  if "$BINARY" parse "$f" >/dev/null 2>&1; then
+  if "$BINARY" validate "$f" >/dev/null 2>&1; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))

@@ -6,38 +6,33 @@
 use miette::Diagnostic;
 use miette::SourceSpan;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::Cell;
 use thiserror::Error;
 
 /// Global ID generator for unique endpoint IDs across parsing and IR passes.
 ///
-/// Uses an atomic counter so IDs are globally unique even if multiple passes
-/// (parser, desugar, contract_resolver) generate new endpoints.
-pub struct IdGenerator {
-    next: AtomicUsize,
+/// Counter for generating unique endpoint IDs within a compilation.
+/// Uses interior mutability via Cell since the compiler is single-threaded.
+pub(crate) struct IdGenerator {
+    next: Cell<usize>,
 }
 
 impl IdGenerator {
     pub fn new() -> Self {
         Self {
-            next: AtomicUsize::new(0),
-        }
-    }
-
-    /// Resume generation from a given starting value (e.g., after parsing).
-    pub fn starting_from(start: usize) -> Self {
-        Self {
-            next: AtomicUsize::new(start),
+            next: Cell::new(0),
         }
     }
 
     pub fn next_id(&self) -> usize {
-        self.next.fetch_add(1, Ordering::Relaxed)
+        let id = self.next.get();
+        self.next.set(id + 1);
+        id
     }
 
     /// Return the current counter value (for passing to later passes).
     pub fn current(&self) -> usize {
-        self.next.load(Ordering::Relaxed)
+        self.next.get()
     }
 }
 

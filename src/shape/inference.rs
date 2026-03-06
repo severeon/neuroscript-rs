@@ -488,7 +488,17 @@ impl ShapeInferenceEngine {
             ctx.pending_constraints = still_pending;
 
             if !made_progress {
-                // No constraints were resolved this pass — remaining are truly unresolvable
+                // Remaining constraints are truly unresolvable after convergence.
+                // Log them for diagnostics but don't fail compilation — these
+                // typically involve dimensions that are only known at runtime.
+                if !ctx.pending_constraints.is_empty() {
+                    for (dim, _expr, constraint_ctx) in &ctx.pending_constraints {
+                        eprintln!(
+                            "warning: unresolved shape constraint for dimension {:?} in {}",
+                            dim, constraint_ctx
+                        );
+                    }
+                }
                 break;
             }
         }
