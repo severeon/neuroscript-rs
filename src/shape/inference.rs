@@ -97,7 +97,7 @@ impl InferenceContext {
                     self.pending_constraints.push((
                         Dim::Named(n.clone()),
                         (**expr).clone(),
-                        format!("Named({}) ~ Expr({:?})", n, expr),
+                        format!("{} ~ ({} {} {})", n, expr.left, expr.op, expr.right),
                     ));
                     Ok(())
                 }
@@ -128,7 +128,7 @@ impl InferenceContext {
                     self.pending_constraints.push((
                         Dim::Global(g.clone()),
                         (**expr).clone(),
-                        format!("Global({}) ~ Expr({:?})", g, expr),
+                        format!("@global {} ~ ({} {} {})", g, expr.left, expr.op, expr.right),
                     ));
                     Ok(())
                 }
@@ -146,10 +146,11 @@ impl InferenceContext {
         match (&expr.left, &expr.right) {
             (Dim::Named(left_name), Dim::Literal(right_val)) => {
                 // Solve: left op right = target
+                let right_usize = *right_val as usize;
                 match expr.op {
                     BinOp::Add => {
-                        if target >= *right_val as usize {
-                            self.resolve_dim(left_name.clone(), target - *right_val as usize)
+                        if target >= right_usize {
+                            self.resolve_dim(left_name.clone(), target - right_usize)
                         } else {
                             Err(format!(
                                 "Illegal negative dimension: {} + {} = {}",
@@ -157,19 +158,25 @@ impl InferenceContext {
                             ))
                         }
                     }
-                    BinOp::Sub => self.resolve_dim(left_name.clone(), target + *right_val as usize),
+                    BinOp::Sub => self.resolve_dim(left_name.clone(), target + right_usize),
                     BinOp::Mul => {
+                        if right_usize == 0 {
+                            return Err(format!(
+                                "Division by zero: cannot solve {} * 0 = {}",
+                                left_name, target
+                            ));
+                        }
                         #[allow(clippy::manual_is_multiple_of)]
-                        if target % (*right_val as usize) != 0 {
+                        if target % right_usize != 0 {
                             return Err(format!(
                                 "Cannot solve {} * {} = {}: {} is not divisible by {}",
                                 left_name, right_val, target, target, right_val
                             ));
                         }
-                        self.resolve_dim(left_name.clone(), target / (*right_val as usize))
+                        self.resolve_dim(left_name.clone(), target / right_usize)
                     }
                     BinOp::Div => {
-                        self.resolve_dim(left_name.clone(), target * (*right_val as usize))
+                        self.resolve_dim(left_name.clone(), target * right_usize)
                     }
                     _ => Err(format!(
                         "Unsupported operator '{}' in dimension constraint solving: {} {} {} = {}",
@@ -179,10 +186,11 @@ impl InferenceContext {
             }
             (Dim::Literal(left_val), Dim::Named(right_name)) => {
                 // Solve: left op right = target
+                let left_usize = *left_val as usize;
                 match expr.op {
                     BinOp::Add => {
-                        if target >= *left_val as usize {
-                            self.resolve_dim(right_name.clone(), target - *left_val as usize)
+                        if target >= left_usize {
+                            self.resolve_dim(right_name.clone(), target - left_usize)
                         } else {
                             Err(format!(
                                 "Illegal negative dimension: {} + {} = {}",
@@ -192,8 +200,8 @@ impl InferenceContext {
                     }
                     BinOp::Sub => {
                         // left - right = target  =>  right = left - target
-                        if *left_val as usize >= target {
-                            self.resolve_dim(right_name.clone(), *left_val as usize - target)
+                        if left_usize >= target {
+                            self.resolve_dim(right_name.clone(), left_usize - target)
                         } else {
                             Err(format!(
                                 "Illegal negative dimension: {} - {} = {}",
@@ -202,22 +210,37 @@ impl InferenceContext {
                         }
                     }
                     BinOp::Mul => {
+                        if left_usize == 0 {
+                            return Err(format!(
+                                "Division by zero: cannot solve 0 * {} = {}",
+                                right_name, target
+                            ));
+                        }
                         #[allow(clippy::manual_is_multiple_of)]
-                        if target % (*left_val as usize) != 0 {
+                        if target % left_usize != 0 {
                             return Err(format!(
                                 "Cannot solve {} * {} = {}: {} is not divisible by {}",
                                 left_val, right_name, target, target, left_val
                             ));
                         }
-                        self.resolve_dim(right_name.clone(), target / (*left_val as usize))
+                        self.resolve_dim(right_name.clone(), target / left_usize)
                     }
                     BinOp::Div => {
                         // left / right = target  =>  right = left / target
+                        if target == 0 {
+                            return Err(format!(
+                                "Division by zero: cannot solve {} / {} = 0",
+                                left_val, right_name
+                            ));
+                        }
                         #[allow(clippy::manual_is_multiple_of)]
-                        if target != 0 && (*left_val as usize) % target == 0 {
-                            self.resolve_dim(right_name.clone(), (*left_val as usize) / target)
+                        if left_usize % target == 0 {
+                            self.resolve_dim(right_name.clone(), left_usize / target)
                         } else {
-                            Ok(())
+                            Err(format!(
+                                "Cannot solve {} / {} = {}: {} is not divisible by {}",
+                                left_val, right_name, target, left_val, target
+                            ))
                         }
                     }
                     _ => Err(format!(
@@ -342,9 +365,9 @@ impl InferenceContext {
             _ => None,
         }?;
         match expr.op {
-            BinOp::Add => Some(left + right),
+            BinOp::Add => left.checked_add(right),
             BinOp::Sub => left.checked_sub(right),
-            BinOp::Mul => Some(left * right),
+            BinOp::Mul => left.checked_mul(right),
             BinOp::Div => left.checked_div(right),
             _ => None,
         }
@@ -421,6 +444,40 @@ impl ShapeInferenceEngine {
             }
         }
 
+        // 4. Flush pending constraints — retry now that more dims may be resolved
+        self.flush_pending_constraints(&mut ctx)?;
+
+        Ok(())
+    }
+
+    /// Retry solving pending constraints after all direct unifications complete.
+    /// Constraints are deferred when one operand is unknown at the time of initial
+    /// unification but may have been resolved by later connections.
+    fn flush_pending_constraints(
+        &self,
+        ctx: &mut InferenceContext,
+    ) -> Result<(), ShapeError> {
+        let constraints = std::mem::take(&mut ctx.pending_constraints);
+        let mut still_pending = Vec::new();
+
+        for (result_dim, expr, constraint_ctx) in constraints {
+            // Try to evaluate the result dimension now
+            let target = ctx.evaluate_dim(&result_dim);
+            if let Some(target_val) = target {
+                // Result dim is now known — solve the expression
+                if let Err(e) = ctx.solve_expr_for_unknown(&expr, target_val) {
+                    return Err(ShapeError::ConstraintViolation {
+                        message: format!("Deferred constraint failed: {}", e),
+                        context: constraint_ctx,
+                    });
+                }
+            } else {
+                // Still can't resolve — keep for future passes or accept as unresolvable
+                still_pending.push((result_dim, expr, constraint_ctx));
+            }
+        }
+
+        ctx.pending_constraints = still_pending;
         Ok(())
     }
 
@@ -1033,12 +1090,17 @@ impl ShapeInferenceEngine {
             let variadic_dims = &concrete.dims[prefix_len..concrete_suffix_start];
             let segment = variadic_dims.to_vec();
 
-            if let Some(existing) = ctx.resolved_variadics.get(name) {
-                // If already bound, they must be equal (or at least same rank and compatible)
+            if let Some(existing) = ctx.resolved_variadics.get(name).cloned() {
+                // If already bound, they must be equal rank and unify element-wise
                 if existing.len() != segment.len() {
                     return Err(format!("Variadic binding mismatch for {}: existing variant rank {}, new variant rank {}", name, existing.len(), segment.len()));
                 }
-                // TODO: Deep unification of variadic segments
+                // Deep unification: unify each dim pair
+                for (existing_dim, new_dim) in existing.iter().zip(segment.iter()) {
+                    ctx.unify(existing_dim, new_dim).map_err(|e| {
+                        format!("Variadic '{}' deep unification failed: {}", name, e)
+                    })?;
+                }
             } else {
                 ctx.resolved_variadics.insert(name.clone(), segment);
             }
