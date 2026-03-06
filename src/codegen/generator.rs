@@ -5,14 +5,19 @@
 
 use super::{forward, instantiation};
 use crate::interfaces::*;
+use miette::Diagnostic;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+use thiserror::Error;
 
 /// Codegen error type
-#[derive(Debug)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum CodegenError {
+    #[error("Neuron '{0}' not found")]
     NeuronNotFound(String),
+    #[error("Invalid connection: {0}")]
     InvalidConnection(String),
+    #[error("Unsupported feature: {0}")]
     UnsupportedFeature(String),
 }
 
@@ -183,17 +188,6 @@ impl Default for CodegenOptions {
     }
 }
 
-impl std::fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CodegenError::NeuronNotFound(name) => write!(f, "Neuron '{}' not found", name),
-            CodegenError::InvalidConnection(msg) => write!(f, "Invalid connection: {}", msg),
-            CodegenError::UnsupportedFeature(msg) => write!(f, "Unsupported feature: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for CodegenError {}
 
 impl<'a> CodeGenerator<'a> {
     /// Create a new code generator with an optional inference context

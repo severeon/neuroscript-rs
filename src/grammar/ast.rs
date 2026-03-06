@@ -10,9 +10,10 @@ use crate::grammar::error;
 use crate::grammar::Rule;
 use crate::interfaces::{
     BinOp, Binding, Connection, ContextUnroll, Dim, DimExpr, Documentation, Endpoint,
-    GlobalBinding, ImplRef, MatchArm, MatchExpr, MatchPattern, MatchSubject, NeuronBody, NeuronDef,
-    NeuronPortContract, Param, ParseError, Port, PortRef, Program, ReshapeDim, ReshapeExpr, Shape,
-    TransformAnnotation, TransformStrategy, UseStmt, Value, WrapContent, WrapExpr,
+    GlobalBinding, IdGenerator, ImplRef, MatchArm, MatchExpr, MatchPattern, MatchSubject,
+    NeuronBody, NeuronDef, NeuronPortContract, Param, ParseError, Port, PortRef, Program,
+    ReshapeDim, ReshapeExpr, Shape, TransformAnnotation, TransformStrategy, UseStmt, Value,
+    WrapContent, WrapExpr,
 };
 use crate::CallArgs;
 use crate::CallExpr;
@@ -20,8 +21,8 @@ use crate::Kwarg;
 
 /// AST builder state
 pub struct AstBuilder {
-    /// Counter for generating unique node IDs (for Call endpoints)
-    next_node_id: usize,
+    /// Shared ID generator for globally unique endpoint IDs
+    id_gen: IdGenerator,
 }
 
 /// Temporary state used during neuron construction
@@ -37,13 +38,18 @@ struct NeuronBuilderState {
 
 impl AstBuilder {
     pub fn new() -> Self {
-        AstBuilder { next_node_id: 0 }
+        AstBuilder {
+            id_gen: IdGenerator::new(),
+        }
     }
 
     fn next_id(&mut self) -> usize {
-        let id = self.next_node_id;
-        self.next_node_id += 1;
-        id
+        self.id_gen.next_id()
+    }
+
+    /// Return the current ID counter value so later passes can continue from it.
+    pub fn id_counter(&self) -> usize {
+        self.id_gen.current()
     }
 
     /// Build a Program from a pest parse tree
@@ -1376,8 +1382,7 @@ impl AstBuilder {
             }
         }
 
-        let id = self.next_node_id;
-        self.next_node_id += 1;
+        let id = self.next_id();
 
         Ok(MatchExpr { subject: MatchSubject::Implicit, arms, id })
     }
@@ -1416,8 +1421,7 @@ impl AstBuilder {
             }
         }
 
-        let id = self.next_node_id;
-        self.next_node_id += 1;
+        let id = self.next_id();
 
         Ok(MatchExpr {
             subject: MatchSubject::Named(subject_name),

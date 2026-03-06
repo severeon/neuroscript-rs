@@ -6,7 +6,46 @@
 use miette::Diagnostic;
 use miette::SourceSpan;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thiserror::Error;
+
+/// Global ID generator for unique endpoint IDs across parsing and IR passes.
+///
+/// Uses an atomic counter so IDs are globally unique even if multiple passes
+/// (parser, desugar, contract_resolver) generate new endpoints.
+pub struct IdGenerator {
+    next: AtomicUsize,
+}
+
+impl IdGenerator {
+    pub fn new() -> Self {
+        Self {
+            next: AtomicUsize::new(0),
+        }
+    }
+
+    /// Resume generation from a given starting value (e.g., after parsing).
+    pub fn starting_from(start: usize) -> Self {
+        Self {
+            next: AtomicUsize::new(start),
+        }
+    }
+
+    pub fn next_id(&self) -> usize {
+        self.next.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Return the current counter value (for passing to later passes).
+    pub fn current(&self) -> usize {
+        self.next.load(Ordering::Relaxed)
+    }
+}
+
+impl Default for IdGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// A dimension in a tensor shape
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -528,7 +567,7 @@ pub struct InferenceContext {
     pub pending_constraints: Vec<(Dim, DimExpr, String)>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum ShapeError {
     #[error("Shape mismatch: expected {expected}, got {got}")]
     Mismatch {

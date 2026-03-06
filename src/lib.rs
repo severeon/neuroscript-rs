@@ -28,6 +28,7 @@ pub mod shape;
 pub mod stdlib;
 pub mod stdlib_registry;
 pub mod validator;
+pub mod visitor;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
