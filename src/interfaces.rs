@@ -1356,6 +1356,121 @@ impl std::fmt::Display for Program {
 mod tests {
     use super::*;
 
+    /// Acceptance test for #114: every ValidationError variant must have an
+    /// explicit arm in the manual `PartialEq` impl.  This test constructs one
+    /// instance of each variant and asserts reflexivity (`v == v`).
+    ///
+    /// If a new variant is added without updating the `PartialEq` match:
+    ///   - Before fix: `unreachable!()` panics at runtime (bad — silent until hit)
+    ///   - After fix:  `_ => false` returns false, and THIS test fails with a
+    ///     clear assertion message (good — caught immediately in CI)
+    #[test]
+    fn validation_error_partialeq_reflexivity_all_variants() {
+        // One representative instance per variant.  If you add a new variant to
+        // `ValidationError`, add it here too — the test failing is the signal
+        // that the `PartialEq` impl also needs a new arm.
+        let variants: Vec<ValidationError> = vec![
+            ValidationError::MissingNeuron {
+                name: "Foo".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::PortMismatch {
+                source_node: "A".into(),
+                source_port: "out".into(),
+                source_shape: Shape::scalar(),
+                dest_node: "B".into(),
+                dest_port: "in".into(),
+                dest_shape: Shape::scalar(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::CycleDetected {
+                cycle: vec!["a".into(), "b".into()],
+                context: "test".into(),
+            },
+            ValidationError::ArityMismatch {
+                expected: 1,
+                got: 2,
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::UnknownNode {
+                node: "x".into(),
+                context: "test".into(),
+            },
+            ValidationError::NonExhaustiveMatch {
+                context: "test".into(),
+                suggestion: "add wildcard".into(),
+            },
+            ValidationError::UnreachableMatchArm {
+                arm_index: 0,
+                shadowed_by: 1,
+                context: "test".into(),
+            },
+            ValidationError::DuplicateBinding {
+                name: "x".into(),
+                neuron: "N".into(),
+            },
+            ValidationError::InvalidRecursion {
+                binding: "x".into(),
+                neuron: "N".into(),
+                reason: "no @lazy".into(),
+            },
+            ValidationError::InvalidUnrollCount {
+                neuron: "N".into(),
+                reason: "negative".into(),
+            },
+            ValidationError::InvalidReshape {
+                message: "bad".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::InvalidAnnotation {
+                annotation: "@foo".into(),
+                reason: "unknown".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::InconsistentArmPorts {
+                expr_kind: "match".into(),
+                arm_index: Some(1),
+                expected_count: 2,
+                got_count: 3,
+                expected_names: vec!["a".into()],
+                got_names: vec!["b".into()],
+                context: "test".into(),
+            },
+            ValidationError::MutualLazyRecursion {
+                cycle: vec!["a".into(), "b".into()],
+                neuron: "N".into(),
+            },
+            ValidationError::Custom("test".into()),
+            ValidationError::UseError {
+                message: "not found".into(),
+            },
+        ];
+
+        // Count must match the number of variants in the enum.  Update this
+        // constant when adding new variants so the test catches omissions.
+        const EXPECTED_VARIANT_COUNT: usize = 16;
+        assert_eq!(
+            variants.len(),
+            EXPECTED_VARIANT_COUNT,
+            "variant count mismatch — did you add a new ValidationError variant? \
+             Update this test AND the PartialEq impl in interfaces.rs"
+        );
+
+        for (i, v) in variants.iter().enumerate() {
+            assert_eq!(
+                v, v,
+                "ValidationError variant at index {} is not reflexive under PartialEq — \
+                 its arm is likely missing from the manual PartialEq impl",
+                i
+            );
+        }
+    }
+
     #[test]
     fn port_mismatch_different_ports_are_not_equal() {
         let err_a = ValidationError::PortMismatch {
