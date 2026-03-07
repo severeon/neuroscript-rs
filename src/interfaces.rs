@@ -780,6 +780,12 @@ pub enum ValidationError {
         got_names: Vec<String>,
         context: String,
     },
+    #[error("Mutual @lazy recursion detected between bindings: {} (in {neuron})", cycle.join(" -> "))]
+    MutualLazyRecursion {
+        /// Binding names forming the cycle, e.g. ["a", "b", "a"]
+        cycle: Vec<String>,
+        neuron: String,
+    },
     #[error("{0}")]
     Custom(String),
     #[error("Import error: {message}")]
@@ -825,6 +831,10 @@ impl PartialEq for ValidationError {
                 Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
                 Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. },
             ) => a == e && b == f && c == g && d == h,
+            (
+                Self::MutualLazyRecursion { cycle: a, neuron: b },
+                Self::MutualLazyRecursion { cycle: c, neuron: d },
+            ) => a == c && b == d,
             (Self::Custom(a), Self::Custom(b)) => a == b,
             (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
             _ => false,
