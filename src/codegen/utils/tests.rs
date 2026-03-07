@@ -1,4 +1,6 @@
 use super::*;
+use crate::codegen::generator::CodeGenerator;
+use crate::interfaces::{InferenceContext, Program};
 
 #[test]
 fn test_value_to_python_primitives() {
@@ -195,4 +197,45 @@ fn test_value_to_python_string_escaping() {
         value_to_python_impl(&Value::String("\01".to_string())),
         "\"\\x001\""
     );
+}
+
+#[test]
+fn test_value_to_python_dim_uses_integer_division() {
+    let program = Program::new();
+    let ctx = InferenceContext::new();
+    let mut gen = CodeGenerator::new(&program, ctx);
+    gen.current_neuron_params.insert("dim".to_string());
+
+    // Division in dimension expressions uses // (integer division)
+    let div_expr = Value::BinOp {
+        op: BinOp::Div,
+        left: Box::new(Value::Name("dim".to_string())),
+        right: Box::new(Value::Int(4)),
+    };
+    assert_eq!(gen.value_to_python_dim(&div_expr), "self.dim // 4");
+
+    // Multiplication works as expected
+    let mul_expr = Value::BinOp {
+        op: BinOp::Mul,
+        left: Box::new(Value::Name("dim".to_string())),
+        right: Box::new(Value::Name("heads".to_string())),
+    };
+    assert_eq!(gen.value_to_python_dim(&mul_expr), "self.dim * heads");
+
+    // binding_context is checked for non-param names
+    gen.binding_context
+        .insert("d".to_string(), "x.shape[1]".to_string());
+    let binding_ref = Value::Name("d".to_string());
+    assert_eq!(gen.value_to_python_dim(&binding_ref), "x.shape[1]");
+}
+
+#[test]
+fn test_value_to_python_impl_uses_float_division() {
+    // The base converter uses / (float division) for general parameter arithmetic
+    let div_expr = Value::BinOp {
+        op: BinOp::Div,
+        left: Box::new(Value::Name("a".to_string())),
+        right: Box::new(Value::Int(4)),
+    };
+    assert_eq!(value_to_python_impl(&div_expr), "a / 4");
 }

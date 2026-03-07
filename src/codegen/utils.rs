@@ -311,7 +311,7 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
     }
 }
 
-// CodeGenerator wrapper methods for backward compatibility
+// CodeGenerator wrapper methods
 impl<'a> CodeGenerator<'a> {
     /// Convert a Value to Python code
     pub(super) fn value_to_python(&self, value: &Value) -> String {
