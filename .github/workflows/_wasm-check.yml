@@ -41,5 +41,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.name }}-cargo-wasm-
 
-      - name: Check WASM build
+      - name: Type-check WASM target
         run: cargo check --target wasm32-unknown-unknown --features wasm --no-default-features

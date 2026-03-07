@@ -19,7 +19,7 @@ jobs:
     if: github.event_name == 'push'
     uses: ./.github/workflows/_build-and-test.yml
     with:
-      runner: '["self-hosted"]'
+      runner: '["self-hosted", "linux"]'
       timeout: 10
 
   # ── WASM: GitHub-hosted (always runs) ──────────────────────────────────
@@ -34,7 +34,7 @@ jobs:
     if: github.event_name == 'push'
     uses: ./.github/workflows/_wasm-check.yml
     with:
-      runner: '["self-hosted"]'
+      runner: '["self-hosted", "linux"]'
       timeout: 10
 
   # ── Gate: single required status check for branch protection ───────────
