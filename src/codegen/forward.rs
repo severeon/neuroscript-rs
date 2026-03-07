@@ -516,10 +516,10 @@ fn process_destination(
                                 .iter()
                                 .map(|(k, v)| {
                                     format!(
-                        "{}={}",
-                        sanitize_python_ident(k),
-                        value_to_python_with_vars(v, &gen.var_names)
-                    )
+                                        "{}={}",
+                                        sanitize_python_ident(k),
+                                        value_to_python_with_vars(v, &gen.var_names)
+                                    )
                                 })
                                 .collect();
                             if args.is_empty() {
@@ -643,10 +643,10 @@ fn process_destination(
                         .iter()
                         .map(|(k, v)| {
                             format!(
-                        "{}={}",
-                        sanitize_python_ident(k),
-                        value_to_python_with_vars(v, &gen.var_names)
-                    )
+                                "{}={}",
+                                sanitize_python_ident(k),
+                                value_to_python_with_vars(v, &gen.var_names)
+                            )
                         })
                         .collect();
                     if args.is_empty() {
