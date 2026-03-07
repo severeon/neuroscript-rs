@@ -152,6 +152,8 @@ pub(super) fn validate_bindings(
         .map(|b| b.name.as_str())
         .collect();
 
+    // A single @lazy binding cannot form mutual recursion with itself;
+    // self-recursion is already checked in the per-binding loop above.
     if lazy_bindings.len() >= 2 {
         // Build adjacency list: only edges between @lazy bindings.
         // BTreeMap ensures deterministic DFS traversal order.
@@ -257,7 +259,6 @@ impl<'a> CycleDfs<'a> {
                         errors.push(ValidationError::MutualLazyRecursion {
                             cycle,
                             neuron: neuron_name.to_string(),
-                            span: None, // Binding struct does not carry spans yet
                         });
                     }
                 }
