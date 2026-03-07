@@ -1,5 +1,5 @@
 use crate::interfaces::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Validate let: and set: bindings
 /// Validate context:, let: and set: bindings
@@ -139,11 +139,116 @@ pub(super) fn validate_bindings(
         }
     }
 
-    // NOTE: Mutual @lazy recursion detection requires cross-neuron call graph
-    // analysis (A calls B, B calls A across different neuron definitions), which
-    // is not available at this scope. Within a single neuron's bindings, two
-    // @lazy bindings that both call the same neuron are just independent
-    // self-recursive bindings, not mutual recursion.
+    // Mutual @lazy recursion detection within the same context block.
+    // Build a dependency graph: for each @lazy binding, find which other bindings
+    // it references (via Value::Name args that match another binding's name).
+    // Then detect cycles in this graph.
+    let lazy_bindings: HashSet<&str> = context_bindings
+        .iter()
+        .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
+        .map(|b| b.name.as_str())
+        .collect();
+
+    if lazy_bindings.len() >= 2 {
+        let binding_names: HashSet<&str> = context_bindings
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
+
+        // Build adjacency list: binding name -> set of binding names it references
+        let mut deps: HashMap<&str, Vec<&str>> = HashMap::new();
+        for binding in context_bindings {
+            if !lazy_bindings.contains(binding.name.as_str()) {
+                continue;
+            }
+            let mut refs = Vec::new();
+            for arg in &binding.args {
+                collect_name_refs(arg, &binding_names, &mut refs);
+            }
+            for (_key, val) in &binding.kwargs {
+                collect_name_refs(val, &binding_names, &mut refs);
+            }
+            // Also check if the call_name itself is another binding name
+            if binding_names.contains(binding.call_name.as_str())
+                && binding.call_name != binding.name
+            {
+                refs.push(binding.call_name.as_str());
+            }
+            deps.insert(binding.name.as_str(), refs);
+        }
+
+        // DFS cycle detection
+        let mut visited: HashSet<&str> = HashSet::new();
+        let mut stack: HashSet<&str> = HashSet::new();
+        let mut path: Vec<&str> = Vec::new();
+
+        for &node in &lazy_bindings {
+            if !visited.contains(node) {
+                if let Some(cycle) =
+                    find_cycle(node, &deps, &mut visited, &mut stack, &mut path)
+                {
+                    let cycle_str = cycle.join(" -> ");
+                    errors.push(ValidationError::Custom(format!(
+                        "Mutual @lazy recursion detected between bindings: {} (in {})",
+                        cycle_str, neuron.name
+                    )));
+                    break;
+                }
+            }
+        }
+    }
 
     errors
+}
+
+/// Collect Value::Name references that match known binding names
+fn collect_name_refs<'a>(
+    value: &'a Value,
+    binding_names: &HashSet<&str>,
+    refs: &mut Vec<&'a str>,
+) {
+    match value {
+        Value::Name(name) if binding_names.contains(name.as_str()) => {
+            refs.push(name.as_str());
+        }
+        Value::BinOp { left, right, .. } => {
+            collect_name_refs(left, binding_names, refs);
+            collect_name_refs(right, binding_names, refs);
+        }
+        _ => {}
+    }
+}
+
+/// DFS-based cycle detection. Returns Some(cycle_path) if a cycle is found.
+fn find_cycle<'a>(
+    node: &'a str,
+    deps: &HashMap<&'a str, Vec<&'a str>>,
+    visited: &mut HashSet<&'a str>,
+    stack: &mut HashSet<&'a str>,
+    path: &mut Vec<&'a str>,
+) -> Option<Vec<String>> {
+    visited.insert(node);
+    stack.insert(node);
+    path.push(node);
+
+    if let Some(neighbors) = deps.get(node) {
+        for &neighbor in neighbors {
+            if !visited.contains(neighbor) {
+                if let Some(cycle) = find_cycle(neighbor, deps, visited, stack, path) {
+                    return Some(cycle);
+                }
+            } else if stack.contains(neighbor) {
+                // Found a cycle - extract it from the path
+                let cycle_start = path.iter().position(|&n| n == neighbor).unwrap();
+                let mut cycle: Vec<String> =
+                    path[cycle_start..].iter().map(|s| s.to_string()).collect();
+                cycle.push(neighbor.to_string());
+                return Some(cycle);
+            }
+        }
+    }
+
+    stack.remove(node);
+    path.pop();
+    None
 }
