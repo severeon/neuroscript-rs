@@ -183,4 +183,16 @@ fn test_value_to_python_string_escaping() {
         value_to_python_impl(&Value::String("a\"b\\c\n".to_string())),
         "\"a\\\"b\\\\c\\n\""
     );
+
+    // Null byte uses \x00 (not \0) to avoid octal ambiguity
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\0b".to_string())),
+        "\"a\\x00b\""
+    );
+
+    // Null byte before digit — \0 + '1' would be octal \01 in Python
+    assert_eq!(
+        value_to_python_impl(&Value::String("\01".to_string())),
+        "\"\\x001\""
+    );
 }

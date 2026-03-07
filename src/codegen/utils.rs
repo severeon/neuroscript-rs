@@ -55,7 +55,7 @@ fn escape_python_string(s: &str) -> String {
             '\n' => result.push_str("\\n"),
             '\r' => result.push_str("\\r"),
             '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
+            '\0' => result.push_str("\\x00"),
             c => result.push(c),
         }
     }
