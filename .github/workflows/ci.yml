@@ -6,58 +6,58 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  test:
-    name: Test
+  # ── Test: self-hosted first, GitHub-hosted fallback ──────────────────
+  test-self-hosted:
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      runner: '["self-hosted"]'
+      timeout: 10
+
+  test-fallback:
+    needs: test-self-hosted
+    if: always() && needs.test-self-hosted.result != 'success'
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      runner: '"ubuntu-latest"'
+      timeout: 30
+
+  # ── WASM: self-hosted first, GitHub-hosted fallback ──────────────────
+  wasm-self-hosted:
+    uses: ./.github/workflows/_wasm-check.yml
+    with:
+      runner: '["self-hosted"]'
+      timeout: 10
+
+  wasm-fallback:
+    needs: wasm-self-hosted
+    if: always() && needs.wasm-self-hosted.result != 'success'
+    uses: ./.github/workflows/_wasm-check.yml
+    with:
+      runner: '"ubuntu-latest"'
+      timeout: 30
+
+  # ── Gate: single required status check for branch protection ─────────
+  ci-status:
+    name: CI Status
+    needs: [test-self-hosted, test-fallback, wasm-self-hosted, wasm-fallback]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check test result
+        run: |
+          if [[ "${{ needs.test-self-hosted.result }}" == "success" || "${{ needs.test-fallback.result }}" == "success" ]]; then
+            echo "Tests passed"
+          else
+            echo "Tests failed (self-hosted: ${{ needs.test-self-hosted.result }}, fallback: ${{ needs.test-fallback.result }})"
+            exit 1
+          fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-test-
-
-      - name: Build
-        run: cargo build --verbose
-
-      - name: Run tests
-        run: cargo test --verbose
-
-  wasm:
-    name: WASM Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Add wasm32 target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-wasm-
-
-      - name: Check WASM build
-        run: cargo check --target wasm32-unknown-unknown --features wasm --no-default-features
+      - name: Check wasm result
+        run: |
+          if [[ "${{ needs.wasm-self-hosted.result }}" == "success" || "${{ needs.wasm-fallback.result }}" == "success" ]]; then
+            echo "WASM check passed"
+          else
+            echo "WASM check failed (self-hosted: ${{ needs.wasm-self-hosted.result }}, fallback: ${{ needs.wasm-fallback.result }})"
+            exit 1
+          fi
