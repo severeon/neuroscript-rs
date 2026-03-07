@@ -151,112 +151,12 @@ fn collect_ns_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), StdlibEr
 /// Load stdlib from sources embedded at compile time.
 ///
 /// This is used in environments without filesystem access (e.g., WASM).
-/// All stdlib .ns files are included via `include_str!()` at compile time.
+/// All stdlib .ns files are discovered by build.rs and included via
+/// `include_str!()` at compile time. Adding a new .ns file to stdlib/
+/// automatically includes it — no manual list maintenance needed.
 pub fn load_stdlib_embedded() -> Result<Program, StdlibError> {
-    const STDLIB_SOURCES: &[(&str, &str)] = &[
-        // Composite neurons
-        ("BottleneckBlock.ns", include_str!("../stdlib/BottleneckBlock.ns")),
-        ("Conformer.ns", include_str!("../stdlib/Conformer.ns")),
-        ("ConvNeXtBlock.ns", include_str!("../stdlib/ConvNeXtBlock.ns")),
-        ("CrossAttention.ns", include_str!("../stdlib/CrossAttention.ns")),
-        ("DenseBlock.ns", include_str!("../stdlib/DenseBlock.ns")),
-        ("DenseConnection.ns", include_str!("../stdlib/DenseConnection.ns")),
-        ("Expert.ns", include_str!("../stdlib/Expert.ns")),
-        ("FusedMBConv.ns", include_str!("../stdlib/FusedMBConv.ns")),
-        ("FFN.ns", include_str!("../stdlib/FFN.ns")),
-        ("GatedFFN.ns", include_str!("../stdlib/GatedFFN.ns")),
-        ("GeGLU.ns", include_str!("../stdlib/GeGLU.ns")),
-        ("GLU.ns", include_str!("../stdlib/GLU.ns")),
-        ("GroupedQueryAttention.ns", include_str!("../stdlib/GroupedQueryAttention.ns")),
-        ("HighwayConnection.ns", include_str!("../stdlib/HighwayConnection.ns")),
-        ("HyperConnect.ns", include_str!("../stdlib/HyperConnect.ns")),
-        ("InceptionBlock.ns", include_str!("../stdlib/InceptionBlock.ns")),
-        ("MBConvBlock.ns", include_str!("../stdlib/MBConvBlock.ns")),
-        ("MetaNeurons.ns", include_str!("../stdlib/MetaNeurons.ns")),
-        ("MultiHeadAttention.ns", include_str!("../stdlib/MultiHeadAttention.ns")),
-        ("MultiQueryAttention.ns", include_str!("../stdlib/MultiQueryAttention.ns")),
-        ("PatchEmbedding.ns", include_str!("../stdlib/PatchEmbedding.ns")),
-        ("PostNormResidual.ns", include_str!("../stdlib/PostNormResidual.ns")),
-        ("PreNormResidual.ns", include_str!("../stdlib/PreNormResidual.ns")),
-        ("RelativePositionBias.ns", include_str!("../stdlib/RelativePositionBias.ns")),
-        ("Residual.ns", include_str!("../stdlib/Residual.ns")),
-        ("ResNetBasicBlock.ns", include_str!("../stdlib/ResNetBasicBlock.ns")),
-        ("ResNeXtBlock.ns", include_str!("../stdlib/ResNeXtBlock.ns")),
-        ("SEBlock.ns", include_str!("../stdlib/SEBlock.ns")),
-        ("SwiGLU.ns", include_str!("../stdlib/SwiGLU.ns")),
-        ("TransformerBlock.ns", include_str!("../stdlib/TransformerBlock.ns")),
-        ("TransformerDecoderBlock.ns", include_str!("../stdlib/TransformerDecoderBlock.ns")),
-        ("TransformerEncoderBlock.ns", include_str!("../stdlib/TransformerEncoderBlock.ns")),
-        ("TransformerStack.ns", include_str!("../stdlib/TransformerStack.ns")),
-        ("ViTBlock.ns", include_str!("../stdlib/ViTBlock.ns")),
-        ("WaveNetBlock.ns", include_str!("../stdlib/WaveNetBlock.ns")),
-        // Primitives
-        ("primitives/ALiBi.ns", include_str!("../stdlib/primitives/ALiBi.ns")),
-        ("primitives/AdaptiveAvgPool.ns", include_str!("../stdlib/primitives/AdaptiveAvgPool.ns")),
-        ("primitives/AdaptiveMaxPool.ns", include_str!("../stdlib/primitives/AdaptiveMaxPool.ns")),
-        ("primitives/Add.ns", include_str!("../stdlib/primitives/Add.ns")),
-        ("primitives/AvgPool.ns", include_str!("../stdlib/primitives/AvgPool.ns")),
-        ("primitives/BatchNorm.ns", include_str!("../stdlib/primitives/BatchNorm.ns")),
-        ("primitives/Bias.ns", include_str!("../stdlib/primitives/Bias.ns")),
-        ("primitives/Cast.ns", include_str!("../stdlib/primitives/Cast.ns")),
-        ("primitives/Clone.ns", include_str!("../stdlib/primitives/Clone.ns")),
-        ("primitives/Concat.ns", include_str!("../stdlib/primitives/Concat.ns")),
-        ("primitives/ConstScale.ns", include_str!("../stdlib/primitives/ConstScale.ns")),
-        ("primitives/Conv1d.ns", include_str!("../stdlib/primitives/Conv1d.ns")),
-        ("primitives/Conv2d.ns", include_str!("../stdlib/primitives/Conv2d.ns")),
-        ("primitives/Conv3d.ns", include_str!("../stdlib/primitives/Conv3d.ns")),
-        ("primitives/Crop.ns", include_str!("../stdlib/primitives/Crop.ns")),
-        ("primitives/DepthwiseConv.ns", include_str!("../stdlib/primitives/DepthwiseConv.ns")),
-        ("primitives/DilatedConv.ns", include_str!("../stdlib/primitives/DilatedConv.ns")),
-        ("primitives/Dropblock.ns", include_str!("../stdlib/primitives/Dropblock.ns")),
-        ("primitives/DropConnect.ns", include_str!("../stdlib/primitives/DropConnect.ns")),
-        ("primitives/DropPath.ns", include_str!("../stdlib/primitives/DropPath.ns")),
-        ("primitives/Dropout.ns", include_str!("../stdlib/primitives/Dropout.ns")),
-        ("primitives/ELU.ns", include_str!("../stdlib/primitives/ELU.ns")),
-        ("primitives/Einsum.ns", include_str!("../stdlib/primitives/Einsum.ns")),
-        ("primitives/Embedding.ns", include_str!("../stdlib/primitives/Embedding.ns")),
-        ("primitives/Flatten.ns", include_str!("../stdlib/primitives/Flatten.ns")),
-        ("primitives/Fork.ns", include_str!("../stdlib/primitives/Fork.ns")),
-        ("primitives/Fork3.ns", include_str!("../stdlib/primitives/Fork3.ns")),
-        ("primitives/GELU.ns", include_str!("../stdlib/primitives/GELU.ns")),
-        ("primitives/GlobalAvgPool.ns", include_str!("../stdlib/primitives/GlobalAvgPool.ns")),
-        ("primitives/GlobalMaxPool.ns", include_str!("../stdlib/primitives/GlobalMaxPool.ns")),
-        ("primitives/GroupNorm.ns", include_str!("../stdlib/primitives/GroupNorm.ns")),
-        ("primitives/HCDepth.ns", include_str!("../stdlib/primitives/HCDepth.ns")),
-        ("primitives/HCWidth.ns", include_str!("../stdlib/primitives/HCWidth.ns")),
-        ("primitives/HyperCollapse.ns", include_str!("../stdlib/primitives/HyperCollapse.ns")),
-        ("primitives/HyperExpand.ns", include_str!("../stdlib/primitives/HyperExpand.ns")),
-        ("primitives/Identity.ns", include_str!("../stdlib/primitives/Identity.ns")),
-        ("primitives/InstanceNorm.ns", include_str!("../stdlib/primitives/InstanceNorm.ns")),
-        ("primitives/LayerNorm.ns", include_str!("../stdlib/primitives/LayerNorm.ns")),
-        ("primitives/LearnedPositionalEmbedding.ns", include_str!("../stdlib/primitives/LearnedPositionalEmbedding.ns")),
-        ("primitives/Linear.ns", include_str!("../stdlib/primitives/Linear.ns")),
-        ("primitives/MatMul.ns", include_str!("../stdlib/primitives/MatMul.ns")),
-        ("primitives/MaxPool.ns", include_str!("../stdlib/primitives/MaxPool.ns")),
-        ("primitives/Mish.ns", include_str!("../stdlib/primitives/Mish.ns")),
-        ("primitives/MultiHeadSelfAttention.ns", include_str!("../stdlib/primitives/MultiHeadSelfAttention.ns")),
-        ("primitives/Multiply.ns", include_str!("../stdlib/primitives/Multiply.ns")),
-        ("primitives/PReLU.ns", include_str!("../stdlib/primitives/PReLU.ns")),
-        ("primitives/Pad.ns", include_str!("../stdlib/primitives/Pad.ns")),
-        ("primitives/PositionalEncoding.ns", include_str!("../stdlib/primitives/PositionalEncoding.ns")),
-        ("primitives/ReLU.ns", include_str!("../stdlib/primitives/ReLU.ns")),
-        ("primitives/RMSNorm.ns", include_str!("../stdlib/primitives/RMSNorm.ns")),
-        ("primitives/Reshape.ns", include_str!("../stdlib/primitives/Reshape.ns")),
-        ("primitives/RotaryEmbedding.ns", include_str!("../stdlib/primitives/RotaryEmbedding.ns")),
-        ("primitives/Scale.ns", include_str!("../stdlib/primitives/Scale.ns")),
-        ("primitives/ScaledDotProductAttention.ns", include_str!("../stdlib/primitives/ScaledDotProductAttention.ns")),
-        ("primitives/SeparableConv.ns", include_str!("../stdlib/primitives/SeparableConv.ns")),
-        ("primitives/SiLU.ns", include_str!("../stdlib/primitives/SiLU.ns")),
-        ("primitives/Sigmoid.ns", include_str!("../stdlib/primitives/Sigmoid.ns")),
-        ("primitives/Slice.ns", include_str!("../stdlib/primitives/Slice.ns")),
-        ("primitives/Softmax.ns", include_str!("../stdlib/primitives/Softmax.ns")),
-        ("primitives/SpecAugment.ns", include_str!("../stdlib/primitives/SpecAugment.ns")),
-        ("primitives/Split.ns", include_str!("../stdlib/primitives/Split.ns")),
-        ("primitives/Tanh.ns", include_str!("../stdlib/primitives/Tanh.ns")),
-        ("primitives/Transpose.ns", include_str!("../stdlib/primitives/Transpose.ns")),
-        ("primitives/TransposedConv.ns", include_str!("../stdlib/primitives/TransposedConv.ns")),
-        ("primitives/WeightNorm.ns", include_str!("../stdlib/primitives/WeightNorm.ns")),
-    ];
+    // Generated by build.rs: scans stdlib/ and emits include_str!() entries
+    let stdlib_sources: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/stdlib_embedded.rs"));
 
     let mut merged = Program {
         uses: Vec::new(),
@@ -266,7 +166,7 @@ pub fn load_stdlib_embedded() -> Result<Program, StdlibError> {
 
     let mut neuron_sources: HashMap<String, String> = HashMap::new();
 
-    for (filename, source) in STDLIB_SOURCES {
+    for (filename, source) in stdlib_sources {
         let program = parse(source)
             .map_err(|e| StdlibError::ParseError(filename.to_string(), format!("{}", e)))?;
 
