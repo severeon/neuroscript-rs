@@ -760,6 +760,11 @@ pub enum ValidationError {
         got_names: Vec<String>,
         context: String,
     },
+    MutualLazyRecursion {
+        /// Binding names forming the cycle, e.g. ["a", "b", "a"]
+        cycle: Vec<String>,
+        neuron: String,
+    },
     Custom(String),
     UseError {
         message: String,
@@ -893,6 +898,13 @@ impl std::fmt::Display for ValidationError {
                     arm_label,
                     got_count, got_names.join(", "),
                     context
+                )
+            }
+            ValidationError::MutualLazyRecursion { cycle, neuron } => {
+                write!(
+                    f,
+                    "Mutual @lazy recursion detected between bindings: {} (in {})",
+                    cycle.join(" -> "), neuron
                 )
             }
             ValidationError::Custom(msg) => {
