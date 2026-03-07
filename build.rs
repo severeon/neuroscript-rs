@@ -13,15 +13,20 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let stdlib_dir = Path::new(&manifest_dir).join("stdlib");
 
-    // Re-run if any file in stdlib/ changes
-    println!("cargo:rerun-if-changed=stdlib");
-
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("stdlib_embedded.rs");
 
     let mut files = Vec::new();
     collect_ns_files(&stdlib_dir, &stdlib_dir, &mut files);
     files.sort();
+
+    // Emit rerun-if-changed for each discovered file and directory so that
+    // additions/removals in subdirectories (e.g. stdlib/primitives/) trigger rebuilds.
+    println!("cargo:rerun-if-changed={}", stdlib_dir.display());
+    for rel_path in &files {
+        let full = stdlib_dir.join(rel_path);
+        println!("cargo:rerun-if-changed={}", full.display());
+    }
 
     let mut out = fs::File::create(&dest_path).unwrap();
 
