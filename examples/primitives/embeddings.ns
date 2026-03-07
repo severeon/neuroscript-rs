@@ -72,8 +72,8 @@ neuron RoPEAttentionInput(dim, num_heads):
     out key_rope: [batch, seq, num_heads, head_dim]
     graph:
         # Reshape Q/K for multi-head
-        query -> Reshape([batch, seq, num_heads, head_dim]) -> q_reshaped
-        key -> Reshape([batch, seq, num_heads, head_dim]) -> k_reshaped
+        query => [batch, seq, num_heads, head_dim] -> q_reshaped
+        key => [batch, seq, num_heads, head_dim] -> k_reshaped
 
         # Apply RoPE
         q_reshaped -> RotaryEmbedding(head_dim) -> query_rope
