@@ -33,6 +33,7 @@ pub(super) fn validate_bindings(
                     "context binding '{}' in neuron '{}'",
                     binding.name, neuron.name
                 ),
+                span: None,
             });
         }
 

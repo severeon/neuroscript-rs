@@ -2,7 +2,7 @@
 source: tests/integration_tests.rs
 expression: error_text
 ---
-ArityMismatch { expected: 3, got: 2, context: "Test: tuple unpacking" }
+ArityMismatch { expected: 3, got: 2, context: "Test: tuple unpacking", span: None }
 
 UnknownNode { node: "in", context: "Test" }
 
