@@ -1,15 +1,121 @@
 # Meta-Neurons: Flow and Composition
 #
+# Routing and composition patterns for building neural networks.
 # These neurons orchestrate other neurons, providing structural
-# composition patterns for common neural network structures.
+# wiring patterns beyond what individual architecture files offer.
 #
-# NOTE: Simplified version - advanced features like implicit fork
-# require implementation of primitive port signatures.
-# See primitives.ns for Identity() and other routing operations.
+# Individual files cover specific architectures (Residual, Highway, Dense,
+# GLU, etc.). This file provides general-purpose composition utilities.
 
-/// Parallel FFN branches
+/// Parallel FFN
+///
+/// A simple feedforward network with a hidden expansion factor.
+/// Useful as a baseline FFN or as a building block.
+///
+/// Parameters:
+/// - dim: Input and output dimension
+///
+/// Shape Contract:
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
 neuron ParallelFFN(dim):
-    in: [*batch, dim]
-    out: [*batch, dim]
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> FFN(dim, dim * 2) -> out
+
+/// Bottleneck Adapter
+///
+/// Down-projects to a smaller dimension, applies a nonlinearity,
+/// projects back up, and adds a residual connection. Used for
+/// parameter-efficient fine-tuning.
+///
+/// Implements: Adapter(x) = x + W_up(ReLU(W_down(x)))
+///
+/// Parameters:
+/// - dim: Input and output dimension
+/// - bottleneck: Reduced intermediate dimension
+///
+/// Shape Contract:
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+///
+/// Reference: Houlsby et al. (2019), "Parameter-Efficient Transfer Learning"
+neuron Adapter(dim, bottleneck):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> (main, skip)
+        main -> Linear(dim, bottleneck) -> ReLU() -> Linear(bottleneck, dim) -> adapted
+        (adapted, skip) -> Add() -> out
+
+/// PreNorm Wrapper
+///
+/// Applies layer normalization before passing through a sub-neuron.
+/// Generic version of PreNormResidual without the skip connection.
+///
+/// Parameters:
+/// - dim: Normalization dimension
+/// - block: A neuron to apply after normalization
+///
+/// Shape Contract:
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+neuron PreNorm(dim, block: Neuron):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> LayerNorm(dim) -> block -> out
+
+/// PostNorm Wrapper
+///
+/// Applies a sub-neuron then normalizes the output.
+/// Generic version of PostNormResidual without the skip connection.
+///
+/// Parameters:
+/// - dim: Normalization dimension
+/// - block: A neuron to apply before normalization
+///
+/// Shape Contract:
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+neuron PostNorm(dim, block: Neuron):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> block -> LayerNorm(dim) -> out
+
+/// Scale-and-Shift
+///
+/// Applies a learnable scale followed by a bias (affine transform).
+/// Useful as a lightweight normalization replacement or calibration layer.
+///
+/// Parameters:
+/// - dim: Feature dimension
+///
+/// Shape Contract:
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+neuron ScaleShift(dim):
+    in: [*shape, dim]
+    out: [*shape, dim]
+    graph:
+        in -> Scale(dim) -> Bias(dim) -> out
+
+/// Projection
+///
+/// Linear projection with GELU activation for dimension adaptation
+/// between layers with different feature sizes.
+///
+/// Parameters:
+/// - in_dim: Input dimension
+/// - out_dim: Output dimension
+///
+/// Shape Contract:
+/// - Input: [*shape, in_dim]
+/// - Output: [*shape, out_dim]
+neuron Projection(in_dim, out_dim):
+    in: [*shape, in_dim]
+    out: [*shape, out_dim]
+    graph:
+        in -> Linear(in_dim, out_dim) -> GELU() -> out
