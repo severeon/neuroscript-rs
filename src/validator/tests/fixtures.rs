@@ -135,7 +135,7 @@ where
 }
 
 /// Assert that validation succeeds
-pub fn assert_validation_ok(program: &mut Program) {
+pub fn assert_validation_ok(program: &Program) {
     let result = Validator::validate(program);
     assert!(result.is_ok(), "Expected validation to succeed, got: {:?}", result);
 }

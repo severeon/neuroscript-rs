@@ -92,8 +92,11 @@ pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
     // Prepare the IR (expand unrolls, desugar @wrap)
     prepare(program)?;
 
-    // First run basic validation
+    // First run basic validation (read-only)
     validator::Validator::validate(program)?;
+
+    // Compute reachability for match arms (marks unreachable/shadowed arms)
+    optimizer::compute_reachability(program);
 
     // Then run shape inference validation
     let mut shape_engine = shape::ShapeInferenceEngine::new();
