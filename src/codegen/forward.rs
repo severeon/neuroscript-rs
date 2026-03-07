@@ -73,6 +73,55 @@ fn emit_bound_module_shape_comment(
     }
 }
 
+/// Generate lazy instantiation guard code for a module.
+///
+/// Both the Ref path (context bindings) and Call path (inline calls) use this
+/// unified function to emit the `if self._mod is None: self._mod = Cls(args)`
+/// pattern, resolving argument names through `var_names`.
+fn emit_lazy_instantiation(
+    gen: &CodeGenerator,
+    output: &mut String,
+    module_ref: &str,
+    call_name: &str,
+    args: &[Value],
+    kwargs: &[Kwarg],
+    indent: &str,
+) {
+    let args_str = args
+        .iter()
+        .map(|v| value_to_python_with_vars(v, &gen.var_names))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let kwargs_str = if kwargs.is_empty() {
+        String::new()
+    } else {
+        let kw: Vec<String> = kwargs
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "{}={}",
+                    sanitize_python_ident(k),
+                    value_to_python_with_vars(v, &gen.var_names)
+                )
+            })
+            .collect();
+        if args.is_empty() {
+            kw.join(", ")
+        } else {
+            format!(", {}", kw.join(", "))
+        }
+    };
+
+    writeln!(output, "{}if {} is None:", indent, module_ref).unwrap();
+    writeln!(
+        output,
+        "{}    {} = {}({}{})",
+        indent, module_ref, call_name, args_str, kwargs_str
+    )
+    .unwrap();
+}
+
 /// Emit a shape comment and optional assertion for a variable at a Ref destination.
 /// Suppresses comments for _unroll temp refs and when shape hasn't changed.
 fn emit_shape_comment_and_assertion(
@@ -490,53 +539,19 @@ fn process_destination(
                         }
                     }
 
-                    // Check if this is a lazy binding (starts with "self._")
-                    if module_ref.starts_with("self._")
-                        && gen.lazy_bindings.contains_key(&port_ref.node)
+                    // Check if this is a lazy binding via lazy_bindings lookup
+                    if let Some((call_name, lazy_args, lazy_kwargs)) =
+                        gen.lazy_bindings.get(&port_ref.node).cloned()
                     {
-                        // Generate lazy instantiation code
-                        let (call_name, args, kwargs) =
-                            gen.lazy_bindings.get(&port_ref.node).ok_or_else(|| {
-                                CodegenError::InvalidConnection(format!(
-                                    "Lazy binding '{}' not found in codegen context",
-                                    port_ref.node
-                                ))
-                            })?;
-
-                        let args_str = args
-                            .iter()
-                            .map(|v| value_to_python_with_vars(v, &gen.var_names))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-
-                        let kwargs_str = if kwargs.is_empty() {
-                            String::new()
-                        } else {
-                            let kw: Vec<String> = kwargs
-                                .iter()
-                                .map(|(k, v)| {
-                                    format!(
-                                        "{}={}",
-                                        sanitize_python_ident(k),
-                                        value_to_python_with_vars(v, &gen.var_names)
-                                    )
-                                })
-                                .collect();
-                            if args.is_empty() {
-                                kw.join(", ")
-                            } else {
-                                format!(", {}", kw.join(", "))
-                            }
-                        };
-
-                        // Generate lazy instantiation check
-                        writeln!(output, "{}if {} is None:", indent, module_ref).unwrap();
-                        writeln!(
+                        emit_lazy_instantiation(
+                            gen,
                             output,
-                            "{}    {} = {}({}{})",
-                            indent, module_ref, call_name, args_str, kwargs_str
-                        )
-                        .unwrap();
+                            &module_ref,
+                            &call_name,
+                            &lazy_args,
+                            &lazy_kwargs,
+                            indent,
+                        );
                     }
 
                     // This is a bound module - generate a call with semantic name
@@ -601,8 +616,8 @@ fn process_destination(
         }
         Endpoint::Call {
             name,
-            args,
-            kwargs,
+            args: _,
+            kwargs: _,
             id,
             frozen: _,
         } => {
@@ -615,62 +630,30 @@ fn process_destination(
             // Semantic name from module attribute name
             let result_var = make_var_name(used_var_names, &module_name);
 
-            // Check if this call has captured dimensions (needs lazy instantiation)
-            let has_captured = args
-                .iter()
-                .any(|v| has_captured_dimensions_impl(v, &gen.current_neuron_params))
-                || kwargs
-                    .iter()
-                    .any(|(_, v)| has_captured_dimensions_impl(v, &gen.current_neuron_params));
-
-            if has_captured {
-                // Lazy instantiation: check cache, instantiate if needed
-                writeln!(output, "{}if self._{} is None:", indent, module_name).unwrap();
-
-                // Generate instantiation with current dimension values.
-                // Use value_to_python_with_vars to resolve context binding names
-                // (e.g., "attn" → "self.attn") and parameter names (e.g., "n" → "self.n").
-                let args_str = args
-                    .iter()
-                    .map(|v| value_to_python_with_vars(v, &gen.var_names))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let kwargs_str = if kwargs.is_empty() {
-                    String::new()
-                } else {
-                    let kw: Vec<String> = kwargs
-                        .iter()
-                        .map(|(k, v)| {
-                            format!(
-                                "{}={}",
-                                sanitize_python_ident(k),
-                                value_to_python_with_vars(v, &gen.var_names)
-                            )
-                        })
-                        .collect();
-                    if args.is_empty() {
-                        kw.join(", ")
-                    } else {
-                        format!(", {}", kw.join(", "))
-                    }
-                };
+            // Check if this call needs lazy instantiation by looking up
+            // lazy_bindings (unified with the Ref path above).
+            if let Some((call_name, lazy_args, lazy_kwargs)) =
+                gen.lazy_bindings.get(&module_name).cloned()
+            {
+                let module_ref = format!("self._{}", module_name);
+                emit_lazy_instantiation(
+                    gen,
+                    output,
+                    &module_ref,
+                    &call_name,
+                    &lazy_args,
+                    &lazy_kwargs,
+                    indent,
+                );
 
                 // Mark as primitive for imports
-                if let Some(neuron) = gen.program.neurons.get(name.as_str()) {
+                if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
                     if neuron.is_primitive() {
-                        gen.used_primitives.insert(name.clone());
+                        gen.used_primitives.insert(call_name.clone());
                     }
                 } else {
-                    gen.used_primitives.insert(name.clone());
+                    gen.used_primitives.insert(call_name.clone());
                 }
-
-                writeln!(
-                    output,
-                    "{}    self._{} = {}({}{})",
-                    indent, module_name, name, args_str, kwargs_str
-                )
-                .unwrap();
 
                 // Call the lazily-instantiated module
                 writeln!(

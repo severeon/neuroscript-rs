@@ -56,6 +56,8 @@ fn escape_python_string(s: &str) -> String {
             '\r' => result.push_str("\\r"),
             '\t' => result.push_str("\\t"),
             '\0' => result.push_str("\\x00"),
+            '\x0b' => result.push_str("\\x0b"),
+            '\x0c' => result.push_str("\\x0c"),
             c => result.push(c),
         }
     }
@@ -193,12 +195,20 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
 }
 
 /// Convert CamelCase to snake_case
+///
+/// Handles acronyms (consecutive uppercase) by keeping them grouped:
+/// - `ReLU` → `re_lu`, `GELU` → `gelu`, `LayerNorm` → `layer_norm`
+/// - `RMSNorm` → `rms_norm`, `Conv2d` → `conv2d`
 pub(super) fn snake_case_impl(name: &str) -> String {
     let mut result = String::new();
+    let chars: Vec<char> = name.chars().collect();
 
-    for c in name.chars() {
+    for (i, &c) in chars.iter().enumerate() {
         if c.is_uppercase() {
-            if !result.is_empty() {
+            let prev_upper = i > 0 && chars[i - 1].is_uppercase();
+            let next_lower = i + 1 < chars.len() && chars[i + 1].is_lowercase();
+
+            if !result.is_empty() && (!prev_upper || next_lower) {
                 result.push('_');
             }
             result.push(c.to_lowercase().next().unwrap());

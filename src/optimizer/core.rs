@@ -1,6 +1,82 @@
 use crate::interfaces::*;
+use crate::validator::shapes::pattern_subsumes;
 use crate::visitor;
 use std::cmp::Ordering;
+
+/// Compute reachability for match arms across the entire program.
+///
+/// This is a dedicated pass that marks `is_reachable = false` on match arms
+/// that are shadowed by earlier, more general patterns. It must run after
+/// validation (which checks exhaustiveness) and before optimization/codegen
+/// (which consume reachability information).
+///
+/// Separated from validation so the validator remains read-only.
+pub fn compute_reachability(program: &mut Program) {
+    for neuron in program.neurons.values_mut() {
+        if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
+            for connection in connections {
+                compute_endpoint_reachability(&mut connection.source);
+                compute_endpoint_reachability(&mut connection.destination);
+            }
+        }
+    }
+}
+
+fn compute_endpoint_reachability(endpoint: &mut Endpoint) {
+    match endpoint {
+        Endpoint::Match(match_expr) => {
+            compute_match_reachability(match_expr);
+            // Recurse into arm pipelines
+            for arm in &mut match_expr.arms {
+                for ep in &mut arm.pipeline {
+                    compute_endpoint_reachability(ep);
+                }
+            }
+        }
+        Endpoint::If(if_expr) => {
+            for branch in &mut if_expr.branches {
+                for ep in &mut branch.pipeline {
+                    compute_endpoint_reachability(ep);
+                }
+            }
+            if let Some(else_branch) = &mut if_expr.else_branch {
+                for ep in else_branch {
+                    compute_endpoint_reachability(ep);
+                }
+            }
+        }
+        // Wrap endpoints are desugared into Call endpoints by desugar_wraps()
+        // before this pass runs, so they never contain match expressions here.
+        // Other leaf endpoints (Ref, Call, Tuple, Reshape) cannot nest matches.
+        _ => {}
+    }
+}
+
+fn compute_match_reachability(match_expr: &mut MatchExpr) {
+    for i in 0..match_expr.arms.len() {
+        if !match_expr.arms[i].is_reachable {
+            continue;
+        }
+        for j in (i + 1)..match_expr.arms.len() {
+            if !match_expr.arms[j].is_reachable {
+                continue;
+            }
+            let subsumes = {
+                let arm_i = &match_expr.arms[i];
+                let arm_j = &match_expr.arms[j];
+                match (arm_i.pattern.as_shape(), arm_j.pattern.as_shape()) {
+                    (Some(shape_i), Some(shape_j)) => {
+                        arm_i.guard.is_none() && pattern_subsumes(shape_i, shape_j)
+                    }
+                    _ => false,
+                }
+            };
+            if subsumes {
+                match_expr.arms[j].is_reachable = false;
+            }
+        }
+    }
+}
 
 /// Optimize match expressions by removing unreachable arms.
 ///

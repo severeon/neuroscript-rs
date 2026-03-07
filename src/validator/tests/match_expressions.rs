@@ -1,5 +1,6 @@
 use super::fixtures::*;
 use crate::interfaces::*;
+use crate::optimizer::compute_reachability;
 use crate::validator::Validator;
 
 #[test]
@@ -121,7 +122,10 @@ fn test_match_pattern_shadowing() {
         )
         .build();
 
-    assert_validation_ok(&mut program);
+    assert_validation_ok(&program);
+
+    // Reachability is computed separately from validation
+    compute_reachability(&mut program);
 
     // Verify is_reachable flags
     let neuron = program.neurons.get("TestMatch").unwrap();
@@ -197,7 +201,10 @@ fn test_unreachable_arm_does_not_shadow_later_arms() {
         )
         .build();
 
-    assert_validation_ok(&mut program);
+    assert_validation_ok(&program);
+
+    // Reachability is computed separately from validation
+    compute_reachability(&mut program);
 
     // Verify: arm 0 reachable, arm 1 unreachable (shadowed by 0), arm 2 unreachable (shadowed by 0, not 1)
     let neuron = program.neurons.get("TestMatch").unwrap();
