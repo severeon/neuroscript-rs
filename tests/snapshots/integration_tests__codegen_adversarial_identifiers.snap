@@ -13,10 +13,10 @@ class AdversarialNet(nn.Module):
         self.lambda_ = lambda_
         self.dim = dim
         self.linear_0 = Linear(lambda_, dim)
-        self.re_l_u_1 = ReLU()
+        self.re_lu_1 = ReLU()
 
     def forward(self, x):
         linear_0 = self.linear_0(x)
         # Linear() output shape: [*, out_dim]
-        re_l_u_1 = self.re_l_u_1(linear_0)
-        return re_l_u_1
+        re_lu_1 = self.re_lu_1(linear_0)
+        return re_lu_1
