@@ -1274,11 +1274,7 @@ fn render_validation_errors(
 
     // Fallback: no spanned errors — return all as a single error (no eprintln
     // here to avoid double output since the caller will display the returned error)
-    let detail = errors
-        .iter()
-        .map(|e| format!("  {}", e))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let detail = plain_errors.join("\n");
     Err(miette::miette!(
         "Validation failed with {} error(s):\n{}",
         errors.len(),
