@@ -629,3 +629,59 @@ fn test_parse_wrap_grammar_rule() {
         result.err()
     );
 }
+
+// ============================================================================
+// Logical operators in guard expressions (issue #121)
+// ============================================================================
+
+#[test]
+fn test_parse_logical_and_in_value() {
+    let input = "d >= 128 && d < 512";
+    let result = NeuroScriptParser::parse(Rule::value, input);
+    assert!(result.is_ok(), "Failed to parse logical AND: {:?}", result.err());
+    let pairs = result.unwrap();
+    let consumed = pairs.peek().unwrap().as_str();
+    assert_eq!(consumed, input, "value rule did not consume entire input; only consumed: {:?}", consumed);
+}
+
+#[test]
+fn test_parse_logical_or_in_value() {
+    let input = "d < 128 || d > 1024";
+    let result = NeuroScriptParser::parse(Rule::value, input);
+    assert!(result.is_ok(), "Failed to parse logical OR: {:?}", result.err());
+    let pairs = result.unwrap();
+    let consumed = pairs.peek().unwrap().as_str();
+    assert_eq!(consumed, input, "value rule did not consume entire input; only consumed: {:?}", consumed);
+}
+
+#[test]
+fn test_parse_logical_and_or_precedence() {
+    let input = "d > 0 && d < 128 || d > 256 && d < 512";
+    let result = NeuroScriptParser::parse(Rule::value, input);
+    assert!(result.is_ok(), "Failed to parse mixed &&/||: {:?}", result.err());
+    let pairs = result.unwrap();
+    let consumed = pairs.peek().unwrap().as_str();
+    assert_eq!(consumed, input, "value rule did not consume entire input; only consumed: {:?}", consumed);
+}
+
+#[test]
+fn test_parse_match_guard_with_logical_and() {
+    let input = "[*, *, d] where d >= 128 && d < 512: Linear(d, 512) -> out\n";
+    let result = NeuroScriptParser::parse(Rule::match_arm, input);
+    assert!(result.is_ok(), "Failed to parse match arm with && guard: {:?}", result.err());
+}
+
+#[test]
+fn test_parse_match_guard_with_triple_and() {
+    let input = "[*, s, d] where s > 1 && d >= 64 && d <= 2048: Identity() -> out\n";
+    let result = NeuroScriptParser::parse(Rule::match_arm, input);
+    assert!(result.is_ok(), "Failed to parse match arm with triple && guard: {:?}", result.err());
+}
+
+#[test]
+fn test_parse_tutorial_03_match_guards() {
+    let input = include_str!("../../examples/tutorials/03_match_guards.ns");
+    let result = NeuroScriptParser::parse(Rule::program, input);
+    if let Err(e) = &result { eprintln!("Parse error in 03_match_guards.ns: {}", e); }
+    assert!(result.is_ok(), "Failed to parse tutorials/03_match_guards.ns");
+}
