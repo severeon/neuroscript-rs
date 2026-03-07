@@ -1225,3 +1225,134 @@ neuron Test(dim):
         code
     );
 }
+
+#[test]
+fn test_lazy_binding_cross_referencing_context_bindings() {
+    // Context bindings that reference each other should produce valid Python.
+    // Binding "adapter" is @lazy and references binding "proj" as an arg.
+    // The generated code must resolve "proj" to "self.proj", not bare "proj".
+    let mut program = Program::new();
+
+    // Register Linear as a primitive so codegen can find it
+    let linear_neuron = NeuronDef {
+        name: "Linear".to_string(),
+        params: vec![
+            Param { name: "in_features".to_string(), default: None, type_annotation: None },
+            Param { name: "out_features".to_string(), default: None, type_annotation: None },
+        ],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("in_features".to_string())]),
+            variadic: false,
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("out_features".to_string())]),
+            variadic: false,
+        }],
+        max_cycle_depth: Some(10),
+        doc: None,
+        body: NeuronBody::Primitive(ImplRef::Source {
+            source: "core".to_string(),
+            path: "nn/Linear".to_string(),
+        }),
+    };
+    program.neurons.insert("Linear".to_string(), linear_neuron);
+
+    // Composite neuron with two bindings: proj (eager) and adapter (@lazy).
+    // adapter's args include "proj" -- a reference to the other binding's name.
+    // This tests that the lazy instantiation code resolves "proj" via var_names
+    // to "self.proj" instead of emitting the bare name "proj".
+    let neuron = NeuronDef {
+        name: "CrossRefLazy".to_string(),
+        params: vec![
+            Param { name: "dim".to_string(), default: None, type_annotation: None },
+        ],
+        inputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+            variadic: false,
+        }],
+        outputs: vec![Port {
+            name: "default".to_string(),
+            shape: Shape::new(vec![Dim::Wildcard, Dim::Named("dim".to_string())]),
+            variadic: false,
+        }],
+        max_cycle_depth: Some(10),
+        doc: None,
+        body: NeuronBody::Graph {
+            context_bindings: vec![
+                Binding {
+                    name: "proj".to_string(),
+                    call_name: "Linear".to_string(),
+                    args: vec![Value::Name("dim".to_string()), Value::Name("dim".to_string())],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: false },
+                    frozen: false,
+                    unroll_group: None,
+                },
+                Binding {
+                    name: "adapter".to_string(),
+                    call_name: "Linear".to_string(),
+                    // "proj" here is a binding name -- should resolve to "self.proj"
+                    args: vec![Value::Name("proj".to_string()), Value::Name("dim".to_string())],
+                    kwargs: vec![],
+                    scope: Scope::Instance { lazy: true },
+                    frozen: false,
+                    unroll_group: None,
+                },
+            ],
+            context_unrolls: vec![],
+            connections: vec![
+                Connection {
+                    source: Endpoint::Ref(PortRef::new("in")),
+                    destination: Endpoint::Ref(PortRef::new("proj")),
+                },
+                Connection {
+                    source: Endpoint::Ref(PortRef::new("proj")),
+                    destination: Endpoint::Ref(PortRef::new("adapter")),
+                },
+                Connection {
+                    source: Endpoint::Ref(PortRef::new("adapter")),
+                    destination: Endpoint::Ref(PortRef::new("out")),
+                },
+            ],
+        },
+    };
+    program.neurons.insert("CrossRefLazy".to_string(), neuron);
+
+    let code = generate_pytorch(&program, "CrossRefLazy").unwrap();
+    println!("{}", code);
+
+    // Verify the eager binding is created normally
+    assert!(
+        code.contains("self.proj = Linear(dim, dim)"),
+        "proj should be eagerly instantiated in __init__"
+    );
+
+    // Verify the lazy binding placeholder
+    assert!(
+        code.contains("self._adapter = None"),
+        "adapter should have lazy placeholder in __init__"
+    );
+
+    // The key assertion: lazy instantiation must resolve "proj" to "self.proj"
+    // not emit bare "proj" which would be an unresolved variable name
+    assert!(
+        code.contains("Linear(self.proj, self.dim)"),
+        "Lazy instantiation should resolve binding names via var_names. Got:\n{}",
+        code
+    );
+
+    // Verify the lazy guard pattern
+    assert!(
+        code.contains("if self._adapter is None:"),
+        "Should have lazy guard check"
+    );
+
+    // Verify forward pass calls the lazily-instantiated module
+    assert!(
+        code.contains("self._adapter("),
+        "Forward should call the lazy module"
+    );
+}
