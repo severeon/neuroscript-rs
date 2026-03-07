@@ -27,8 +27,10 @@ neuron ParallelFFN(dim):
 /// Bottleneck Adapter
 ///
 /// Down-projects to a smaller dimension, applies a nonlinearity,
-/// then projects back up. Used for parameter-efficient fine-tuning
-/// (adapters) and information bottlenecks.
+/// projects back up, and adds a residual connection. Used for
+/// parameter-efficient fine-tuning.
+///
+/// Implements: Adapter(x) = x + W_up(ReLU(W_down(x)))
 ///
 /// Parameters:
 /// - dim: Input and output dimension
@@ -43,7 +45,9 @@ neuron Adapter(dim, bottleneck):
     in: [*batch, dim]
     out: [*batch, dim]
     graph:
-        in -> Linear(dim, bottleneck) -> ReLU() -> Linear(bottleneck, dim) -> out
+        in -> (main, skip)
+        main -> Linear(dim, bottleneck) -> ReLU() -> Linear(bottleneck, dim) -> adapted
+        (adapted, skip) -> Add() -> out
 
 /// Prenorm Wrapper
 ///
@@ -100,8 +104,8 @@ neuron ScaleShift(dim):
 
 /// Projection
 ///
-/// Linear projection with optional activation. Projects from one
-/// dimension to another, useful for dimension adaptation between layers.
+/// Linear projection between dimensions. Useful for dimension
+/// adaptation between layers with different feature sizes.
 ///
 /// Parameters:
 /// - in_dim: Input dimension
@@ -114,4 +118,4 @@ neuron Projection(in_dim, out_dim):
     in: [*batch, in_dim]
     out: [*batch, out_dim]
     graph:
-        in -> Linear(in_dim, out_dim) -> GELU() -> out
+        in -> Linear(in_dim, out_dim) -> out
