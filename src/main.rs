@@ -1264,16 +1264,16 @@ fn render_validation_errors(
         plain_errors.push(format!("  {}", error));
     }
 
-    // Print all non-spanned errors regardless of ordering
-    for msg in &plain_errors {
-        eprintln!("{}", msg);
-    }
-
     if let Some(report) = first_report {
+        // Print non-spanned errors to stderr alongside the rich spanned output
+        for msg in &plain_errors {
+            eprintln!("{}", msg);
+        }
         return Err(report);
     }
 
-    // Fallback: no spanned errors, use the old-style summary
+    // Fallback: no spanned errors — return all as a single error (no eprintln
+    // here to avoid double output since the caller will display the returned error)
     let detail = plain_errors.join("\n");
     Err(miette::miette!(
         "Validation failed with {} error(s):\n{}",
