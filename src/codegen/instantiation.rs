@@ -343,6 +343,13 @@ pub(super) fn generate_module_instantiations(
                 module_name
             )
             .unwrap();
+
+            gen.lazy_bindings.insert(
+                module_name.clone(),
+                (name.clone(), args.clone(), kwargs.clone()),
+            );
+            gen.var_names
+                .insert(module_name.clone(), format!("self._{}", module_name));
             instantiated_count += 1;
             continue;
         }
