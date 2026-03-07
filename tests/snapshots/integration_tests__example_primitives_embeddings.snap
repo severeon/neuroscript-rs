@@ -1,0 +1,157 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron BERTEmbeddings(vocab_size, dim, max_len):
+  inputs:
+    tokens: [batch, seq]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    tokens -> Embedding#4(vocab_size, dim)
+    Embedding#4(vocab_size, dim) -> token_embeds
+    token_embeds -> LearnedPositionalEmbedding#5(max_len, dim)
+    LearnedPositionalEmbedding#5(max_len, dim) -> LayerNorm#6(dim)
+    LayerNorm#6(dim) -> out
+
+neuron Conv2d(in_channels, out_channels, kernel_size, stride):
+  inputs:
+    default: [*, in_channels, h, w]
+  outputs:
+    default: [*, out_channels, h_out, w_out]
+  impl:
+    Source: core,nn/Conv2d
+
+neuron Dropout(rate):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,regularization/Dropout
+
+neuron Embedding(vocab_size, embed_dim):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, embed_dim]
+  impl:
+    Source: core,nn/Embedding
+
+neuron Flatten:
+  inputs:
+    default: [batch, *dims]
+  outputs:
+    default: [batch, flattened]
+  impl:
+    Source: core,builtin/Flatten
+
+neuron GPTEmbeddings(vocab_size, dim, max_len):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Embedding#2(vocab_size, dim)
+    Embedding#2(vocab_size, dim) -> token_embeds
+    token_embeds -> LearnedPositionalEmbedding#3(max_len, dim)
+    LearnedPositionalEmbedding#3(max_len, dim) -> out
+
+neuron LayerNorm(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: core,normalization/LayerNorm
+
+neuron LearnedPositionalEmbedding(max_len, dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,nn/LearnedPositionalEmbedding
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron PatchEmbedding(patch_size, in_channels, embed_dim):
+  inputs:
+    default: [batch, in_channels, height, width]
+  outputs:
+    default: [batch, num_patches, embed_dim]
+  graph:
+    in -> Conv2d#11(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+    Conv2d#11(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size) -> Flatten#12()
+    Flatten#12() -> out
+
+neuron PositionalEncoding(dim, max_len):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: core,nn/PositionalEncoding
+
+neuron Reshape(target_shape):
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [target_shape]
+  impl:
+    Source: core,builtin/Reshape
+
+neuron RoPEAttentionInput(dim, num_heads):
+  inputs:
+    query: [batch, seq, dim]
+    key: [batch, seq, dim]
+  outputs:
+    query_rope: [batch, seq, num_heads, head_dim]
+    key_rope: [batch, seq, num_heads, head_dim]
+  graph:
+    query => [batch, seq, num_heads, head_dim]
+    [batch, seq, num_heads, head_dim] -> q_reshaped
+    key => [batch, seq, num_heads, head_dim]
+    [batch, seq, num_heads, head_dim] -> k_reshaped
+    q_reshaped -> RotaryEmbedding#9(head_dim)
+    RotaryEmbedding#9(head_dim) -> query_rope
+    k_reshaped -> RotaryEmbedding#10(head_dim)
+    RotaryEmbedding#10(head_dim) -> key_rope
+
+neuron RobustEmbeddings(vocab_size, dim, max_len, dropout_rate):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Embedding#13(vocab_size, dim)
+    Embedding#13(vocab_size, dim) -> PositionalEncoding#14(dim, max_len)
+    PositionalEncoding#14(dim, max_len) -> LayerNorm#15(dim)
+    LayerNorm#15(dim) -> Dropout#16(dropout_rate)
+    Dropout#16(dropout_rate) -> out
+
+neuron RotaryEmbedding(dim):
+  inputs:
+    default: [batch, seq, num_heads, head_dim]
+  outputs:
+    default: [batch, seq, num_heads, head_dim]
+  impl:
+    Source: core,nn/RotaryEmbedding
+
+neuron TransformerInput(vocab_size, dim, max_len):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> Embedding#0(vocab_size, dim)
+    Embedding#0(vocab_size, dim) -> PositionalEncoding#1(dim, max_len)
+    PositionalEncoding#1(dim, max_len) -> out
