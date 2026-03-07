@@ -515,7 +515,11 @@ fn process_destination(
                             let kw: Vec<String> = kwargs
                                 .iter()
                                 .map(|(k, v)| {
-                                    format!("{}={}", k, value_to_python_with_vars(v, &gen.var_names))
+                                    format!(
+                                        "{}={}",
+                                        sanitize_python_ident(k),
+                                        value_to_python_with_vars(v, &gen.var_names)
+                                    )
                                 })
                                 .collect();
                             if args.is_empty() {
@@ -638,7 +642,11 @@ fn process_destination(
                     let kw: Vec<String> = kwargs
                         .iter()
                         .map(|(k, v)| {
-                            format!("{}={}", k, value_to_python_with_vars(v, &gen.var_names))
+                            format!(
+                                "{}={}",
+                                sanitize_python_ident(k),
+                                value_to_python_with_vars(v, &gen.var_names)
+                            )
                         })
                         .collect();
                     if args.is_empty() {
@@ -978,7 +986,7 @@ fn process_destination(
             for dim in &reshape.dims {
                 if let ReshapeDim::Binding { name, expr } = dim {
                     let expr_str = gen.value_to_python_dim_expr(expr);
-                    writeln!(output, "{}{} = {}", indent, name, expr_str).unwrap();
+                    writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str).unwrap();
                 }
             }
 
@@ -1000,7 +1008,7 @@ fn process_destination(
                     )
                     .unwrap();
                 }
-                Some(TransformAnnotation::Reduce(strategy)) => match strategy {
+                Some(TransformAnnotation::Reduce(strategy, _)) => match strategy {
                     TransformStrategy::Intrinsic(name) => {
                         let method = match name.as_str() {
                             "mean" => "mean",
@@ -1108,7 +1116,7 @@ fn process_destination(
                         .unwrap();
                     }
                 },
-                Some(TransformAnnotation::Repeat(strategy)) => match strategy {
+                Some(TransformAnnotation::Repeat(strategy, _)) => match strategy {
                     TransformStrategy::Intrinsic(name) if name == "copy" => {
                         // Determine which target dims are new (not in source shape).
                         // These require unsqueeze before expand.
@@ -1227,11 +1235,11 @@ fn process_destination(
 /// (assuming it's already in scope from a match capture, prior reshape, etc.).
 fn resolve_dim_name(gen: &CodeGenerator, name: &str) -> String {
     if gen.current_neuron_params.contains(name) {
-        format!("self.{}", name)
+        format!("self.{}", sanitize_python_ident(name))
     } else if let Some(resolved) = gen.binding_context.get(name) {
         resolved.clone()
     } else {
-        name.to_string()
+        sanitize_python_ident(name)
     }
 }
 
@@ -1243,7 +1251,7 @@ fn reshape_dim_to_python(gen: &CodeGenerator, d: &ReshapeDim) -> Result<String, 
     Ok(match d {
         ReshapeDim::Named(name) => resolve_dim_name(gen, name),
         ReshapeDim::Literal(n) => n.to_string(),
-        ReshapeDim::Binding { name, .. } => name.clone(),
+        ReshapeDim::Binding { name, .. } => sanitize_python_ident(name),
         ReshapeDim::Others => "-1".to_string(),
         ReshapeDim::Expr(expr) => dim_expr_to_python(gen, expr)?,
     })
@@ -1281,7 +1289,7 @@ fn dim_ref_to_python(gen: &CodeGenerator, dim: &Dim) -> Result<String, CodegenEr
     Ok(match dim {
         Dim::Literal(n) => n.to_string(),
         Dim::Named(n) => resolve_dim_name(gen, n),
-        Dim::Global(n) => n.clone(),
+        Dim::Global(n) => sanitize_python_ident(n),
         Dim::Expr(e) => dim_expr_to_python(gen, e)?,
         Dim::Wildcard => "-1".to_string(),
         Dim::Inferred => "-1".to_string(),
@@ -1351,10 +1359,20 @@ pub(super) fn generate_shape_check(
                 // Check if it's a parameter
                 if gen.current_neuron_params.contains(n) {
                     // Parameter: check equality with self.param
-                    checks.push(format!("{}.shape[{}] == self.{}", var_name, i, n));
+                    checks.push(format!(
+                        "{}.shape[{}] == self.{}",
+                        var_name,
+                        i,
+                        sanitize_python_ident(n)
+                    ));
                 } else {
                     // Pattern capture: bind dimension for use in pipeline
-                    bindings.push(format!("{} = {}.shape[{}]", n, var_name, i));
+                    bindings.push(format!(
+                        "{} = {}.shape[{}]",
+                        sanitize_python_ident(n),
+                        var_name,
+                        i
+                    ));
                 }
             }
             _ => {} // Skip Wildcard, Variadic, Expr for now

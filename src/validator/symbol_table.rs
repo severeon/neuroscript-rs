@@ -537,7 +537,7 @@ pub(super) fn check_port_compatibility(
         }
         // Annotated reshapes (@reduce/@repeat) intentionally change element count.
         // However, @reduce must strictly decrease rank (target dims < source dims).
-        if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+        if let Some(TransformAnnotation::Reduce(..)) = &reshape.annotation {
             // Compute source rank from the first source port's shape.
             // Skip check if source has variadic dims (unknown rank).
             if let Some(src_port) = source_ports.first() {

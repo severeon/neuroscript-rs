@@ -286,6 +286,8 @@ pub struct ReshapeExpr {
     pub dims: Vec<ReshapeDim>,
     pub annotation: Option<TransformAnnotation>,
     pub id: usize,
+    /// Source span for diagnostic reporting
+    pub span: Option<SourceSpan>,
 }
 
 impl ReshapeExpr {
@@ -356,8 +358,8 @@ pub enum ReshapeDim {
 /// Transform annotation: @reduce(mean), @repeat(copy)
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransformAnnotation {
-    Reduce(TransformStrategy),
-    Repeat(TransformStrategy),
+    Reduce(TransformStrategy, Option<SourceSpan>),
+    Repeat(TransformStrategy, Option<SourceSpan>),
 }
 
 /// Strategy for a transform: intrinsic name or neuron call
@@ -1229,8 +1231,8 @@ impl std::fmt::Display for ReshapeExpr {
 impl std::fmt::Display for TransformAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformAnnotation::Reduce(s) => write!(f, "@reduce({})", s),
-            TransformAnnotation::Repeat(s) => write!(f, "@repeat({})", s),
+            TransformAnnotation::Reduce(s, _) => write!(f, "@reduce({})", s),
+            TransformAnnotation::Repeat(s, _) => write!(f, "@repeat({})", s),
         }
     }
 }
