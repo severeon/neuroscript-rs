@@ -17,16 +17,16 @@ class FFN(nn.Module):
         super().__init__()
         self.dim = dim
         self.expansion = expansion
-        self.g_e_l_u_1 = GELU()
+        self.gelu_1 = GELU()
         self.linear_0 = Linear(dim, expansion)
         self.linear_2 = Linear(expansion, dim)
 
     def forward(self, x):
         linear_0 = self.linear_0(x)
         # Linear() output shape: [*batch, out_dim]
-        g_e_l_u_1 = self.g_e_l_u_1(linear_0)
+        gelu_1 = self.gelu_1(linear_0)
         # GELU() output shape: [*shape]
-        linear_2 = self.linear_2(g_e_l_u_1)
+        linear_2 = self.linear_2(gelu_1)
         # Linear() output shape: [*batch, out_dim]
         return linear_2
 
@@ -40,7 +40,7 @@ class TransformerBlock(nn.Module):
         self.add_7 = Add()
         self.dropout_2 = Dropout(0.1)
         self.dropout_6 = Dropout(0.1)
-        self.f_f_n_5 = FFN(dim, d_ff)
+        self.ffn_5 = FFN(dim, d_ff)
         self.layer_norm_0 = LayerNorm(dim)
         self.layer_norm_4 = LayerNorm(dim)
         self.multi_head_self_attention_1 = MultiHeadSelfAttention(dim, num_heads)
@@ -59,8 +59,8 @@ class TransformerBlock(nn.Module):
         ffn_path = add_3
         layer_norm_4 = self.layer_norm_4(ffn_path)
         # LayerNorm() output shape: [*shape, dim]
-        f_f_n_5 = self.f_f_n_5(layer_norm_4)
-        dropout_6 = self.dropout_6(f_f_n_5)
+        ffn_5 = self.ffn_5(layer_norm_4)
+        dropout_6 = self.dropout_6(ffn_5)
         # Dropout() output shape: [*shape]
         add_7 = self.add_7((skip2, dropout_6))
         return add_7

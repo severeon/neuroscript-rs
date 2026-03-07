@@ -30,12 +30,16 @@ fn test_value_to_python_binop() {
 #[test]
 fn test_snake_case() {
     assert_eq!(snake_case_impl("Linear"), "linear");
-    assert_eq!(snake_case_impl("GELU"), "g_e_l_u");
+    assert_eq!(snake_case_impl("GELU"), "gelu");
     assert_eq!(snake_case_impl("LayerNorm"), "layer_norm");
     assert_eq!(
         snake_case_impl("MultiHeadAttention"),
         "multi_head_attention"
     );
+    assert_eq!(snake_case_impl("ReLU"), "re_lu");
+    assert_eq!(snake_case_impl("SiLU"), "si_lu");
+    assert_eq!(snake_case_impl("Conv2d"), "conv2d");
+    assert_eq!(snake_case_impl("RMSNorm"), "rms_norm");
 }
 
 #[test]
