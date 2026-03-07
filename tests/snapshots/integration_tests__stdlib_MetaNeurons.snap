@@ -4,6 +4,17 @@ expression: formatted
 ---
 === Neurons ===
 
+neuron Adapter(dim, bottleneck):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, dim]
+  graph:
+    in -> Linear#1(dim, bottleneck)
+    Linear#1(dim, bottleneck) -> ReLU#2()
+    ReLU#2() -> Linear#3(bottleneck, dim)
+    Linear#3(bottleneck, dim) -> out
+
 neuron ParallelFFN(dim):
   inputs:
     default: [*batch, dim]
@@ -12,3 +23,43 @@ neuron ParallelFFN(dim):
   graph:
     in -> FFN#0(dim, (dim * 2))
     FFN#0(dim, (dim * 2)) -> out
+
+neuron Postnorm(dim, block):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, dim]
+  graph:
+    in -> block
+    block -> LayerNorm#5(dim)
+    LayerNorm#5(dim) -> out
+
+neuron Prenorm(dim, block):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, dim]
+  graph:
+    in -> LayerNorm#4(dim)
+    LayerNorm#4(dim) -> block
+    block -> out
+
+neuron Projection(in_dim, out_dim):
+  inputs:
+    default: [*batch, in_dim]
+  outputs:
+    default: [*batch, out_dim]
+  graph:
+    in -> Linear#8(in_dim, out_dim)
+    Linear#8(in_dim, out_dim) -> GELU#9()
+    GELU#9() -> out
+
+neuron ScaleShift(dim):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, dim]
+  graph:
+    in -> Scale#6(dim)
+    Scale#6(dim) -> Bias#7(dim)
+    Bias#7(dim) -> out
