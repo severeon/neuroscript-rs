@@ -28,6 +28,7 @@ git checkout -b fix/<story-id-slug>
 ```
 
 ### 2. Read Context
+- Read `.claude/conventions.md` — patterns and pitfalls from prior sprints
 - Read the Obsidian story note: `neuroscript/Stories/<story-name>.md`
 - Read relevant source files listed in the story
 - Check CLAUDE.md and `.claude/context/` files if needed
@@ -120,7 +121,14 @@ For any issues discovered while working that are OUT OF SCOPE:
 - Add a card to the appropriate column on the board
 - Do NOT fix them — just document
 
-### 12. Shut Down
+### 12. Retrospective
+Before shutting down, review what you learned during this story:
+- Did you hit any pitfall that `.claude/conventions.md` could have warned about?
+- Did you discover a pattern future agents should know?
+- If yes, append a concise entry to `.claude/conventions.md` under the appropriate heading.
+- Only add durable, reusable learnings — not task-specific details.
+
+### 13. Shut Down
 Report completion to team lead and approve shutdown.
 
 ## Hard Rules
