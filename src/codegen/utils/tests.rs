@@ -201,6 +201,18 @@ fn test_value_to_python_string_escaping() {
         value_to_python_impl(&Value::String("\01".to_string())),
         "\"\\x001\""
     );
+
+    // Vertical tab escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\x0bb".to_string())),
+        "\"a\\x0bb\""
+    );
+
+    // Form feed escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\x0cb".to_string())),
+        "\"a\\x0cb\""
+    );
 }
 
 #[test]
