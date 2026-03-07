@@ -4,6 +4,70 @@ Tracks what was built, what's left, known bugs, and key decisions. Referenced fr
 
 ---
 
+## Session: 2026-03-07 — Sprint 2 (v0.6.0) — 11 stories, 8 agent PRs, release to main
+
+### What Was Done
+
+**Sprint 2 stories (PRs #105–#112):**
+- **CODEGEN-NEW-1**: Unified two divergent lazy instantiation codegen paths (Ref + Call) into shared `emit_lazy_instantiation()` helper (#108)
+- **PASS-NEW-1**: Separated reachability computation from validator into dedicated `optimizer::compute_reachability` pass, making validator read-only (#107)
+- **CODEGEN-8**: Restored port names and shapes in PortMismatch error messages (#105)
+- **CODEGEN-5**: Fixed snake_case acronym handling — `ReLU` → `re_lu_1` instead of `re_l_u_1` (#106)
+- **CLI-NEW-2**: Added 29 CLI integration tests covering parse, validate, compile, list commands (#111)
+- **CODEGEN-7**: Added vertical tab and form feed escaping to `escape_python_string` (#110)
+- **CODEGEN-6**: Fixed PortMismatch PartialEq to compare all semantic fields (#109)
+- **INTERFACES-1**: Cleaned up ValidationError PartialEq with discriminant check, superseding CODEGEN-6 (#112)
+- **INFRA-2**: Added branch protection on main requiring Test + WASM Check status checks
+
+**Infrastructure:**
+- Created CHANGELOG.md (Keep a Changelog format, v0.4.0–v0.6.0)
+- Fixed wait-for-review.sh race condition with SEEN_PENDING guard
+- Bumped version to 0.6.0
+- Merged Sprint 1 + Sprint 2 to main via PR #113
+- Created 3 GitHub issues from review feedback (#114, #115, #116)
+- Organized Obsidian Stories into Sprint 1 / Sprint 2 / Backlog subfolders
+
+**Agent coordination:**
+- 6 agents in round 1 (Marvin, Baymax, Data-2, Johnny-5, Wall-E-2) — worktree isolation issues
+- 3 agents in round 2 (HAL, Cortana, JARVIS) — clean parallel execution with pre-created worktrees
+- Team lead handled INFRA-2 (settings change) and INTERFACES-1 (conflict with JARVIS's work)
+
+### Files Changed
+
+| Layer | Files | Change |
+|-------|-------|--------|
+| Codegen | `src/codegen/forward.rs`, `instantiation.rs` | Unified lazy instantiation, emit_lazy_instantiation() helper |
+| Codegen | `src/codegen/utils.rs`, `utils/tests.rs` | Snake_case acronym fix, control char escaping |
+| Codegen | `src/codegen/tests.rs` | Lazy instantiation cross-reference test |
+| Interfaces | `src/interfaces.rs` | PortMismatch error fields, PartialEq cleanup with discriminant |
+| Optimizer | `src/optimizer/core.rs` | compute_reachability pass (separated from validator) |
+| Validator | `src/validator/core.rs`, `tests/` | Read-only validator signature, test updates |
+| Lib | `src/lib.rs` | compute_reachability call between validation and shape inference |
+| CLI Tests | `tests/cli_tests.rs` | 29 new integration tests (508 lines) |
+| Infra | `scripts/wait-for-review.sh` | SEEN_PENDING race condition fix |
+| Infra | `CHANGELOG.md` | New file, v0.4.0–v0.6.0 |
+| Infra | `Cargo.toml`, `Cargo.lock` | Version bump 0.5.0 → 0.6.0 |
+
+### Lessons Learned
+
+1. **Pre-created worktrees are essential for agent isolation** — `isolation: "worktree"` Agent parameter doesn't work reliably. Team lead must pre-create worktrees and give agents explicit `cd /path/to/worktree &&` prefixes in every bash command.
+2. **3 parallel agents is the sweet spot** — 5 agents in round 1 collided; 3 in round 2 worked flawlessly. Each agent completes in 2–10 minutes.
+3. **Don't launch agents on overlapping files** — CODEGEN-6 (JARVIS) and INTERFACES-1 (team lead) both modified the same PartialEq section, causing a merge conflict. Either serialize or skip the redundant story.
+4. **miette's `#[label]` attribute requires `Option<SourceSpan>` at the type level** — wrapping in a newtype (EqIgnoredSpan) breaks the derive macro. Manual PartialEq is unavoidable until miette supports custom span types.
+5. **Squash-merge release PRs cause conflicts on the next release** — Sprint 1 squash-merged to main, then Sprint 2's `_dev→main` PR had conflicts because git couldn't recognize the already-applied changes. Resolve by merging main back into _dev before the release PR.
+6. **wait-for-review.sh needs SEEN_PENDING guard** — Without it, polling immediately after push sees stale completed results and exits before the new run registers.
+7. **Agent quality was excellent** — All 8 agent PRs passed CI on first push with zero review feedback needed. The backlog-worker agent definition is mature.
+8. **Version bump before agent branching** — Commit version bumps to _dev before creating agent branches so all PRs include the correct version.
+
+### Next Steps
+
+- Address review issues #114 (PartialEq unreachable!), #115 (reachability docs), #116 (CLI test improvements)
+- TOOL-5: LLM-in-the-loop doc quality testing experiment
+- Consider worktree lifecycle script to automate create/cleanup
+- Sprint 3 planning from backlog
+
+---
+
 ## Session: 2026-02-13 — Syntax Highlighting, Codegen Improvements, Tutorial Expansion & Editor Consolidation
 
 ### What Was Done

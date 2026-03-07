@@ -5,6 +5,16 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- CONTRIBUTING.md now clarifies that CLAUDE.md doubles as AI assistant configuration alongside architecture documentation
+
+### Fixed
+
+- Verified Cargo.lock is in sync with Cargo.toml version (0.6.0)
+
 ## [0.6.0] - 2026-03-07
 
 ### Fixed
