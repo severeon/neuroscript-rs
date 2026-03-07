@@ -1242,6 +1242,7 @@ fn render_validation_errors(
     let source = fs::read_to_string(file).ok();
 
     let mut first_report: Option<miette::Report> = None;
+    let mut plain_errors: Vec<String> = Vec::new();
 
     for error in errors {
         if error.span().is_some() {
@@ -1259,10 +1260,13 @@ fn render_validation_errors(
                 continue;
             }
         }
-        // No span or no source — print as plain text
-        if first_report.is_some() {
-            eprintln!("  {}", error);
-        }
+        // No span or no source — always collect for display
+        plain_errors.push(format!("  {}", error));
+    }
+
+    // Print all non-spanned errors regardless of ordering
+    for msg in &plain_errors {
+        eprintln!("{}", msg);
     }
 
     if let Some(report) = first_report {
@@ -1270,11 +1274,7 @@ fn render_validation_errors(
     }
 
     // Fallback: no spanned errors, use the old-style summary
-    let detail = errors
-        .iter()
-        .map(|e| format!("  {}", e))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let detail = plain_errors.join("\n");
     Err(miette::miette!(
         "Validation failed with {} error(s):\n{}",
         errors.len(),
