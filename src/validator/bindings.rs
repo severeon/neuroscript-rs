@@ -1,5 +1,5 @@
 use crate::interfaces::*;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Validate context:, let: and set: bindings
 pub(super) fn validate_bindings(
@@ -141,6 +141,11 @@ pub(super) fn validate_bindings(
     // Mutual @lazy recursion detection within the same context block.
     // Build a dependency graph: for each @lazy binding, find which other @lazy
     // bindings it references (via Value::Name args). Then detect cycles.
+    //
+    // NOTE: This only detects mutual recursion within a single neuron's context
+    // bindings. Cross-neuron mutual recursion (neuron A's binding calls neuron B,
+    // neuron B's binding calls neuron A) requires whole-program call graph
+    // analysis and is not handled here.
     let lazy_bindings: BTreeSet<&str> = context_bindings
         .iter()
         .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
@@ -148,8 +153,9 @@ pub(super) fn validate_bindings(
         .collect();
 
     if lazy_bindings.len() >= 2 {
-        // Build adjacency list: only edges between @lazy bindings
-        let mut deps: HashMap<&str, BTreeSet<&str>> = HashMap::new();
+        // Build adjacency list: only edges between @lazy bindings.
+        // BTreeMap ensures deterministic DFS traversal order.
+        let mut deps: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for binding in context_bindings {
             if !lazy_bindings.contains(binding.name.as_str()) {
                 continue;
@@ -212,7 +218,7 @@ fn collect_name_refs<'a>(
 
 /// DFS state for cycle detection across @lazy bindings.
 struct CycleDfs<'a> {
-    deps: &'a HashMap<&'a str, BTreeSet<&'a str>>,
+    deps: &'a BTreeMap<&'a str, BTreeSet<&'a str>>,
     visited: HashSet<&'a str>,
     stack: HashSet<&'a str>,
     path: Vec<&'a str>,
@@ -248,9 +254,8 @@ impl<'a> CycleDfs<'a> {
                     // to deduplicate cycles found from different starting points.
                     let key = normalize_cycle(&cycle);
                     if self.reported_cycles.insert(key) {
-                        let cycle_str = cycle.join(" -> ");
                         errors.push(ValidationError::MutualLazyRecursion {
-                            cycle: cycle_str,
+                            cycle,
                             neuron: neuron_name.to_string(),
                         });
                     }
