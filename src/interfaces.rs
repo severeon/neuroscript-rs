@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::cell::Cell;
 use thiserror::Error;
 
+
 /// Global ID generator for unique endpoint IDs across parsing and IR passes.
 ///
 /// Counter for generating unique endpoint IDs within a compilation.
@@ -794,50 +795,53 @@ pub enum ValidationError {
     },
 }
 
+/// `PartialEq` compares all semantic fields but ignores `span` (source location
+/// metadata). Two errors at different positions in the source are still "the same
+/// error" for deduplication and test-assertion purposes.
 impl PartialEq for ValidationError {
     fn eq(&self, other: &Self) -> bool {
+        // std::mem::discriminant handles the cross-variant `_ => false` case,
+        // so each arm only needs to destructure its own fields.
+        if std::mem::discriminant(self) != std::mem::discriminant(other) {
+            return false;
+        }
         match (self, other) {
-            (
-                Self::MissingNeuron { name: a, context: b, .. },
-                Self::MissingNeuron { name: c, context: d, .. },
-            ) => a == c && b == d,
-            (Self::PortMismatch { context: a, .. }, Self::PortMismatch { context: b, .. }) => a == b,
-            (Self::CycleDetected { cycle: a, context: b }, Self::CycleDetected { cycle: c, context: d }) => a == c && b == d,
-            (
-                Self::ArityMismatch { expected: a, got: b, context: c, .. },
-                Self::ArityMismatch { expected: d, got: e, context: f, .. },
-            ) => a == d && b == e && c == f,
-            (Self::UnknownNode { node: a, context: b }, Self::UnknownNode { node: c, context: d }) => a == c && b == d,
-            (Self::NonExhaustiveMatch { context: a, suggestion: b }, Self::NonExhaustiveMatch { context: c, suggestion: d }) => a == c && b == d,
-            (
-                Self::UnreachableMatchArm { arm_index: a, shadowed_by: b, context: c },
-                Self::UnreachableMatchArm { arm_index: d, shadowed_by: e, context: f },
-            ) => a == d && b == e && c == f,
-            (Self::DuplicateBinding { name: a, neuron: b }, Self::DuplicateBinding { name: c, neuron: d }) => a == c && b == d,
-            (
-                Self::InvalidRecursion { binding: a, neuron: b, reason: c },
-                Self::InvalidRecursion { binding: d, neuron: e, reason: f },
-            ) => a == d && b == e && c == f,
-            (Self::InvalidUnrollCount { neuron: a, reason: b }, Self::InvalidUnrollCount { neuron: c, reason: d }) => a == c && b == d,
-            (
-                Self::InvalidReshape { message: a, context: b, .. },
-                Self::InvalidReshape { message: c, context: d, .. },
-            ) => a == c && b == d,
-            (
-                Self::InvalidAnnotation { annotation: a, reason: b, context: c, .. },
-                Self::InvalidAnnotation { annotation: d, reason: e, context: f, .. },
-            ) => a == d && b == e && c == f,
-            (
-                Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
-                Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. },
-            ) => a == e && b == f && c == g && d == h,
-            (
-                Self::MutualLazyRecursion { cycle: a, neuron: b },
-                Self::MutualLazyRecursion { cycle: c, neuron: d },
-            ) => a == c && b == d,
+            (Self::MissingNeuron { name: a, context: b, .. },
+             Self::MissingNeuron { name: c, context: d, .. }) => a == c && b == d,
+            (Self::PortMismatch { source_node: a1, source_port: a2, source_shape: a3,
+                                  dest_node: a4, dest_port: a5, dest_shape: a6, context: a7, .. },
+             Self::PortMismatch { source_node: b1, source_port: b2, source_shape: b3,
+                                  dest_node: b4, dest_port: b5, dest_shape: b6, context: b7, .. })
+                => a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4 && a5 == b5 && a6 == b6 && a7 == b7,
+            (Self::CycleDetected { cycle: a, context: b },
+             Self::CycleDetected { cycle: c, context: d }) => a == c && b == d,
+            (Self::ArityMismatch { expected: a, got: b, context: c, .. },
+             Self::ArityMismatch { expected: d, got: e, context: f, .. }) => a == d && b == e && c == f,
+            (Self::UnknownNode { node: a, context: b },
+             Self::UnknownNode { node: c, context: d }) => a == c && b == d,
+            (Self::NonExhaustiveMatch { context: a, suggestion: b },
+             Self::NonExhaustiveMatch { context: c, suggestion: d }) => a == c && b == d,
+            (Self::UnreachableMatchArm { arm_index: a, shadowed_by: b, context: c },
+             Self::UnreachableMatchArm { arm_index: d, shadowed_by: e, context: f }) => a == d && b == e && c == f,
+            (Self::DuplicateBinding { name: a, neuron: b },
+             Self::DuplicateBinding { name: c, neuron: d }) => a == c && b == d,
+            (Self::InvalidRecursion { binding: a, neuron: b, reason: c },
+             Self::InvalidRecursion { binding: d, neuron: e, reason: f }) => a == d && b == e && c == f,
+            (Self::InvalidUnrollCount { neuron: a, reason: b },
+             Self::InvalidUnrollCount { neuron: c, reason: d }) => a == c && b == d,
+            (Self::InvalidReshape { message: a, context: b, .. },
+             Self::InvalidReshape { message: c, context: d, .. }) => a == c && b == d,
+            (Self::InvalidAnnotation { annotation: a, reason: b, context: c, .. },
+             Self::InvalidAnnotation { annotation: d, reason: e, context: f, .. }) => a == d && b == e && c == f,
+            (Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
+             Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. })
+                => a == e && b == f && c == g && d == h,
+            (Self::MutualLazyRecursion { cycle: a, neuron: b },
+             Self::MutualLazyRecursion { cycle: c, neuron: d }) => a == c && b == d,
             (Self::Custom(a), Self::Custom(b)) => a == b,
             (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
-            _ => false,
+            // discriminant check above ensures this is unreachable, but required for exhaustiveness
+            _ => unreachable!(),
         }
     }
 }
