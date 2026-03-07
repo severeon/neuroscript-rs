@@ -45,6 +45,23 @@ pub(super) fn sanitize_python_ident(name: &str) -> String {
     result
 }
 
+/// Escape a string for embedding inside Python double quotes.
+fn escape_python_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '"' => result.push_str("\\\""),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\0' => result.push_str("\\0"),
+            c => result.push(c),
+        }
+    }
+    result
+}
+
 /// Map a BinOp to its Python operator string.
 /// When `int_div` is true, `Div` maps to `//` (integer division for dimension arithmetic).
 ///
@@ -130,7 +147,7 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
         Value::Float(f) => format!("{:?}", f),
-        Value::String(s) => format!("\"{}\"", s),
+        Value::String(s) => format!("\"{}\"", escape_python_string(s)),
         Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
         Value::Name(n) => sanitize_python_ident(n),
         Value::Global(n) => sanitize_python_ident(n),

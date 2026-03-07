@@ -139,3 +139,48 @@ fn test_value_to_python_sanitizes_names() {
     };
     assert_eq!(value_to_python_impl(&call), "Linear(class_=1)");
 }
+
+#[test]
+fn test_value_to_python_string_escaping() {
+    // Simple string unchanged
+    assert_eq!(
+        value_to_python_impl(&Value::String("hello".to_string())),
+        "\"hello\""
+    );
+
+    // Double quotes escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("say \"hi\"".to_string())),
+        "\"say \\\"hi\\\"\""
+    );
+
+    // Backslashes escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("path\\to\\file".to_string())),
+        "\"path\\\\to\\\\file\""
+    );
+
+    // Newlines escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("line1\nline2".to_string())),
+        "\"line1\\nline2\""
+    );
+
+    // Tabs escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("col1\tcol2".to_string())),
+        "\"col1\\tcol2\""
+    );
+
+    // Carriage return escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("cr\rhere".to_string())),
+        "\"cr\\rhere\""
+    );
+
+    // Combined: quotes, backslash, newline
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\"b\\c\n".to_string())),
+        "\"a\\\"b\\\\c\\n\""
+    );
+}
