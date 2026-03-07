@@ -840,8 +840,11 @@ impl PartialEq for ValidationError {
              Self::MutualLazyRecursion { cycle: c, neuron: d }) => a == c && b == d,
             (Self::Custom(a), Self::Custom(b)) => a == b,
             (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
-            // discriminant check above ensures this is unreachable, but required for exhaustiveness
-            _ => unreachable!(),
+            // Safety net: the discriminant guard above means this arm only fires for
+            // same-discriminant pairs that lack an explicit match. Returning false is
+            // conservative and safe — and avoids a runtime panic if a new variant is
+            // added without updating this block.
+            _ => false,
         }
     }
 }
