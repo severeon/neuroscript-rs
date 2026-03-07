@@ -303,3 +303,38 @@ fn test_cycle_via_kwargs_reference() {
 
     assert_validation_error(&mut program, is_mutual_recursion);
 }
+
+#[test]
+fn test_mutual_lazy_recursion_has_source_span() {
+    // Parse from source so pest captures spans, then validate.
+    // The MutualLazyRecursion error should carry a non-None span
+    // pointing back into the source.
+    let source = r#"
+neuron Helper(x):
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/Identity
+
+neuron MutualTest(dim):
+    in: [*shape]
+    out: [*shape]
+    context:
+        @lazy a = Helper(b)
+        @lazy b = Helper(a)
+    graph:
+        in -> a -> out
+"#;
+
+    let mut program = crate::parse(source).expect("should parse successfully");
+    let result = crate::validate(&mut program);
+    assert!(result.is_err(), "Expected MutualLazyRecursion validation error");
+    let errors = result.unwrap_err();
+    let mutual_error = errors
+        .iter()
+        .find(|e| matches!(e, ValidationError::MutualLazyRecursion { .. }))
+        .expect("Expected a MutualLazyRecursion error");
+    assert!(
+        mutual_error.span().is_some(),
+        "MutualLazyRecursion error should have a source span, but span() returned None"
+    );
+}
