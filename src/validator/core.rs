@@ -31,6 +31,7 @@ impl Validator {
                     errors.push(ValidationError::MissingNeuron {
                         name: name.clone(),
                         context: format!("global declaration '{}'", global.name),
+                        span: None,
                     });
                 }
             }
@@ -464,6 +465,7 @@ impl Validator {
                     vec![ValidationError::MissingNeuron {
                         name: name.clone(),
                         context: context_neuron.to_string(),
+                        span: None,
                     }]
                 } else {
                     vec![]
@@ -543,6 +545,7 @@ impl Validator {
                                         "transform annotation in {}",
                                         context_neuron
                                     ),
+                                    span: None,
                                 });
                             }
                         }

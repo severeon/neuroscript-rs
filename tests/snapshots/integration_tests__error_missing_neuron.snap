@@ -2,10 +2,10 @@
 source: tests/integration_tests.rs
 expression: error_text
 ---
-MissingNeuron { name: "MissingNeuron", context: "Test" }
+MissingNeuron { name: "MissingNeuron", context: "Test", span: None }
 
 UnknownNode { node: "in", context: "Test" }
 
-MissingNeuron { name: "MissingNeuron", context: "Test" }
+MissingNeuron { name: "MissingNeuron", context: "Test", span: None }
 
-MissingNeuron { name: "MissingNeuron", context: "Test" }
+MissingNeuron { name: "MissingNeuron", context: "Test", span: None }

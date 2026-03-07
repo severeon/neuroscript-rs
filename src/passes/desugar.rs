@@ -124,6 +124,7 @@ fn desugar_endpoint_wraps(
                 return Err(ValidationError::MissingNeuron {
                     name: wrapper_name.clone(),
                     context: format!("@wrap({}, ...)", wrapper_name),
+                    span: None,
                 });
             }
             // If it's a primitive from the registry, we skip the check since primitives
