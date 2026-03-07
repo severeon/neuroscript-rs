@@ -1,0 +1,20 @@
+# Test file: adversarial identifiers that are Python keywords
+#
+# NeuroScript allows these as valid identifiers, but the codegen
+# must sanitize them (append '_') to produce valid Python.
+
+neuron AdversarialNet(lambda, dim):
+    in: [batch, lambda]
+    out: [batch, dim]
+    graph:
+        in -> Linear(lambda, dim) -> ReLU() -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/ReLU
