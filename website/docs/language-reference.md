@@ -233,7 +233,13 @@ context:
     @global vocab = Embedding(vocab_size)   # global singleton
 ```
 
-**`@lazy`** is required for recursive bindings — the arguments that change must be expressions:
+**`@lazy`**: Deferred instantiation — the neuron is only created when the binding is actually reached during forward execution. Required for recursive bindings where arguments change per call.
+
+**`@static`**: Shared across all instances of the enclosing neuron — useful for parameter-free modules like normalization.
+
+**`@global`**: A process-wide singleton — all neurons that reference this binding share the same instance. Useful for shared vocabularies or embeddings.
+
+`@lazy` is required for recursive bindings — the arguments that change must be expressions:
 
 ```neuroscript
 context:
@@ -291,6 +297,7 @@ in -> match: ->
 Dispatch based on a neuron parameter's port shapes, resolved at compile time:
 
 ```neuroscript
+# Selects wiring strategy based on the block's input/output shapes
 neuron SmartStack(block: Neuron, d_model, count=6):
     in: [*, seq, d_model]
     out: [*, seq, d_model]
@@ -300,10 +307,14 @@ neuron SmartStack(block: Neuron, d_model, count=6):
     graph:
         in ->
             match(block):
+                # Block expects sequence dimension — pass through directly
                 in [*, seq, d_model] -> out [*, seq, d_model]:
-                    blocks -> out
+                    blocks
+                    out
+                # Block operates per-token — reshape around it
                 in [*, d_model] -> out [*, d_model]:
-                    blocks -> out
+                    blocks
+                    out
 ```
 
 ## Conditionals
@@ -314,7 +325,10 @@ Route based on parameter values (compile-time branching).
 
 ```neuroscript
 graph:
-    in -> if has_pool: pool -> out else: Identity() -> out
+    in ->
+        if has_pool: pool
+        else: Identity()
+        out
 ```
 
 ### Block Syntax
@@ -338,8 +352,11 @@ Guards support comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`.
 
 Inline reshape/view operator that compiles to `torch.reshape()`:
 
+Dimension binding (`name=expr`) assigns a name to the result of an expression, making it available in subsequent reshape steps.
+
 ```neuroscript
 # Basic reshape: [batch, seq, dim] -> [batch, seq, heads, dim/heads]
+# dh=dim/heads creates a new named dimension 'dh' with value dim/heads
 in => [batch, seq, heads, dh=dim/heads] -> out
 
 # Transpose via reshape: [batch, seq, heads, dh] -> [batch, heads, seq, dh]
@@ -363,6 +380,8 @@ use core,attention/ScaledDotProductAttention      # from attention library
 ```
 
 Import path format: `<provider>,<library>/<neuron>` or `<provider>,<library>/*`.
+
+Wildcard imports (`/*`) make all neurons in that library available without qualification. Specific imports are preferred when you only need a few neurons to keep dependencies explicit.
 
 ## Complete Examples
 
