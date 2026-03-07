@@ -1,4 +1,6 @@
 use super::*;
+use crate::codegen::generator::CodeGenerator;
+use crate::interfaces::{InferenceContext, Program};
 
 #[test]
 fn test_value_to_python_primitives() {
@@ -92,4 +94,148 @@ fn test_endpoint_key_unique_per_call() {
         frozen: false,
     };
     assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call3));
+}
+
+#[test]
+fn test_sanitize_python_ident_defense_in_depth() {
+    // Normal identifiers pass through unchanged
+    assert_eq!(sanitize_python_ident("dim"), "dim");
+    assert_eq!(sanitize_python_ident("Linear"), "Linear");
+    assert_eq!(sanitize_python_ident("my_var"), "my_var");
+
+    // Python keywords get trailing underscore
+    assert_eq!(sanitize_python_ident("class"), "class_");
+    assert_eq!(sanitize_python_ident("import"), "import_");
+    assert_eq!(sanitize_python_ident("lambda"), "lambda_");
+
+    // Invalid chars become underscores
+    assert_eq!(sanitize_python_ident("a-b"), "a_b");
+    assert_eq!(sanitize_python_ident("x.y"), "x_y");
+
+    // Leading digit gets underscore prefix
+    assert_eq!(sanitize_python_ident("3layer"), "_3layer");
+
+    // Empty string
+    assert_eq!(sanitize_python_ident(""), "_empty");
+}
+
+#[test]
+fn test_value_to_python_sanitizes_names() {
+    // Value::Name with a Python keyword should be sanitized
+    assert_eq!(
+        value_to_python_impl(&Value::Name("class".to_string())),
+        "class_"
+    );
+
+    // Value::Global with special chars should be sanitized
+    assert_eq!(
+        value_to_python_impl(&Value::Global("my-global".to_string())),
+        "my_global"
+    );
+
+    // Value::Call with kwargs keys should be sanitized
+    let call = Value::Call {
+        name: "Linear".to_string(),
+        args: vec![],
+        kwargs: vec![("class".to_string(), Value::Int(1))],
+    };
+    assert_eq!(value_to_python_impl(&call), "Linear(class_=1)");
+}
+
+#[test]
+fn test_value_to_python_string_escaping() {
+    // Simple string unchanged
+    assert_eq!(
+        value_to_python_impl(&Value::String("hello".to_string())),
+        "\"hello\""
+    );
+
+    // Double quotes escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("say \"hi\"".to_string())),
+        "\"say \\\"hi\\\"\""
+    );
+
+    // Backslashes escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("path\\to\\file".to_string())),
+        "\"path\\\\to\\\\file\""
+    );
+
+    // Newlines escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("line1\nline2".to_string())),
+        "\"line1\\nline2\""
+    );
+
+    // Tabs escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("col1\tcol2".to_string())),
+        "\"col1\\tcol2\""
+    );
+
+    // Carriage return escaped
+    assert_eq!(
+        value_to_python_impl(&Value::String("cr\rhere".to_string())),
+        "\"cr\\rhere\""
+    );
+
+    // Combined: quotes, backslash, newline
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\"b\\c\n".to_string())),
+        "\"a\\\"b\\\\c\\n\""
+    );
+
+    // Null byte uses \x00 (not \0) to avoid octal ambiguity
+    assert_eq!(
+        value_to_python_impl(&Value::String("a\0b".to_string())),
+        "\"a\\x00b\""
+    );
+
+    // Null byte before digit — \0 + '1' would be octal \01 in Python
+    assert_eq!(
+        value_to_python_impl(&Value::String("\01".to_string())),
+        "\"\\x001\""
+    );
+}
+
+#[test]
+fn test_value_to_python_dim_uses_integer_division() {
+    let program = Program::new();
+    let ctx = InferenceContext::new();
+    let mut gen = CodeGenerator::new(&program, ctx);
+    gen.current_neuron_params.insert("dim".to_string());
+
+    // Division in dimension expressions uses // (integer division)
+    let div_expr = Value::BinOp {
+        op: BinOp::Div,
+        left: Box::new(Value::Name("dim".to_string())),
+        right: Box::new(Value::Int(4)),
+    };
+    assert_eq!(gen.value_to_python_dim(&div_expr), "self.dim // 4");
+
+    // Multiplication works as expected
+    let mul_expr = Value::BinOp {
+        op: BinOp::Mul,
+        left: Box::new(Value::Name("dim".to_string())),
+        right: Box::new(Value::Name("heads".to_string())),
+    };
+    assert_eq!(gen.value_to_python_dim(&mul_expr), "self.dim * heads");
+
+    // binding_context is checked for non-param names
+    gen.binding_context
+        .insert("d".to_string(), "x.shape[1]".to_string());
+    let binding_ref = Value::Name("d".to_string());
+    assert_eq!(gen.value_to_python_dim(&binding_ref), "x.shape[1]");
+}
+
+#[test]
+fn test_value_to_python_impl_uses_float_division() {
+    // The base converter uses / (float division) for general parameter arithmetic
+    let div_expr = Value::BinOp {
+        op: BinOp::Div,
+        left: Box::new(Value::Name("a".to_string())),
+        right: Box::new(Value::Int(4)),
+    };
+    assert_eq!(value_to_python_impl(&div_expr), "a / 4");
 }

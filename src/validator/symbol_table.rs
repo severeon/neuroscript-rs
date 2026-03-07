@@ -163,6 +163,7 @@ fn process_destination_for_symbol_table<F>(
                         expected: port_refs.len(),
                         got: source_ports.len(),
                         context: format!("{}: tuple unpacking", ctx.neuron.name),
+                        span: None,
                     });
                 } else {
                     // Add each unpacked reference as a single-port node
@@ -332,6 +333,7 @@ where
             Err(Box::new(ValidationError::MissingNeuron {
                 name: name.clone(),
                 context: ctx.neuron.name.clone(),
+                span: None,
             }))
         }
         Endpoint::Ref(port_ref) => {
@@ -530,6 +532,7 @@ pub(super) fn check_port_compatibility(
                                 "{}: element count mismatch in reshape ({} vs {})",
                                 context_neuron, source_product, target_product
                             ),
+                            span: None,
                         });
                     }
                 }
@@ -537,7 +540,7 @@ pub(super) fn check_port_compatibility(
         }
         // Annotated reshapes (@reduce/@repeat) intentionally change element count.
         // However, @reduce must strictly decrease rank (target dims < source dims).
-        if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+        if let Some(TransformAnnotation::Reduce { .. }) = &reshape.annotation {
             // Compute source rank from the first source port's shape.
             // Skip check if source has variadic dims (unknown rank).
             if let Some(src_port) = source_ports.first() {
@@ -601,6 +604,7 @@ pub(super) fn check_port_compatibility(
                     dest_port: dest_ports[0].name.clone(),
                     dest_shape: dest_ports[0].shape.clone(),
                     context: context_neuron.to_string(),
+                    span: None,
                 });
             }
         }
@@ -621,6 +625,7 @@ pub(super) fn check_port_compatibility(
                         dest_port: dst_port.name.clone(),
                         dest_shape: dst_port.shape.clone(),
                         context: context_neuron.to_string(),
+                        span: None,
                     });
                 }
             }
@@ -638,6 +643,7 @@ pub(super) fn check_port_compatibility(
                 endpoint_desc(source_endpoint),
                 endpoint_desc(dest_endpoint)
             ),
+            span: None,
         });
         return errors;
     }
@@ -654,6 +660,7 @@ pub(super) fn check_port_compatibility(
                 dest_port: dst_port.name.clone(),
                 dest_shape: dst_port.shape.clone(),
                 context: context_neuron.to_string(),
+                span: None,
             });
         }
     }

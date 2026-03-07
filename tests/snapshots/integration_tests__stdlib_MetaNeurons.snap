@@ -4,11 +4,65 @@ expression: formatted
 ---
 === Neurons ===
 
+neuron Adapter(dim, bottleneck):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> (main, skip)
+    main -> Linear#1(dim, bottleneck)
+    Linear#1(dim, bottleneck) -> ReLU#2()
+    ReLU#2() -> Linear#3(bottleneck, dim)
+    Linear#3(bottleneck, dim) -> adapted
+    (adapted, skip) -> Add#4()
+    Add#4() -> out
+
 neuron ParallelFFN(dim):
   inputs:
-    default: [*batch, dim]
+    default: [*shape, dim]
   outputs:
-    default: [*batch, dim]
+    default: [*shape, dim]
   graph:
     in -> FFN#0(dim, (dim * 2))
     FFN#0(dim, (dim * 2)) -> out
+
+neuron PostNorm(dim, block):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> block
+    block -> LayerNorm#6(dim)
+    LayerNorm#6(dim) -> out
+
+neuron PreNorm(dim, block):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> LayerNorm#5(dim)
+    LayerNorm#5(dim) -> block
+    block -> out
+
+neuron Projection(in_dim, out_dim):
+  inputs:
+    default: [*shape, in_dim]
+  outputs:
+    default: [*shape, out_dim]
+  graph:
+    in -> Linear#9(in_dim, out_dim)
+    Linear#9(in_dim, out_dim) -> GELU#10()
+    GELU#10() -> out
+
+neuron ScaleShift(dim):
+  inputs:
+    default: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  graph:
+    in -> Scale#7(dim)
+    Scale#7(dim) -> Bias#8(dim)
+    Bias#8(dim) -> out

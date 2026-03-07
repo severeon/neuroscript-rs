@@ -624,16 +624,7 @@ fn cmd_validate(file: PathBuf, verbose: bool, no_stdlib: bool, no_deps: bool) ->
             Ok(())
         }
         Err(errors) => {
-            let detail = errors
-                .iter()
-                .map(|e| format!("  {}", e))
-                .collect::<Vec<_>>()
-                .join("\n");
-            return Err(miette::miette!(
-                "Validation failed with {} error(s):\n{}",
-                errors.len(),
-                detail
-            ));
+            render_validation_errors(&file, &errors)
         }
     }
 }
@@ -654,16 +645,7 @@ fn cmd_compile(
 
     // Validate
     if let Err(errors) = validate(&mut program) {
-        let detail = errors
-            .iter()
-            .map(|e| format!("  {}", e))
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(miette::miette!(
-            "Validation failed with {} error(s):\n{}",
-            errors.len(),
-            detail
-        ));
+        return render_validation_errors(&file, &errors);
     }
     if verbose {
         println!("✓ Validation passed");
@@ -1245,6 +1227,59 @@ fn read_source(file: &Path) -> miette::Result<String> {
     fs::read_to_string(file)
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to read {}", file.display()))
+}
+
+/// Render validation errors as miette diagnostics with source code context.
+///
+/// Errors that carry a source span get full source-code underlining via miette.
+/// Errors without spans are printed as plain text. The first spanned error is
+/// returned as the primary miette::Result error; all others are printed to stderr.
+fn render_validation_errors(
+    file: &Path,
+    errors: &[neuroscript::ValidationError],
+) -> miette::Result<()> {
+    // Try to read the source for span-bearing errors
+    let source = fs::read_to_string(file).ok();
+
+    let mut first_report: Option<miette::Report> = None;
+    let mut plain_errors: Vec<String> = Vec::new();
+
+    for error in errors {
+        if error.span().is_some() {
+            if let Some(ref src) = source {
+                let report = miette::Report::from(error.clone())
+                    .with_source_code(NamedSource::new(
+                        file.to_string_lossy(),
+                        src.clone(),
+                    ));
+                if first_report.is_none() {
+                    first_report = Some(report);
+                } else {
+                    eprintln!("{:?}", report);
+                }
+                continue;
+            }
+        }
+        // No span or no source — always collect for display
+        plain_errors.push(format!("  {}", error));
+    }
+
+    if let Some(report) = first_report {
+        // Print non-spanned errors to stderr alongside the rich spanned output
+        for msg in &plain_errors {
+            eprintln!("{}", msg);
+        }
+        return Err(report);
+    }
+
+    // Fallback: no spanned errors — return all as a single error (no eprintln
+    // here to avoid double output since the caller will display the returned error)
+    let detail = plain_errors.join("\n");
+    Err(miette::miette!(
+        "Validation failed with {} error(s):\n{}",
+        errors.len(),
+        detail
+    ))
 }
 
 /// Print a summary of all neurons

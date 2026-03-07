@@ -18,12 +18,9 @@ const PYTHON_KEYWORDS: &[&str] = &[
 /// Sanitize a string to be a valid Python identifier.
 /// Replaces invalid characters with underscores and prefixes Python keywords.
 ///
-/// Currently applied to: reshape dimension names, unroll group/base names.
-/// TODO(CODEGEN-2): Extend to all user-provided strings emitted into Python
-/// (binding names, neuron call names, parameter names in forward.rs and
-/// instantiation.rs, kwargs keys in value_to_python_impl/value_to_python_with_vars).
-/// Those paths currently rely on the parser accepting only valid NeuroScript
-/// identifiers, but a defense-in-depth pass would be safer.
+/// Applied defense-in-depth to all user-provided strings emitted into Python:
+/// binding names, neuron call names, parameter names, kwargs keys, dimension
+/// names, and reshape bindings.
 pub(super) fn sanitize_python_ident(name: &str) -> String {
     if name.is_empty() {
         return "_empty".to_string();
@@ -45,6 +42,23 @@ pub(super) fn sanitize_python_ident(name: &str) -> String {
         result.push('_');
     }
 
+    result
+}
+
+/// Escape a string for embedding inside Python double quotes.
+fn escape_python_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '"' => result.push_str("\\\""),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\0' => result.push_str("\\x00"),
+            c => result.push(c),
+        }
+    }
     result
 }
 
@@ -82,7 +96,7 @@ pub(super) fn value_to_python_with_vars(
             if let Some(resolved) = var_names.get(n) {
                 resolved.clone()
             } else {
-                n.clone()
+                sanitize_python_ident(n)
             }
         }
         Value::BinOp { op, left, right } => {
@@ -105,7 +119,13 @@ pub(super) fn value_to_python_with_vars(
             } else {
                 let kw: Vec<String> = kwargs
                     .iter()
-                    .map(|(k, v)| format!("{}={}", k, value_to_python_with_vars(v, var_names)))
+                    .map(|(k, v)| {
+                        format!(
+                            "{}={}",
+                            sanitize_python_ident(k),
+                            value_to_python_with_vars(v, var_names)
+                        )
+                    })
                     .collect();
                 if args.is_empty() {
                     kw.join(", ")
@@ -114,7 +134,7 @@ pub(super) fn value_to_python_with_vars(
                 }
             };
 
-            format!("{}({}{})", name, args_str, kwargs_str)
+            format!("{}({}{})", sanitize_python_ident(name), args_str, kwargs_str)
         }
         // For other value types (Int, Float, String, Bool, Global),
         // delegate to the standard converter
@@ -127,10 +147,10 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
         Value::Float(f) => format!("{:?}", f),
-        Value::String(s) => format!("\"{}\"", s),
+        Value::String(s) => format!("\"{}\"", escape_python_string(s)),
         Value::Bool(b) => if *b { "True" } else { "False" }.to_string(),
-        Value::Name(n) => n.clone(),
-        Value::Global(n) => n.clone(),
+        Value::Name(n) => sanitize_python_ident(n),
+        Value::Global(n) => sanitize_python_ident(n),
         Value::BinOp { op, left, right } => {
             format!(
                 "{} {} {}",
@@ -151,7 +171,9 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
             } else {
                 let kw: Vec<String> = kwargs
                     .iter()
-                    .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
+                    .map(|(k, v)| {
+                        format!("{}={}", sanitize_python_ident(k), value_to_python_impl(v))
+                    })
                     .collect();
                 if args.is_empty() {
                     kw.join(", ")
@@ -160,7 +182,12 @@ pub(super) fn value_to_python_impl(value: &Value) -> String {
                 }
             };
 
-            format!("{}({}{})", name, args_str, kwargs_str)
+            format!(
+                "{}({}{})",
+                sanitize_python_ident(name),
+                args_str,
+                kwargs_str
+            )
         }
     }
 }
@@ -284,55 +311,38 @@ fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoin
     }
 }
 
-// CodeGenerator wrapper methods for backward compatibility
+// CodeGenerator wrapper methods
 impl<'a> CodeGenerator<'a> {
     /// Convert a Value to Python code
     pub(super) fn value_to_python(&self, value: &Value) -> String {
         value_to_python_impl(value)
     }
 
-    /// Convert a Value to Python, replacing parameter names with self.param
-    pub(super) fn value_to_python_with_self(&self, value: &Value) -> String {
+    /// Convert a Value to Python for dimension expressions.
+    ///
+    /// Resolves parameter names to `self.param`, checks `binding_context`
+    /// for captured dimension bindings, and uses integer division `//`
+    /// because tensor dimensions are always integers.
+    ///
+    /// Used for: reshape bindings, if-conditions, match guards, and
+    /// shape assertion expressions.
+    pub(super) fn value_to_python_dim(&self, value: &Value) -> String {
         match value {
             Value::Name(n) => {
                 if self.current_neuron_params.contains(n) {
-                    format!("self.{}", n)
-                } else {
-                    n.clone()
-                }
-            }
-            Value::BinOp { op, left, right } => {
-                format!(
-                    "{} {} {}",
-                    self.value_to_python_with_self(left),
-                    binop_to_str(op, false),
-                    self.value_to_python_with_self(right)
-                )
-            }
-            _ => self.value_to_python(value),
-        }
-    }
-
-    /// Convert a Value to Python for dimension arithmetic in reshape bindings.
-    /// Uses `//` for integer division and resolves names via neuron params
-    /// and binding_context.
-    pub(super) fn value_to_python_dim_expr(&self, value: &Value) -> String {
-        match value {
-            Value::Name(n) => {
-                if self.current_neuron_params.contains(n) {
-                    format!("self.{}", n)
+                    format!("self.{}", sanitize_python_ident(n))
                 } else if let Some(resolved) = self.binding_context.get(n) {
                     resolved.clone()
                 } else {
-                    n.clone()
+                    sanitize_python_ident(n)
                 }
             }
             Value::BinOp { op, left, right } => {
                 format!(
                     "{} {} {}",
-                    self.value_to_python_dim_expr(left),
+                    self.value_to_python_dim(left),
                     binop_to_str(op, true),
-                    self.value_to_python_dim_expr(right)
+                    self.value_to_python_dim(right)
                 )
             }
             _ => value_to_python_impl(value),
@@ -361,13 +371,13 @@ impl<'a> CodeGenerator<'a> {
                         value.to_string()
                     } else if self.current_neuron_params.contains(name) {
                         // It's a parameter - use self.param
-                        format!("self.{}", name)
+                        format!("self.{}", sanitize_python_ident(name))
                     } else {
                         // Not resolved - can't create concrete assertion
                         return None;
                     }
                 }
-                Dim::Global(name) => name.clone(),
+                Dim::Global(name) => sanitize_python_ident(name),
                 Dim::Wildcard => return None, // Can't assert on wildcard
                 Dim::Inferred => return None, // Can't assert on inferred (-1) dim
                 Dim::Variadic(_) => return None, // Can't assert on variadic
@@ -379,7 +389,7 @@ impl<'a> CodeGenerator<'a> {
                         // Build expression with parameters
                         format!(
                             "({})",
-                            self.value_to_python_with_self(&Value::BinOp {
+                            self.value_to_python_dim(&Value::BinOp {
                                 op: expr.op,
                                 left: Box::new(dim_to_value(&expr.left)),
                                 right: Box::new(dim_to_value(&expr.right)),

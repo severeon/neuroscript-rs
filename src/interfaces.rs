@@ -281,11 +281,19 @@ pub enum WrapContent {
 }
 
 /// A reshape expression: [dim_spec, dim_spec, ...]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ReshapeExpr {
     pub dims: Vec<ReshapeDim>,
     pub annotation: Option<TransformAnnotation>,
     pub id: usize,
+    /// Source span for diagnostic reporting (excluded from equality comparison)
+    pub span: Option<SourceSpan>,
+}
+
+impl PartialEq for ReshapeExpr {
+    fn eq(&self, other: &Self) -> bool {
+        self.dims == other.dims && self.annotation == other.annotation && self.id == other.id
+    }
 }
 
 impl ReshapeExpr {
@@ -354,10 +362,36 @@ pub enum ReshapeDim {
 }
 
 /// Transform annotation: @reduce(mean), @repeat(copy)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum TransformAnnotation {
-    Reduce(TransformStrategy),
-    Repeat(TransformStrategy),
+    Reduce { strategy: TransformStrategy, span: Option<SourceSpan> },
+    Repeat { strategy: TransformStrategy, span: Option<SourceSpan> },
+}
+
+impl PartialEq for TransformAnnotation {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Reduce { strategy: a, .. }, Self::Reduce { strategy: b, .. }) => a == b,
+            (Self::Repeat { strategy: a, .. }, Self::Repeat { strategy: b, .. }) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl TransformAnnotation {
+    /// Get the source span for this annotation.
+    pub fn span(&self) -> Option<SourceSpan> {
+        match self {
+            Self::Reduce { span, .. } | Self::Repeat { span, .. } => *span,
+        }
+    }
+
+    /// Get the strategy for this annotation.
+    pub fn strategy(&self) -> &TransformStrategy {
+        match self {
+            Self::Reduce { strategy, .. } | Self::Repeat { strategy, .. } => strategy,
+        }
+    }
 }
 
 /// Strategy for a transform: intrinsic name or neuron call
@@ -653,12 +687,17 @@ pub struct StdlibRegistry {
 /// The validator collects all errors rather than failing fast, so users see
 /// every problem in a single run. Variants cover missing neurons, shape
 /// mismatches, cycles, arity errors, binding issues, and more.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Error, Diagnostic)]
 pub enum ValidationError {
+    #[error("Neuron '{name}' not found (in {context})")]
     MissingNeuron {
         name: String,
         context: String,
+        #[label("not found")]
+        span: Option<SourceSpan>,
     },
+    #[error("Port mismatch: {context}")]
+    #[diagnostic(help("check if dimensions match or if a transpose/reshape is needed"))]
     PortMismatch {
         source_node: String,
         source_port: String,
@@ -667,56 +706,71 @@ pub enum ValidationError {
         dest_port: String,
         dest_shape: Shape,
         context: String,
+        #[label("shape mismatch here")]
+        span: Option<SourceSpan>,
     },
+    #[error("Cycle detected in {context}: {}", cycle.join(" -> "))]
     CycleDetected {
         cycle: Vec<String>,
         context: String,
     },
+    #[error("Arity mismatch: expected {expected} ports, got {got} (in {context})")]
     ArityMismatch {
         expected: usize,
         got: usize,
         context: String,
+        #[label("arity mismatch")]
+        span: Option<SourceSpan>,
     },
+    #[error("Unknown node '{node}' (in {context})")]
     UnknownNode {
         node: String,
         context: String,
     },
+    #[error("Non-exhaustive match expression (in {context}): {suggestion}")]
     NonExhaustiveMatch {
         context: String,
         suggestion: String,
     },
+    #[error("Unreachable match arm {arm_index} shadowed by arm {shadowed_by} (in {context})")]
     UnreachableMatchArm {
         arm_index: usize,
         shadowed_by: usize,
         context: String,
     },
+    #[error("Duplicate binding '{name}' in neuron '{neuron}'")]
     DuplicateBinding {
         name: String,
         neuron: String,
     },
+    #[error("Invalid recursion in binding '{binding}' of neuron '{neuron}': {reason}")]
     InvalidRecursion {
         binding: String,
         neuron: String,
         reason: String,
     },
+    #[error("Invalid unroll count in neuron '{neuron}': {reason}")]
     InvalidUnrollCount {
         neuron: String,
         reason: String,
     },
+    #[error("Invalid reshape: {message} (in {context})")]
     InvalidReshape {
         message: String,
         context: String,
-        /// Source span for diagnostic reporting
+        #[label("invalid reshape")]
         span: Option<SourceSpan>,
     },
+    #[error("Invalid annotation {annotation}: {reason} ({context})")]
     InvalidAnnotation {
         annotation: String,
         reason: String,
         context: String,
-        /// Source span for diagnostic reporting
+        #[label("invalid annotation")]
         span: Option<SourceSpan>,
     },
     /// Match/if arms produce different port signatures.
+    #[error("Inconsistent ports in {expr_kind} expression (in {context})")]
     InconsistentArmPorts {
         expr_kind: String,
         arm_index: Option<usize>, // None = else branch, Some(n) = 1-based arm number
@@ -726,147 +780,78 @@ pub enum ValidationError {
         got_names: Vec<String>,
         context: String,
     },
+    #[error("Mutual @lazy recursion detected between bindings: {} (in {neuron})", cycle.join(" -> "))]
+    MutualLazyRecursion {
+        /// Binding names forming the cycle, e.g. ["a", "b", "a"]
+        cycle: Vec<String>,
+        neuron: String,
+    },
+    #[error("{0}")]
     Custom(String),
+    #[error("Import error: {message}")]
     UseError {
         message: String,
     },
 }
 
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValidationError::MissingNeuron { name, context } => {
-                write!(f, "Neuron '{}' not found (in {})", name, context)
-            }
-            ValidationError::PortMismatch {
-                source_node,
-                source_port,
-                source_shape,
-                dest_node,
-                dest_port,
-                dest_shape,
-                context,
-            } => {
-                let source = if source_port == "default" {
-                    source_node.clone()
-                } else {
-                    format!("{}.{}", source_node, source_port)
-                };
-                let dest = if dest_port == "default" {
-                    dest_node.clone()
-                } else {
-                    format!("{}.{}", dest_node, dest_port)
-                };
+impl PartialEq for ValidationError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::MissingNeuron { name: a, context: b, .. },
+                Self::MissingNeuron { name: c, context: d, .. },
+            ) => a == c && b == d,
+            (Self::PortMismatch { context: a, .. }, Self::PortMismatch { context: b, .. }) => a == b,
+            (Self::CycleDetected { cycle: a, context: b }, Self::CycleDetected { cycle: c, context: d }) => a == c && b == d,
+            (
+                Self::ArityMismatch { expected: a, got: b, context: c, .. },
+                Self::ArityMismatch { expected: d, got: e, context: f, .. },
+            ) => a == d && b == e && c == f,
+            (Self::UnknownNode { node: a, context: b }, Self::UnknownNode { node: c, context: d }) => a == c && b == d,
+            (Self::NonExhaustiveMatch { context: a, suggestion: b }, Self::NonExhaustiveMatch { context: c, suggestion: d }) => a == c && b == d,
+            (
+                Self::UnreachableMatchArm { arm_index: a, shadowed_by: b, context: c },
+                Self::UnreachableMatchArm { arm_index: d, shadowed_by: e, context: f },
+            ) => a == d && b == e && c == f,
+            (Self::DuplicateBinding { name: a, neuron: b }, Self::DuplicateBinding { name: c, neuron: d }) => a == c && b == d,
+            (
+                Self::InvalidRecursion { binding: a, neuron: b, reason: c },
+                Self::InvalidRecursion { binding: d, neuron: e, reason: f },
+            ) => a == d && b == e && c == f,
+            (Self::InvalidUnrollCount { neuron: a, reason: b }, Self::InvalidUnrollCount { neuron: c, reason: d }) => a == c && b == d,
+            (
+                Self::InvalidReshape { message: a, context: b, .. },
+                Self::InvalidReshape { message: c, context: d, .. },
+            ) => a == c && b == d,
+            (
+                Self::InvalidAnnotation { annotation: a, reason: b, context: c, .. },
+                Self::InvalidAnnotation { annotation: d, reason: e, context: f, .. },
+            ) => a == d && b == e && c == f,
+            (
+                Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
+                Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. },
+            ) => a == e && b == f && c == g && d == h,
+            (
+                Self::MutualLazyRecursion { cycle: a, neuron: b },
+                Self::MutualLazyRecursion { cycle: c, neuron: d },
+            ) => a == c && b == d,
+            (Self::Custom(a), Self::Custom(b)) => a == b,
+            (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
+            _ => false,
+        }
+    }
+}
 
-                write!(
-                    f,
-                    "Port mismatch: {} {} -> {} {} (in {})\n  Suggestion: check if dimensions match or if a transpose/reshape is needed.",
-                    source, source_shape, dest, dest_shape, context
-                )
-            }
-            ValidationError::CycleDetected { cycle, context } => {
-                write!(f, "Cycle detected in {}: {}", context, cycle.join(" -> "))
-            }
-            ValidationError::ArityMismatch {
-                expected,
-                got,
-                context,
-            } => {
-                write!(
-                    f,
-                    "Arity mismatch: expected {} ports, got {} (in {})",
-                    expected, got, context
-                )
-            }
-            ValidationError::UnknownNode { node, context } => {
-                write!(f, "Unknown node '{}' (in {})", node, context)
-            }
-            ValidationError::NonExhaustiveMatch {
-                context,
-                suggestion,
-            } => {
-                write!(
-                    f,
-                    "Non-exhaustive match expression (in {}): {}",
-                    context, suggestion
-                )
-            }
-            ValidationError::UnreachableMatchArm {
-                arm_index,
-                shadowed_by,
-                context,
-            } => {
-                write!(
-                    f,
-                    "Unreachable match arm {} shadowed by arm {} (in {})",
-                    arm_index, shadowed_by, context
-                )
-            }
-            ValidationError::DuplicateBinding { name, neuron } => {
-                write!(f, "Duplicate binding '{}' in neuron '{}'", name, neuron)
-            }
-            ValidationError::InvalidRecursion {
-                binding,
-                neuron,
-                reason,
-            } => {
-                write!(
-                    f,
-                    "Invalid recursion in binding '{}' of neuron '{}': {}",
-                    binding, neuron, reason
-                )
-            }
-            ValidationError::InvalidUnrollCount { neuron, reason } => {
-                write!(
-                    f,
-                    "Invalid unroll count in neuron '{}': {}",
-                    neuron, reason
-                )
-            }
-            ValidationError::InvalidReshape { message, context, .. } => {
-                write!(f, "Invalid reshape: {} (in {})", message, context)
-            }
-            ValidationError::InvalidAnnotation {
-                annotation,
-                reason,
-                context,
-                ..
-            } => {
-                write!(
-                    f,
-                    "Invalid annotation {}: {} ({})",
-                    annotation, reason, context
-                )
-            }
-            ValidationError::InconsistentArmPorts {
-                expr_kind,
-                arm_index,
-                expected_count,
-                got_count,
-                expected_names,
-                got_names,
-                context,
-            } => {
-                let arm_label = match arm_index {
-                    None => "else branch".to_string(),
-                    Some(n) => format!("arm {}", n),
-                };
-                write!(
-                    f,
-                    "Inconsistent ports in {} expression: arm 1 has {} port(s) [{}] but {} has {} port(s) [{}] (in {})",
-                    expr_kind,
-                    expected_count, expected_names.join(", "),
-                    arm_label,
-                    got_count, got_names.join(", "),
-                    context
-                )
-            }
-            ValidationError::Custom(msg) => {
-                write!(f, "{}", msg)
-            }
-            ValidationError::UseError { message } => {
-                write!(f, "Import error: {}", message)
-            }
+impl ValidationError {
+    /// Returns the source span for this error, if available.
+    pub fn span(&self) -> Option<SourceSpan> {
+        match self {
+            Self::MissingNeuron { span, .. }
+            | Self::PortMismatch { span, .. }
+            | Self::ArityMismatch { span, .. }
+            | Self::InvalidReshape { span, .. }
+            | Self::InvalidAnnotation { span, .. } => *span,
+            _ => None,
         }
     }
 }
@@ -1229,8 +1214,8 @@ impl std::fmt::Display for ReshapeExpr {
 impl std::fmt::Display for TransformAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformAnnotation::Reduce(s) => write!(f, "@reduce({})", s),
-            TransformAnnotation::Repeat(s) => write!(f, "@repeat({})", s),
+            TransformAnnotation::Reduce { strategy, .. } => write!(f, "@reduce({})", strategy),
+            TransformAnnotation::Repeat { strategy, .. } => write!(f, "@repeat({})", strategy),
         }
     }
 }

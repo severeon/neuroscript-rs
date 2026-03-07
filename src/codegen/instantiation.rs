@@ -62,7 +62,7 @@ pub(super) fn generate_module_instantiations(
 
     // 1. Process standalone bindings (non-unrolled)
     for binding in &standalone_bindings {
-        let module_name = binding.name.clone();
+        let module_name = sanitize_python_ident(&binding.name);
         let name = &binding.call_name;
         let args = &binding.args;
         let kwargs = &binding.kwargs;
@@ -118,7 +118,7 @@ pub(super) fn generate_module_instantiations(
                             format!("{}({}{})", name, a, k)
                         }
                     }
-                    Value::Name(n) => format!("self.{}", n),
+                    Value::Name(n) => format!("self.{}", sanitize_python_ident(n)),
                     _ => value_to_python_impl(arg),
                 })
                 .collect();
@@ -405,8 +405,8 @@ fn collect_reshape_transforms_from_endpoint(
             }
             if let Some(ref annotation) = reshape.annotation {
                 let strategy = match annotation {
-                    TransformAnnotation::Reduce(s) => s,
-                    TransformAnnotation::Repeat(s) => s,
+                    TransformAnnotation::Reduce { strategy, .. } => strategy,
+                    TransformAnnotation::Repeat { strategy, .. } => strategy,
                 };
                 if let TransformStrategy::Neuron { name, args, kwargs } = strategy {
                     seen.insert(reshape.id);
@@ -473,7 +473,7 @@ fn format_kwargs_impl(kwargs: &[(String, Value)]) -> String {
     } else {
         let kw: Vec<String> = kwargs
             .iter()
-            .map(|(k, v)| format!("{}={}", k, value_to_python_impl(v)))
+            .map(|(k, v)| format!("{}={}", sanitize_python_ident(k), value_to_python_impl(v)))
             .collect();
         format!(", {}", kw.join(", "))
     }

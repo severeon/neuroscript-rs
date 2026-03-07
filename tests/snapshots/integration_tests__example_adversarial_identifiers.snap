@@ -1,0 +1,31 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AdversarialNet(lambda, dim):
+  inputs:
+    default: [batch, lambda]
+  outputs:
+    default: [batch, dim]
+  graph:
+    in -> Linear#0(lambda, dim)
+    Linear#0(lambda, dim) -> ReLU#1()
+    ReLU#1() -> out
+
+neuron Linear(in_dim, out_dim):
+  inputs:
+    default: [*, in_dim]
+  outputs:
+    default: [*, out_dim]
+  impl:
+    Source: core,nn/Linear
+
+neuron ReLU:
+  inputs:
+    default: [*shape]
+  outputs:
+    default: [*shape]
+  impl:
+    Source: core,nn/ReLU
