@@ -318,32 +318,15 @@ impl<'a> CodeGenerator<'a> {
         value_to_python_impl(value)
     }
 
-    /// Convert a Value to Python, replacing parameter names with self.param
-    pub(super) fn value_to_python_with_self(&self, value: &Value) -> String {
-        match value {
-            Value::Name(n) => {
-                if self.current_neuron_params.contains(n) {
-                    format!("self.{}", sanitize_python_ident(n))
-                } else {
-                    sanitize_python_ident(n)
-                }
-            }
-            Value::BinOp { op, left, right } => {
-                format!(
-                    "{} {} {}",
-                    self.value_to_python_with_self(left),
-                    binop_to_str(op, false),
-                    self.value_to_python_with_self(right)
-                )
-            }
-            _ => self.value_to_python(value),
-        }
-    }
-
-    /// Convert a Value to Python for dimension arithmetic in reshape bindings.
-    /// Uses `//` for integer division and resolves names via neuron params
-    /// and binding_context.
-    pub(super) fn value_to_python_dim_expr(&self, value: &Value) -> String {
+    /// Convert a Value to Python for dimension expressions.
+    ///
+    /// Resolves parameter names to `self.param`, checks `binding_context`
+    /// for captured dimension bindings, and uses integer division `//`
+    /// because tensor dimensions are always integers.
+    ///
+    /// Used for: reshape bindings, if-conditions, match guards, and
+    /// shape assertion expressions.
+    pub(super) fn value_to_python_dim(&self, value: &Value) -> String {
         match value {
             Value::Name(n) => {
                 if self.current_neuron_params.contains(n) {
@@ -357,9 +340,9 @@ impl<'a> CodeGenerator<'a> {
             Value::BinOp { op, left, right } => {
                 format!(
                     "{} {} {}",
-                    self.value_to_python_dim_expr(left),
+                    self.value_to_python_dim(left),
                     binop_to_str(op, true),
-                    self.value_to_python_dim_expr(right)
+                    self.value_to_python_dim(right)
                 )
             }
             _ => value_to_python_impl(value),
@@ -406,7 +389,7 @@ impl<'a> CodeGenerator<'a> {
                         // Build expression with parameters
                         format!(
                             "({})",
-                            self.value_to_python_with_self(&Value::BinOp {
+                            self.value_to_python_dim(&Value::BinOp {
                                 op: expr.op,
                                 left: Box::new(dim_to_value(&expr.left)),
                                 right: Box::new(dim_to_value(&expr.right)),
