@@ -876,7 +876,7 @@ fn process_destination(
             for (i, branch) in if_expr.branches.iter().enumerate() {
                 let prefix = if i == 0 { "if" } else { "elif" };
                 // Ensure self.param is used in conditions
-                let cond_str = gen.value_to_python_with_self(&branch.condition);
+                let cond_str = gen.value_to_python_dim(&branch.condition);
 
                 writeln!(output, "{}{} {}:", indent, prefix, cond_str).unwrap();
                 let branch_indent = format!("{}    ", indent);
@@ -985,7 +985,7 @@ fn process_destination(
             // Binding dims like `dh=dim/heads` must be assigned before any use.
             for dim in &reshape.dims {
                 if let ReshapeDim::Binding { name, expr } = dim {
-                    let expr_str = gen.value_to_python_dim_expr(expr);
+                    let expr_str = gen.value_to_python_dim(expr);
                     writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str).unwrap();
                 }
             }
@@ -1375,10 +1375,10 @@ pub(super) fn generate_shape_check(
             && has_captured_dimensions_impl(guard_expr, &gen.current_neuron_params)
         {
             // Guard uses captured dims - check it separately after binding
-            Some(gen.value_to_python_with_self(guard_expr))
+            Some(gen.value_to_python_dim(guard_expr))
         } else {
             // Guard doesn't use captured dims - include in main condition
-            let guard_str = gen.value_to_python_with_self(guard_expr);
+            let guard_str = gen.value_to_python_dim(guard_expr);
             checks.push(format!("({})", guard_str));
             None
         }
