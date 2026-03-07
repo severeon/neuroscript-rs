@@ -11,6 +11,7 @@
 //! sub-rules. Each `unwrap()` corresponds to a mandatory child in the grammar rule
 //! being destructured.
 
+use miette::SourceSpan;
 use pest::iterators::Pair;
 
 use crate::doc_parser;
@@ -1824,6 +1825,9 @@ impl AstBuilder {
     fn build_reshape_expr(&mut self, pair: Pair<Rule>) -> Result<ReshapeExpr, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::reshape_expr);
 
+        let span = pair.as_span();
+        let source_span = SourceSpan::new(span.start().into(), span.end() - span.start());
+
         let mut dims = vec![];
 
         for inner in pair.into_inner() {
@@ -1836,6 +1840,7 @@ impl AstBuilder {
             dims,
             annotation: None,
             id: self.next_id(),
+            span: Some(source_span),
         })
     }
 
@@ -1908,6 +1913,9 @@ impl AstBuilder {
     ) -> Result<TransformAnnotation, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::transform_annotation);
 
+        let span = pair.as_span();
+        let source_span = Some(SourceSpan::new(span.start().into(), span.end() - span.start()));
+
         let mut inner = pair.into_inner();
         inner.next(); // Skip '@'
         let annotation_name = inner.next().unwrap(); // ident: "reduce" or "repeat"
@@ -1918,8 +1926,8 @@ impl AstBuilder {
         // Skip ')' (if present)
 
         match name.as_str() {
-            "reduce" => Ok(TransformAnnotation::Reduce(strategy)),
-            "repeat" => Ok(TransformAnnotation::Repeat(strategy)),
+            "reduce" => Ok(TransformAnnotation::Reduce { strategy, span: source_span }),
+            "repeat" => Ok(TransformAnnotation::Repeat { strategy, span: source_span }),
             other => Err(error::expected("reduce or repeat", other, 0))
         }
     }

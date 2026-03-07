@@ -329,7 +329,7 @@ impl Validator {
     ) {
         match endpoint {
             Endpoint::Reshape(reshape) => {
-                if let Some(TransformAnnotation::Reduce(_)) = &reshape.annotation {
+                if let Some(TransformAnnotation::Reduce { .. }) = &reshape.annotation {
                     // For @reduce, every named dim in the target shape must be
                     // reachable from the source (i.e., present in the neuron's
                     // known dims from input/output shapes and params).
@@ -364,7 +364,7 @@ impl Validator {
                                     name, context_neuron
                                 ),
                                 context: format!("in {}", context_neuron),
-                                span: None,
+                                span: reshape.annotation.as_ref().unwrap().span(),
                             });
                         }
                     }
@@ -511,7 +511,7 @@ impl Validator {
                     errors.push(ValidationError::InvalidReshape {
                         message: "reshape expression must have at least one dimension".to_string(),
                         context: format!("in {}", context_neuron),
-                        span: None, // TODO: propagate source span from ReshapeExpr
+                        span: reshape.span,
                     });
                 }
                 // Validate at most one 'others' dimension (PyTorch allows only one -1)
@@ -527,15 +527,11 @@ impl Validator {
                             others_count
                         ),
                         context: format!("in {}", context_neuron),
-                        span: None, // TODO: propagate source span from ReshapeExpr
+                        span: reshape.span,
                     });
                 }
                 if let Some(ref annotation) = reshape.annotation {
-                    let strategy = match annotation {
-                        TransformAnnotation::Reduce(s) => s,
-                        TransformAnnotation::Repeat(s) => s,
-                    };
-                    match strategy {
+                    match annotation.strategy() {
                         TransformStrategy::Neuron { name, .. } => {
                             // Skip check if the name is a neuron-typed parameter
                             if !neuron_param_names.contains(name.as_str())
@@ -552,10 +548,10 @@ impl Validator {
                         }
                         TransformStrategy::Intrinsic(name) => {
                             let valid_intrinsics: &[&str] = match annotation {
-                                TransformAnnotation::Reduce(_) => {
+                                TransformAnnotation::Reduce { .. } => {
                                     &["mean", "sum", "min", "max", "prod", "logsumexp"]
                                 }
-                                TransformAnnotation::Repeat(_) => &["copy"],
+                                TransformAnnotation::Repeat { .. } => &["copy"],
                             };
                             if !valid_intrinsics.contains(&name.as_str()) {
                                 errors.push(ValidationError::InvalidAnnotation {
@@ -566,7 +562,7 @@ impl Validator {
                                         valid_intrinsics.join(", ")
                                     ),
                                     context: format!("in {}", context_neuron),
-                                    span: None, // TODO: propagate source span from annotation
+                                    span: annotation.span(),
                                 });
                             }
                         }

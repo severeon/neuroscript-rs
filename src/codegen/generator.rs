@@ -447,8 +447,8 @@ fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>
             // Collect neuron names from annotation strategies
             if let Some(ref annotation) = reshape.annotation {
                 let strategy = match annotation {
-                    TransformAnnotation::Reduce(s) => s,
-                    TransformAnnotation::Repeat(s) => s,
+                    TransformAnnotation::Reduce { strategy, .. } => strategy,
+                    TransformAnnotation::Repeat { strategy, .. } => strategy,
                 };
                 if let TransformStrategy::Neuron { name, .. } = strategy {
                     result.insert(name.clone());

@@ -43,6 +43,7 @@ fn build_reduce_reshape_program(
             dims: r.dims.clone(),
             annotation: r.annotation.clone(),
             id: next_test_id(),
+            span: None,
         }),
         other => other.clone(),
     };
@@ -95,6 +96,7 @@ fn build_reshape_program_with_ports(
             dims: r.dims.clone(),
             annotation: r.annotation.clone(),
             id: next_test_id(),
+            span: None,
         }),
         other => other.clone(),
     };
@@ -126,6 +128,7 @@ fn test_validate_reshape_basic() {
         ],
         annotation: None,
         id: 100,
+        span: None,
     });
 
     let mut program = build_reshape_program("ReshapeTest", reshape_ep, vec![]);
@@ -140,10 +143,11 @@ fn test_validate_reshape_with_reduce_mean() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "mean".to_string(),
-        ))),
+        ), span: None }),
         id: 101,
+        span: None,
     });
 
     let mut program = build_reduce_reshape_program("ReduceTest", reshape_ep, vec![]);
@@ -158,10 +162,11 @@ fn test_validate_reshape_with_reduce_sum() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "sum".to_string(),
-        ))),
+        ), span: None }),
         id: 102,
+        span: None,
     });
 
     let mut program = build_reduce_reshape_program("ReduceSumTest", reshape_ep, vec![]);
@@ -176,10 +181,11 @@ fn test_validate_reshape_reduce_must_decrease_rank() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "mean".to_string(),
-        ))),
+        ), span: None }),
         id: next_test_id(),
+        span: None,
     });
 
     // build_reshape_program uses shape_two_wildcard() = [*, *] (2 dims) as input
@@ -204,10 +210,11 @@ fn test_validate_reshape_reduce_increasing_rank_fails() {
             ReshapeDim::Named("seq".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "sum".to_string(),
-        ))),
+        ), span: None }),
         id: next_test_id(),
+        span: None,
     });
 
     // build_reshape_program uses shape_two_wildcard() = [*, *] (2 dims) as input
@@ -231,10 +238,11 @@ fn test_validate_reshape_with_repeat_copy() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Repeat(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Repeat { strategy: TransformStrategy::Intrinsic(
             "copy".to_string(),
-        ))),
+        ), span: None }),
         id: 103,
+        span: None,
     });
 
     let mut program = build_reshape_program("RepeatTest", reshape_ep, vec![]);
@@ -249,10 +257,11 @@ fn test_validate_reshape_invalid_reduce_intrinsic() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "invalid_op".to_string(),
-        ))),
+        ), span: None }),
         id: 104,
+        span: None,
     });
 
     let mut program = build_reshape_program("InvalidReduceTest", reshape_ep, vec![]);
@@ -277,10 +286,11 @@ fn test_validate_reshape_invalid_repeat_intrinsic() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Repeat(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Repeat { strategy: TransformStrategy::Intrinsic(
             "mean".to_string(),
-        ))),
+        ), span: None }),
         id: 105,
+        span: None,
     });
 
     let mut program = build_reshape_program("InvalidRepeatTest", reshape_ep, vec![]);
@@ -305,12 +315,13 @@ fn test_validate_reshape_with_neuron_annotation_existing() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Neuron {
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Neuron {
             name: "PoolNeuron".to_string(),
             args: vec![],
             kwargs: vec![],
-        })),
+        }, span: None }),
         id: 106,
+        span: None,
     });
 
     let mut program = build_reduce_reshape_program(
@@ -329,12 +340,13 @@ fn test_validate_reshape_with_neuron_annotation_missing() {
             ReshapeDim::Named("batch".to_string()),
             ReshapeDim::Named("dim".to_string()),
         ],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Neuron {
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Neuron {
             name: "MissingPoolNeuron".to_string(),
             args: vec![],
             kwargs: vec![],
-        })),
+        }, span: None }),
         id: 107,
+        span: None,
     });
 
     let mut program = build_reshape_program("MissingNeuronAnnotationTest", reshape_ep, vec![]);
@@ -356,6 +368,7 @@ fn test_validate_reshape_with_others_dim() {
         ],
         annotation: None,
         id: 108,
+        span: None,
     });
 
     let mut program = build_reshape_program("OthersTest", reshape_ep, vec![]);
@@ -372,6 +385,7 @@ fn test_validate_reshape_with_literal_dim() {
         ],
         annotation: None,
         id: 109,
+        span: None,
     });
 
     let mut program = build_reshape_program("LiteralDimTest", reshape_ep, vec![]);
@@ -393,6 +407,7 @@ fn build_literal_reshape_program(
             dims: r.dims.clone(),
             annotation: r.annotation.clone(),
             id: next_test_id(),
+            span: None,
         }),
         other => other.clone(),
     };
@@ -420,6 +435,7 @@ fn test_validate_reshape_element_count_mismatch() {
         ],
         annotation: None,
         id: 300,
+        span: None,
     });
 
     let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
@@ -451,6 +467,7 @@ fn test_validate_reshape_element_count_preserved() {
         ],
         annotation: None,
         id: 301,
+        span: None,
     });
 
     let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
@@ -469,10 +486,11 @@ fn test_validate_reshape_annotated_skips_element_check() {
     // @reduce(mean) intentionally changes element count, so [2, 6] => [12] should pass
     let reshape_ep = Endpoint::Reshape(ReshapeExpr {
         dims: vec![ReshapeDim::Literal(12)],
-        annotation: Some(TransformAnnotation::Reduce(TransformStrategy::Intrinsic(
+        annotation: Some(TransformAnnotation::Reduce { strategy: TransformStrategy::Intrinsic(
             "mean".to_string(),
-        ))),
+        ), span: None }),
         id: 302,
+        span: None,
     });
 
     let in_shape = Shape::new(vec![Dim::Literal(2), Dim::Literal(6)]);
@@ -706,6 +724,7 @@ fn test_validate_reshape_empty_dims() {
         dims: vec![],
         annotation: None,
         id: 200,
+        span: None,
     });
 
     let mut program = build_reshape_program("EmptyReshapeTest", reshape_ep, vec![]);

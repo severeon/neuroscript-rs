@@ -1062,6 +1062,7 @@ fn test_codegen_fat_arrow_reshape_in_match_arm() {
                                     ],
                                     annotation: None,
                                     id: 10,
+                                    span: None,
                                 }),
                                 Endpoint::Ref(PortRef::new("out")),
                             ],

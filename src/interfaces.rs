@@ -281,11 +281,19 @@ pub enum WrapContent {
 }
 
 /// A reshape expression: [dim_spec, dim_spec, ...]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ReshapeExpr {
     pub dims: Vec<ReshapeDim>,
     pub annotation: Option<TransformAnnotation>,
     pub id: usize,
+    /// Source span for diagnostic reporting (excluded from equality comparison)
+    pub span: Option<SourceSpan>,
+}
+
+impl PartialEq for ReshapeExpr {
+    fn eq(&self, other: &Self) -> bool {
+        self.dims == other.dims && self.annotation == other.annotation && self.id == other.id
+    }
 }
 
 impl ReshapeExpr {
@@ -354,10 +362,36 @@ pub enum ReshapeDim {
 }
 
 /// Transform annotation: @reduce(mean), @repeat(copy)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum TransformAnnotation {
-    Reduce(TransformStrategy),
-    Repeat(TransformStrategy),
+    Reduce { strategy: TransformStrategy, span: Option<SourceSpan> },
+    Repeat { strategy: TransformStrategy, span: Option<SourceSpan> },
+}
+
+impl PartialEq for TransformAnnotation {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Reduce { strategy: a, .. }, Self::Reduce { strategy: b, .. }) => a == b,
+            (Self::Repeat { strategy: a, .. }, Self::Repeat { strategy: b, .. }) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl TransformAnnotation {
+    /// Get the source span for this annotation.
+    pub fn span(&self) -> Option<SourceSpan> {
+        match self {
+            Self::Reduce { span, .. } | Self::Repeat { span, .. } => *span,
+        }
+    }
+
+    /// Get the strategy for this annotation.
+    pub fn strategy(&self) -> &TransformStrategy {
+        match self {
+            Self::Reduce { strategy, .. } | Self::Repeat { strategy, .. } => strategy,
+        }
+    }
 }
 
 /// Strategy for a transform: intrinsic name or neuron call
@@ -1229,8 +1263,8 @@ impl std::fmt::Display for ReshapeExpr {
 impl std::fmt::Display for TransformAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransformAnnotation::Reduce(s) => write!(f, "@reduce({})", s),
-            TransformAnnotation::Repeat(s) => write!(f, "@repeat({})", s),
+            TransformAnnotation::Reduce { strategy, .. } => write!(f, "@reduce({})", strategy),
+            TransformAnnotation::Repeat { strategy, .. } => write!(f, "@repeat({})", strategy),
         }
     }
 }
