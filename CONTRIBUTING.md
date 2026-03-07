@@ -44,7 +44,7 @@ cargo insta review                   # Review snapshot changes
 
 ## Project Structure
 
-See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation, module organization, and development guidelines.
+See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation, module organization, and development guidelines. (This file also serves as configuration for AI coding assistants such as Claude Code — human contributors can skip the agent-workflow sections and focus on the architecture and build command reference.)
 
 ## What to Work On
 
