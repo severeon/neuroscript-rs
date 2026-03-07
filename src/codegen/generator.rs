@@ -3,6 +3,7 @@
 //! Orchestrates the generation of Python nn.Module classes from
 //! NeuroScript neuron definitions.
 
+use super::utils::sanitize_python_ident;
 use super::{forward, instantiation};
 use crate::interfaces::*;
 use miette::Diagnostic;
@@ -223,7 +224,7 @@ impl<'a> CodeGenerator<'a> {
         let mut output = String::new();
 
         // Generate class definition
-        writeln!(output, "class {}(nn.Module):", neuron.name).unwrap();
+        writeln!(output, "class {}(nn.Module):", sanitize_python_ident(&neuron.name)).unwrap();
 
         // Generate __init__
         self.generate_init(&mut output, neuron)?;
@@ -250,10 +251,11 @@ impl<'a> CodeGenerator<'a> {
                 .params
                 .iter()
                 .map(|p| {
+                    let safe_name = sanitize_python_ident(&p.name);
                     if let Some(default) = &p.default {
-                        format!("{}={}", p.name, self.value_to_python(default))
+                        format!("{}={}", safe_name, self.value_to_python(default))
                     } else {
-                        p.name.clone()
+                        safe_name
                     }
                 })
                 .collect();
@@ -265,7 +267,8 @@ impl<'a> CodeGenerator<'a> {
 
         // Store parameters as instance variables (needed for guards)
         for param in &neuron.params {
-            writeln!(output, "        self.{} = {}", param.name, param.name).unwrap();
+            let safe_name = sanitize_python_ident(&param.name);
+            writeln!(output, "        self.{} = {}", safe_name, safe_name).unwrap();
         }
 
         match &neuron.body {
@@ -300,14 +303,14 @@ impl<'a> CodeGenerator<'a> {
         // Determine input parameter(s)
         let input_params = if neuron.inputs.len() == 1 && neuron.inputs[0].variadic {
             // Variadic port: single tuple parameter (matches Python runtime convention)
-            neuron.inputs[0].name.clone()
+            sanitize_python_ident(&neuron.inputs[0].name)
         } else if neuron.inputs.len() == 1 && neuron.inputs[0].name == "default" {
             "x".to_string()
         } else {
             neuron
                 .inputs
                 .iter()
-                .map(|p| p.name.clone())
+                .map(|p| sanitize_python_ident(&p.name))
                 .collect::<Vec<_>>()
                 .join(", ")
         };
@@ -320,9 +323,10 @@ impl<'a> CodeGenerator<'a> {
         // may already have a mapping (e.g., self.binding_name) which should take
         // precedence. Params are a fallback for names not yet in the map.
         for param in &neuron.params {
+            let safe_name = sanitize_python_ident(&param.name);
             self.var_names
                 .entry(param.name.clone())
-                .or_insert_with(|| format!("self.{}", param.name));
+                .or_insert_with(|| format!("self.{}", safe_name));
         }
 
         match &neuron.body {
@@ -494,7 +498,7 @@ pub fn generate_pytorch_with_options(
         writeln!(
             globals_output,
             "{} = {}",
-            global.name,
+            sanitize_python_ident(&global.name),
             dummy_gen.value_to_python(&global.value)
         )
         .unwrap();

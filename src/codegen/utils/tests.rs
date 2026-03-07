@@ -93,3 +93,49 @@ fn test_endpoint_key_unique_per_call() {
     };
     assert_eq!(endpoint_key_impl(&call1), endpoint_key_impl(&call3));
 }
+
+#[test]
+fn test_sanitize_python_ident_defense_in_depth() {
+    // Normal identifiers pass through unchanged
+    assert_eq!(sanitize_python_ident("dim"), "dim");
+    assert_eq!(sanitize_python_ident("Linear"), "Linear");
+    assert_eq!(sanitize_python_ident("my_var"), "my_var");
+
+    // Python keywords get trailing underscore
+    assert_eq!(sanitize_python_ident("class"), "class_");
+    assert_eq!(sanitize_python_ident("import"), "import_");
+    assert_eq!(sanitize_python_ident("lambda"), "lambda_");
+
+    // Invalid chars become underscores
+    assert_eq!(sanitize_python_ident("a-b"), "a_b");
+    assert_eq!(sanitize_python_ident("x.y"), "x_y");
+
+    // Leading digit gets underscore prefix
+    assert_eq!(sanitize_python_ident("3layer"), "_3layer");
+
+    // Empty string
+    assert_eq!(sanitize_python_ident(""), "_empty");
+}
+
+#[test]
+fn test_value_to_python_sanitizes_names() {
+    // Value::Name with a Python keyword should be sanitized
+    assert_eq!(
+        value_to_python_impl(&Value::Name("class".to_string())),
+        "class_"
+    );
+
+    // Value::Global with special chars should be sanitized
+    assert_eq!(
+        value_to_python_impl(&Value::Global("my-global".to_string())),
+        "my_global"
+    );
+
+    // Value::Call with kwargs keys should be sanitized
+    let call = Value::Call {
+        name: "Linear".to_string(),
+        args: vec![],
+        kwargs: vec![("class".to_string(), Value::Int(1))],
+    };
+    assert_eq!(value_to_python_impl(&call), "Linear(class_=1)");
+}
