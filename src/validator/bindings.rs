@@ -1,7 +1,6 @@
 use crate::interfaces::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-/// Validate let: and set: bindings
 /// Validate context:, let: and set: bindings
 pub(super) fn validate_bindings(
     neuron: &NeuronDef,
@@ -143,7 +142,7 @@ pub(super) fn validate_bindings(
     // Build a dependency graph: for each @lazy binding, find which other bindings
     // it references (via Value::Name args that match another binding's name).
     // Then detect cycles in this graph.
-    let lazy_bindings: HashSet<&str> = context_bindings
+    let lazy_bindings: BTreeSet<&str> = context_bindings
         .iter()
         .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
         .map(|b| b.name.as_str())
@@ -156,12 +155,12 @@ pub(super) fn validate_bindings(
             .collect();
 
         // Build adjacency list: binding name -> set of binding names it references
-        let mut deps: HashMap<&str, HashSet<&str>> = HashMap::new();
+        let mut deps: HashMap<&str, BTreeSet<&str>> = HashMap::new();
         for binding in context_bindings {
             if !lazy_bindings.contains(binding.name.as_str()) {
                 continue;
             }
-            let mut refs = HashSet::new();
+            let mut refs = BTreeSet::new();
             for arg in &binding.args {
                 collect_name_refs(arg, &binding_names, &mut refs);
             }
@@ -172,23 +171,24 @@ pub(super) fn validate_bindings(
             deps.insert(binding.name.as_str(), refs);
         }
 
-        // DFS cycle detection
+        // DFS cycle detection -- collect all independent cycles
         let mut visited: HashSet<&str> = HashSet::new();
         let mut stack: HashSet<&str> = HashSet::new();
         let mut path: Vec<&str> = Vec::new();
+        let mut reported_in_cycle: HashSet<&str> = HashSet::new();
 
         for &node in &lazy_bindings {
             if !visited.contains(node) {
-                if let Some(cycle) =
-                    find_cycle(node, &deps, &mut visited, &mut stack, &mut path)
-                {
-                    let cycle_str = cycle.join(" -> ");
-                    errors.push(ValidationError::Custom(format!(
-                        "Mutual @lazy recursion detected between bindings: {} (in {})",
-                        cycle_str, neuron.name
-                    )));
-                    break;
-                }
+                find_cycles(
+                    node,
+                    &deps,
+                    &mut visited,
+                    &mut stack,
+                    &mut path,
+                    &mut reported_in_cycle,
+                    &neuron.name,
+                    &mut errors,
+                );
             }
         }
     }
@@ -200,12 +200,14 @@ pub(super) fn validate_bindings(
 fn collect_name_refs<'a>(
     value: &'a Value,
     binding_names: &HashSet<&str>,
-    refs: &mut HashSet<&'a str>,
+    refs: &mut BTreeSet<&'a str>,
 ) {
     match value {
+        Value::Int(_) | Value::Float(_) | Value::String(_) | Value::Bool(_) | Value::Global(_) => {}
         Value::Name(name) if binding_names.contains(name.as_str()) => {
             refs.insert(name.as_str());
         }
+        Value::Name(_) => {}
         Value::BinOp { left, right, .. } => {
             collect_name_refs(left, binding_names, refs);
             collect_name_refs(right, binding_names, refs);
@@ -218,18 +220,20 @@ fn collect_name_refs<'a>(
                 collect_name_refs(val, binding_names, refs);
             }
         }
-        _ => {}
     }
 }
 
-/// DFS-based cycle detection. Returns Some(cycle_path) if a cycle is found.
-fn find_cycle<'a>(
+/// DFS-based cycle detection. Pushes errors for all independent cycles found.
+fn find_cycles<'a>(
     node: &'a str,
-    deps: &HashMap<&'a str, HashSet<&'a str>>,
+    deps: &HashMap<&'a str, BTreeSet<&'a str>>,
     visited: &mut HashSet<&'a str>,
     stack: &mut HashSet<&'a str>,
     path: &mut Vec<&'a str>,
-) -> Option<Vec<String>> {
+    reported_in_cycle: &mut HashSet<&'a str>,
+    neuron_name: &str,
+    errors: &mut Vec<ValidationError>,
+) {
     visited.insert(node);
     stack.insert(node);
     path.push(node);
@@ -237,21 +241,36 @@ fn find_cycle<'a>(
     if let Some(neighbors) = deps.get(node) {
         for &neighbor in neighbors {
             if !visited.contains(neighbor) {
-                if let Some(cycle) = find_cycle(neighbor, deps, visited, stack, path) {
-                    return Some(cycle);
-                }
-            } else if stack.contains(neighbor) {
-                // Found a cycle - extract it from the path
-                let cycle_start = path.iter().position(|&n| n == neighbor).unwrap();
+                find_cycles(
+                    neighbor,
+                    deps,
+                    visited,
+                    stack,
+                    path,
+                    reported_in_cycle,
+                    neuron_name,
+                    errors,
+                );
+            } else if stack.contains(neighbor) && !reported_in_cycle.contains(neighbor) {
+                let cycle_start = path
+                    .iter()
+                    .position(|&n| n == neighbor)
+                    .expect("cycle node must be in path since it is on the stack");
                 let mut cycle: Vec<String> =
                     path[cycle_start..].iter().map(|s| s.to_string()).collect();
                 cycle.push(neighbor.to_string());
-                return Some(cycle);
+                for &n in &path[cycle_start..] {
+                    reported_in_cycle.insert(n);
+                }
+                let cycle_str = cycle.join(" -> ");
+                errors.push(ValidationError::Custom(format!(
+                    "Mutual @lazy recursion detected between bindings: {} (in {})",
+                    cycle_str, neuron_name
+                )));
             }
         }
     }
 
     stack.remove(node);
     path.pop();
-    None
 }
