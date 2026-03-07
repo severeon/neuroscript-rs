@@ -28,6 +28,22 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.name }}-cargo-test-
       - run: cargo build --verbose
       - run: cargo test --verbose
+      - name: Notify CI complete
+        if: always() && github.event_name == 'pull_request'
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then exit 0; fi
+          STATUS="${{ job.status }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          REPO="${{ github.repository }}"
+          curl -s \
+            -H "Title: CI ${STATUS}: PR #${PR_NUM}" \
+            -H "Tags: ${STATUS},ci" \
+            -H "Click: https://github.com/${REPO}/pull/${PR_NUM}" \
+            -d "${PR_TITLE}" \
+            "https://ntfy.sh/${NTFY_TOPIC}" || true
 
   wasm:
     name: WASM Check

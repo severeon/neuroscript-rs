@@ -55,3 +55,23 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
 
+      - name: Notify review complete
+        if: always()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "NTFY_TOPIC secret not set, skipping notification"
+            exit 0
+          fi
+          STATUS="${{ job.status }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          REPO="${{ github.repository }}"
+          curl -s \
+            -H "Title: Review ${STATUS}: PR #${PR_NUM}" \
+            -H "Tags: ${STATUS},pr" \
+            -H "Click: https://github.com/${REPO}/pull/${PR_NUM}" \
+            -d "${PR_TITLE}" \
+            "https://ntfy.sh/${NTFY_TOPIC}" || true
+
