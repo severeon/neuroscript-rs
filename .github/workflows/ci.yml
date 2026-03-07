@@ -7,57 +7,54 @@ on:
     branches: [main]
 
 jobs:
-  # ── Test: self-hosted first, GitHub-hosted fallback ──────────────────
+  # ── Test: GitHub-hosted (always runs) ──────────────────────────────────
+  test:
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      runner: '["ubuntu-latest"]'
+      timeout: 30
+
+  # ── Test: self-hosted (push only — never runs untrusted fork code) ─────
   test-self-hosted:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/_build-and-test.yml
     with:
       runner: '["self-hosted"]'
       timeout: 10
 
-  test-fallback:
-    needs: test-self-hosted
-    if: always() && needs.test-self-hosted.result != 'success'
-    uses: ./.github/workflows/_build-and-test.yml
+  # ── WASM: GitHub-hosted (always runs) ──────────────────────────────────
+  wasm:
+    uses: ./.github/workflows/_wasm-check.yml
     with:
-      runner: '"ubuntu-latest"'
+      runner: '["ubuntu-latest"]'
       timeout: 30
 
-  # ── WASM: self-hosted first, GitHub-hosted fallback ──────────────────
+  # ── WASM: self-hosted (push only) ─────────────────────────────────────
   wasm-self-hosted:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/_wasm-check.yml
     with:
       runner: '["self-hosted"]'
       timeout: 10
 
-  wasm-fallback:
-    needs: wasm-self-hosted
-    if: always() && needs.wasm-self-hosted.result != 'success'
-    uses: ./.github/workflows/_wasm-check.yml
-    with:
-      runner: '"ubuntu-latest"'
-      timeout: 30
-
-  # ── Gate: single required status check for branch protection ─────────
+  # ── Gate: single required status check for branch protection ───────────
   ci-status:
     name: CI Status
-    needs: [test-self-hosted, test-fallback, wasm-self-hosted, wasm-fallback]
+    needs: [test, test-self-hosted, wasm, wasm-self-hosted]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check test result
+      - name: Fail if tests did not pass
+        if: needs.test.result != 'success'
         run: |
-          if [[ "${{ needs.test-self-hosted.result }}" == "success" || "${{ needs.test-fallback.result }}" == "success" ]]; then
-            echo "Tests passed"
-          else
-            echo "Tests failed (self-hosted: ${{ needs.test-self-hosted.result }}, fallback: ${{ needs.test-fallback.result }})"
-            exit 1
-          fi
+          echo "Tests failed: ${{ needs.test.result }}"
+          exit 1
 
-      - name: Check wasm result
+      - name: Fail if WASM check did not pass
+        if: needs.wasm.result != 'success'
         run: |
-          if [[ "${{ needs.wasm-self-hosted.result }}" == "success" || "${{ needs.wasm-fallback.result }}" == "success" ]]; then
-            echo "WASM check passed"
-          else
-            echo "WASM check failed (self-hosted: ${{ needs.wasm-self-hosted.result }}, fallback: ${{ needs.wasm-fallback.result }})"
-            exit 1
-          fi
+          echo "WASM check failed: ${{ needs.wasm.result }}"
+          exit 1
+
+      - name: All checks passed
+        run: echo "CI passed"
