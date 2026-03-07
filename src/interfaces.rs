@@ -224,8 +224,8 @@ pub struct MatchArm {
     pub pattern: MatchPattern,
     pub guard: Option<Value>, // where clause
     pub pipeline: Vec<Endpoint>,
-    /// Whether this arm is reachable (not shadowed by earlier arms)
-    /// Set to false by validator for dead code elimination
+    /// Whether this arm is reachable (not shadowed by earlier arms).
+    /// Set by `optimizer::compute_reachability` (not by the validator).
     pub is_reachable: bool,
 }
 

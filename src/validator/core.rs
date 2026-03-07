@@ -18,8 +18,8 @@ impl Validator {
             || name == crate::interfaces::SEQUENTIAL_PSEUDO_NEURON
     }
 
-    /// Validate an entire program
-    pub fn validate(program: &mut Program) -> Result<(), Vec<ValidationError>> {
+    /// Validate an entire program (read-only — does not mutate the IR)
+    pub fn validate(program: &Program) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
         let registry = StdlibRegistry::new();
 
@@ -112,13 +112,13 @@ impl Validator {
             }
         }
 
-        // Check match expressions (mutable pass for reachability)
-        for (neuron_name, neuron) in &mut program.neurons {
-            let params = neuron.params.clone();
-            if let NeuronBody::Graph { connections, .. } = &mut neuron.body {
+        // Check match expressions (read-only validation)
+        for (neuron_name, neuron) in &program.neurons {
+            let params = &neuron.params;
+            if let NeuronBody::Graph { connections, .. } = &neuron.body {
                 for connection in connections {
-                    if let Endpoint::Match(match_expr) = &mut connection.destination {
-                        errors.extend(Self::validate_match_expression(match_expr, neuron_name, &params));
+                    if let Endpoint::Match(match_expr) = &connection.destination {
+                        errors.extend(Self::validate_match_expression(match_expr, neuron_name, params));
                     }
                 }
             }
@@ -577,10 +577,11 @@ impl Validator {
         }
     }
 
-    /// Validate a match expression for exhaustiveness and pattern shadowing
-    /// Marks unreachable arms by setting is_reachable = false
+    /// Validate a match expression for exhaustiveness and pattern structure.
+    /// Does NOT mutate the IR — reachability is computed separately by
+    /// `optimizer::compute_reachability`.
     fn validate_match_expression(
-        match_expr: &mut MatchExpr,
+        match_expr: &MatchExpr,
         context_neuron: &str,
         neuron_params: &[Param],
     ) -> Vec<ValidationError> {
@@ -629,37 +630,6 @@ impl Validator {
                         suggestion: "Add a catch-all pattern as the last arm, e.g., [*shape] or [*, d]"
                             .to_string(),
                     });
-                }
-            }
-        }
-
-        // Check for pattern shadowing and mark unreachable arms
-        for i in 0..match_expr.arms.len() {
-            // An unreachable arm cannot shadow anything — skip it
-            if !match_expr.arms[i].is_reachable {
-                continue;
-            }
-            for j in (i + 1)..match_expr.arms.len() {
-                // Already marked unreachable by an earlier arm — skip
-                if !match_expr.arms[j].is_reachable {
-                    continue;
-                }
-                // Check if arm i subsumes arm j (making j unreachable)
-                // A pattern with a guard does NOT subsume any pattern (guard can fail)
-                let subsumes = {
-                    let arm_i = &match_expr.arms[i];
-                    let arm_j = &match_expr.arms[j];
-                    match (arm_i.pattern.as_shape(), arm_j.pattern.as_shape()) {
-                        (Some(shape_i), Some(shape_j)) => {
-                            arm_i.guard.is_none() && Self::pattern_subsumes(shape_i, shape_j)
-                        }
-                        _ => false,
-                    }
-                };
-
-                if subsumes {
-                    // Mark as unreachable
-                    match_expr.arms[j].is_reachable = false;
                 }
             }
         }
