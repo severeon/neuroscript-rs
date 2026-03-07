@@ -1351,3 +1351,62 @@ impl std::fmt::Display for Program {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn port_mismatch_different_ports_are_not_equal() {
+        let err_a = ValidationError::PortMismatch {
+            source_node: "Linear".into(),
+            source_port: "out".into(),
+            source_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("dim".into())] },
+            dest_node: "ReLU".into(),
+            dest_port: "in".into(),
+            dest_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("hidden".into())] },
+            context: "MyNeuron".into(),
+            span: None,
+        };
+        let err_b = ValidationError::PortMismatch {
+            source_node: "Conv".into(),
+            source_port: "out".into(),
+            source_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("channels".into())] },
+            dest_node: "Pool".into(),
+            dest_port: "in".into(),
+            dest_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("features".into())] },
+            context: "MyNeuron".into(),
+            span: None,
+        };
+
+        // Same context but different nodes/shapes must NOT compare equal
+        assert_ne!(err_a, err_b, "PortMismatch errors on different ports should not be equal");
+    }
+
+    #[test]
+    fn port_mismatch_identical_fields_are_equal() {
+        let err_a = ValidationError::PortMismatch {
+            source_node: "Linear".into(),
+            source_port: "out".into(),
+            source_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("dim".into())] },
+            dest_node: "ReLU".into(),
+            dest_port: "in".into(),
+            dest_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("hidden".into())] },
+            context: "MyNeuron".into(),
+            span: None,
+        };
+        let err_b = ValidationError::PortMismatch {
+            source_node: "Linear".into(),
+            source_port: "out".into(),
+            source_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("dim".into())] },
+            dest_node: "ReLU".into(),
+            dest_port: "in".into(),
+            dest_shape: Shape { dims: vec![Dim::Named("batch".into()), Dim::Named("hidden".into())] },
+            context: "MyNeuron".into(),
+            span: Some(SourceSpan::new(0.into(), 10)),
+        };
+
+        // Spans are excluded from comparison; all other fields match
+        assert_eq!(err_a, err_b, "PortMismatch errors with identical fields (ignoring span) should be equal");
+    }
+}
