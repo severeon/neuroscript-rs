@@ -156,24 +156,19 @@ pub(super) fn validate_bindings(
             .collect();
 
         // Build adjacency list: binding name -> set of binding names it references
-        let mut deps: HashMap<&str, Vec<&str>> = HashMap::new();
+        let mut deps: HashMap<&str, HashSet<&str>> = HashMap::new();
         for binding in context_bindings {
             if !lazy_bindings.contains(binding.name.as_str()) {
                 continue;
             }
-            let mut refs = Vec::new();
+            let mut refs = HashSet::new();
             for arg in &binding.args {
                 collect_name_refs(arg, &binding_names, &mut refs);
             }
             for (_key, val) in &binding.kwargs {
                 collect_name_refs(val, &binding_names, &mut refs);
             }
-            // Also check if the call_name itself is another binding name
-            if binding_names.contains(binding.call_name.as_str())
-                && binding.call_name != binding.name
-            {
-                refs.push(binding.call_name.as_str());
-            }
+            refs.remove(binding.name.as_str());
             deps.insert(binding.name.as_str(), refs);
         }
 
@@ -205,15 +200,23 @@ pub(super) fn validate_bindings(
 fn collect_name_refs<'a>(
     value: &'a Value,
     binding_names: &HashSet<&str>,
-    refs: &mut Vec<&'a str>,
+    refs: &mut HashSet<&'a str>,
 ) {
     match value {
         Value::Name(name) if binding_names.contains(name.as_str()) => {
-            refs.push(name.as_str());
+            refs.insert(name.as_str());
         }
         Value::BinOp { left, right, .. } => {
             collect_name_refs(left, binding_names, refs);
             collect_name_refs(right, binding_names, refs);
+        }
+        Value::Call { args, kwargs, .. } => {
+            for arg in args {
+                collect_name_refs(arg, binding_names, refs);
+            }
+            for (_key, val) in kwargs {
+                collect_name_refs(val, binding_names, refs);
+            }
         }
         _ => {}
     }
@@ -222,7 +225,7 @@ fn collect_name_refs<'a>(
 /// DFS-based cycle detection. Returns Some(cycle_path) if a cycle is found.
 fn find_cycle<'a>(
     node: &'a str,
-    deps: &HashMap<&'a str, Vec<&'a str>>,
+    deps: &HashMap<&'a str, HashSet<&'a str>>,
     visited: &mut HashSet<&'a str>,
     stack: &mut HashSet<&'a str>,
     path: &mut Vec<&'a str>,
