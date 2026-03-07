@@ -1,9 +1,34 @@
-# Multi-Head Attention
-#
-# Core mechanism of transformers. Computes attention over sequences
-# using multiple parallel attention heads.
-#
-# Note: This is a simplified version using attention as primitives.
-# Full attention with head splitting would require more complex composition.
-# See primitives.ns for ScaledDotProductAttention and MultiHeadSelfAttention
-# neuron definitions.
+/// Multi-Head Attention (MHA)
+///
+/// Core mechanism of transformers. Projects input into query, key, and value
+/// representations, applies scaled dot-product attention across multiple
+/// parallel heads, then projects back to the model dimension.
+///
+/// Implements: MHA(x) = W_o * Attention(W_q * x, W_k * x, W_v * x)
+///
+/// Parameters:
+/// - dim: Model dimension for all projections
+/// - num_heads: Number of parallel attention heads
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// This is self-attention: query, key, and value all come from the same input.
+/// For cross-attention (separate query and key/value sources), see CrossAttention.
+///
+/// Reference: Vaswani et al. (2017), "Attention Is All You Need"
+neuron MultiHeadAttention(dim, num_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Split input into three paths for Q, K, V projections
+        in -> (q_path, k_path, v_path)
+
+        # Project to query, key, and value spaces
+        q_path -> Linear(dim, dim) -> q
+        k_path -> Linear(dim, dim) -> k
+        v_path -> Linear(dim, dim) -> v
+
+        # Apply scaled dot-product attention and output projection
+        (q, k, v) -> ScaledDotProductAttention(dim, num_heads) -> Linear(dim, dim) -> out
