@@ -27,8 +27,11 @@ Living document of lessons learned across sprints. Agents should read this durin
 ## Agent Coordination
 
 - **Worktrees must be isolated per agent.** Shared worktrees cause branch contamination and leaked changes in PRs.
-- **Always fix release bugs in separate PRs**, not in the release PR itself. Add non-trivial nits to the board as stories.
+- **Always fix release bugs in separate PRs**, not in the release PR itself. Create GitHub issues for non-trivial nits.
 - **Dogfood new tooling early.** If we build a script or workflow, use it immediately in the same sprint.
+- **All tracking lives on GitHub Issues.** No Obsidian dependency. Plans, progress, and follow-ups go on issue/PR threads.
+- **Agents never merge PRs or convert drafts to ready.** Only the human maintainer does this.
+- **Planner writes tests, implementer writes code.** Separation prevents scope creep and ensures testable plans.
 
 ## NeuroScript Language
 
