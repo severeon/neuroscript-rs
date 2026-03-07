@@ -6,58 +6,58 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
+  # ── Test: GitHub-hosted (always runs) ──────────────────────────────────
   test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      runner: '["ubuntu-latest"]'
+      timeout: 30
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+  # ── Test: self-hosted (push only — never runs untrusted fork code) ─────
+  test-self-hosted:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      runner: '["self-hosted", "linux"]'
+      timeout: 10
 
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-test-
-
-      - name: Build
-        run: cargo build --verbose
-
-      - name: Run tests
-        run: cargo test --verbose
-
+  # ── WASM: GitHub-hosted (always runs) ──────────────────────────────────
   wasm:
-    name: WASM Check
+    uses: ./.github/workflows/_wasm-check.yml
+    with:
+      runner: '["ubuntu-latest"]'
+      timeout: 30
+
+  # ── WASM: self-hosted (push only) ─────────────────────────────────────
+  wasm-self-hosted:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_wasm-check.yml
+    with:
+      runner: '["self-hosted", "linux"]'
+      timeout: 10
+
+  # ── Gate: single required status check for branch protection ───────────
+  # At least one runner from each pair (test, wasm) must succeed.
+  # On pull_request, self-hosted jobs are skipped so only GitHub-hosted is checked.
+  # On push, either runner passing is sufficient.
+  ci-status:
+    name: CI Status
+    needs: [test, test-self-hosted, wasm, wasm-self-hosted]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Fail if no test runner succeeded
+        if: needs.test.result != 'success' && needs.test-self-hosted.result != 'success'
+        run: |
+          echo "Both test runners failed (github-hosted: ${{ needs.test.result }}, self-hosted: ${{ needs.test-self-hosted.result }})"
+          exit 1
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Fail if no WASM runner succeeded
+        if: needs.wasm.result != 'success' && needs.wasm-self-hosted.result != 'success'
+        run: |
+          echo "Both WASM runners failed (github-hosted: ${{ needs.wasm.result }}, self-hosted: ${{ needs.wasm-self-hosted.result }})"
+          exit 1
 
-      - name: Add wasm32 target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-wasm-
-
-      - name: Check WASM build
-        run: cargo check --target wasm32-unknown-unknown --features wasm --no-default-features
+      - name: All checks passed
+        run: echo "CI passed"
