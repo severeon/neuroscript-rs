@@ -16,6 +16,10 @@
 ///
 /// This is self-attention: query, key, and value all come from the same input.
 /// For cross-attention (separate query and key/value sources), see CrossAttention.
+/// For the monolithic primitive version, see MultiHeadSelfAttention.
+///
+/// Note: head_dim is implicitly dim / num_heads. All projections use full dim
+/// since ScaledDotProductAttention handles the head splitting internally.
 ///
 /// Reference: Vaswani et al. (2017), "Attention Is All You Need"
 neuron MultiHeadAttention(dim, num_heads):
