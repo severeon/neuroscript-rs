@@ -730,6 +730,8 @@ pub enum ValidationError {
         /// Binding names forming the cycle, e.g. ["a", "b", "a"]
         cycle: Vec<String>,
         neuron: String,
+        /// Source span for diagnostic reporting (None until Binding carries spans)
+        span: Option<SourceSpan>,
     },
     Custom(String),
     UseError {
@@ -866,7 +868,7 @@ impl std::fmt::Display for ValidationError {
                     context
                 )
             }
-            ValidationError::MutualLazyRecursion { cycle, neuron } => {
+            ValidationError::MutualLazyRecursion { cycle, neuron, .. } => {
                 write!(
                     f,
                     "Mutual @lazy recursion detected between bindings: {} (in {})",

@@ -257,6 +257,7 @@ impl<'a> CycleDfs<'a> {
                         errors.push(ValidationError::MutualLazyRecursion {
                             cycle,
                             neuron: neuron_name.to_string(),
+                            span: None, // Binding struct does not carry spans yet
                         });
                     }
                 }
