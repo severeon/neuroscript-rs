@@ -38,22 +38,25 @@ jobs:
       timeout: 10
 
   # ── Gate: single required status check for branch protection ───────────
+  # At least one runner from each pair (test, wasm) must succeed.
+  # On pull_request, self-hosted jobs are skipped so only GitHub-hosted is checked.
+  # On push, either runner passing is sufficient.
   ci-status:
     name: CI Status
     needs: [test, test-self-hosted, wasm, wasm-self-hosted]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if tests did not pass
-        if: needs.test.result != 'success'
+      - name: Fail if no test runner succeeded
+        if: needs.test.result != 'success' && needs.test-self-hosted.result != 'success'
         run: |
-          echo "Tests failed: ${{ needs.test.result }}"
+          echo "Both test runners failed (github-hosted: ${{ needs.test.result }}, self-hosted: ${{ needs.test-self-hosted.result }})"
           exit 1
 
-      - name: Fail if WASM check did not pass
-        if: needs.wasm.result != 'success'
+      - name: Fail if no WASM runner succeeded
+        if: needs.wasm.result != 'success' && needs.wasm-self-hosted.result != 'success'
         run: |
-          echo "WASM check failed: ${{ needs.wasm.result }}"
+          echo "Both WASM runners failed (github-hosted: ${{ needs.wasm.result }}, self-hosted: ${{ needs.wasm-self-hosted.result }})"
           exit 1
 
       - name: All checks passed

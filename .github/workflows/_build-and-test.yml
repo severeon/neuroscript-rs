@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: 'Runner label (JSON array or string for runs-on)'
+        description: 'Runner label as a JSON array string, e.g. ''["ubuntu-latest"]'' or ''["self-hosted"]'''
         required: true
         type: string
       timeout:
@@ -34,9 +34,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.name }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-${{ runner.name }}-cargo-test-
 
       - name: Build
         run: cargo build --verbose
