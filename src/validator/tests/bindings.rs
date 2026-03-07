@@ -31,6 +31,23 @@ fn lazy_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
     }
 }
 
+fn lazy_binding_with_kwargs(
+    name: &str,
+    call_name: &str,
+    args: Vec<Value>,
+    kwargs: Vec<Kwarg>,
+) -> Binding {
+    Binding {
+        name: name.to_string(),
+        call_name: call_name.to_string(),
+        args,
+        kwargs,
+        scope: Scope::Instance { lazy: true },
+        frozen: false,
+        unroll_group: None,
+    }
+}
+
 fn eager_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
     Binding {
         name: name.to_string(),
@@ -43,11 +60,13 @@ fn eager_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
     }
 }
 
+fn is_mutual_recursion(e: &ValidationError) -> bool {
+    matches!(e, ValidationError::MutualLazyRecursion { .. })
+}
+
 #[test]
 fn test_mutual_lazy_recursion_detected() {
-    // Binding `a` calls SomeNeuron with `b` as argument,
-    // and binding `b` calls SomeNeuron with `a` as argument.
-    // This forms a cycle: a -> b -> a
+    // a references b, b references a => cycle: a -> b -> a
     let mut program = ProgramBuilder::new()
         .with_simple_neuron("SomeNeuron", wildcard(), wildcard())
         .with_neuron(
@@ -62,10 +81,7 @@ fn test_mutual_lazy_recursion_detected() {
         )
         .build();
 
-    assert_validation_error(&mut program, |e| match e {
-        ValidationError::Custom(msg) => msg.contains("Mutual @lazy recursion detected"),
-        _ => false,
-    });
+    assert_validation_error(&mut program, is_mutual_recursion);
 }
 
 #[test]
@@ -107,17 +123,13 @@ fn test_three_way_lazy_cycle_detected() {
         )
         .build();
 
-    assert_validation_error(&mut program, |e| match e {
-        ValidationError::Custom(msg) => msg.contains("Mutual @lazy recursion detected"),
-        _ => false,
-    });
+    assert_validation_error(&mut program, is_mutual_recursion);
 }
 
 #[test]
 fn test_self_recursive_lazy_not_double_reported_as_mutual() {
     // A single @lazy binding that calls itself should only produce the
     // existing self-recursion error, not a mutual recursion error.
-    // (Mutual recursion detection requires >= 2 @lazy bindings.)
     let mut program = ProgramBuilder::new()
         .with_simple_neuron("TestNeuron", wildcard(), wildcard())
         .with_neuron(
@@ -134,7 +146,7 @@ fn test_self_recursive_lazy_not_double_reported_as_mutual() {
         Ok(()) => {} // self-recursion with args is allowed
         Err(errors) => {
             assert!(
-                !errors.iter().any(|e| matches!(e, ValidationError::Custom(msg) if msg.contains("Mutual"))),
+                !errors.iter().any(is_mutual_recursion),
                 "Self-recursive @lazy binding should not trigger mutual recursion error: {:?}",
                 errors
             );
@@ -166,10 +178,128 @@ fn test_mixed_lazy_and_eager_bindings_no_false_cycle() {
         Ok(()) => {}
         Err(errors) => {
             assert!(
-                !errors.iter().any(|e| matches!(e, ValidationError::Custom(msg) if msg.contains("Mutual"))),
+                !errors.iter().any(is_mutual_recursion),
                 "Mixed lazy/eager bindings should not trigger mutual recursion: {:?}",
                 errors
             );
         }
     }
+}
+
+#[test]
+fn test_sibling_cycles_sharing_node_both_reported() {
+    // a references both b and c; b references a; c references a.
+    // This creates two sibling cycles: a->b->a and a->c->a.
+    // Both should be reported.
+    let mut program = ProgramBuilder::new()
+        .with_simple_neuron("N", wildcard(), wildcard())
+        .with_neuron(
+            "TestNeuron",
+            neuron_with_bindings(
+                "TestNeuron",
+                vec![
+                    lazy_binding(
+                        "a",
+                        "N",
+                        vec![
+                            Value::Name("b".to_string()),
+                            Value::Name("c".to_string()),
+                        ],
+                    ),
+                    lazy_binding("b", "N", vec![Value::Name("a".to_string())]),
+                    lazy_binding("c", "N", vec![Value::Name("a".to_string())]),
+                ],
+            ),
+        )
+        .build();
+
+    let result = Validator::validate(&mut program);
+    let errors = result.unwrap_err();
+    let mutual_count = errors.iter().filter(|e| is_mutual_recursion(e)).count();
+    assert_eq!(
+        mutual_count, 2,
+        "Expected 2 sibling cycles reported, got {}: {:?}",
+        mutual_count, errors
+    );
+}
+
+#[test]
+fn test_three_bindings_only_two_form_cycle() {
+    // a -> b -> a forms a cycle, c is independent (no cycle)
+    let mut program = ProgramBuilder::new()
+        .with_simple_neuron("N", wildcard(), wildcard())
+        .with_neuron(
+            "TestNeuron",
+            neuron_with_bindings(
+                "TestNeuron",
+                vec![
+                    lazy_binding("a", "N", vec![Value::Name("b".to_string())]),
+                    lazy_binding("b", "N", vec![Value::Name("a".to_string())]),
+                    lazy_binding("c", "N", vec![Value::Int(42)]),
+                ],
+            ),
+        )
+        .build();
+
+    let result = Validator::validate(&mut program);
+    let errors = result.unwrap_err();
+    let mutual_count = errors.iter().filter(|e| is_mutual_recursion(e)).count();
+    assert_eq!(
+        mutual_count, 1,
+        "Expected exactly 1 cycle, got {}: {:?}",
+        mutual_count, errors
+    );
+}
+
+#[test]
+fn test_cycle_via_binop_reference() {
+    // a references b through a BinOp expression: a = N(b + 1)
+    let mut program = ProgramBuilder::new()
+        .with_simple_neuron("N", wildcard(), wildcard())
+        .with_neuron(
+            "TestNeuron",
+            neuron_with_bindings(
+                "TestNeuron",
+                vec![
+                    lazy_binding(
+                        "a",
+                        "N",
+                        vec![Value::BinOp {
+                            op: BinOp::Add,
+                            left: Box::new(Value::Name("b".to_string())),
+                            right: Box::new(Value::Int(1)),
+                        }],
+                    ),
+                    lazy_binding("b", "N", vec![Value::Name("a".to_string())]),
+                ],
+            ),
+        )
+        .build();
+
+    assert_validation_error(&mut program, is_mutual_recursion);
+}
+
+#[test]
+fn test_cycle_via_kwargs_reference() {
+    // a references b through a kwarg: a = N(key=b)
+    let mut program = ProgramBuilder::new()
+        .with_simple_neuron("N", wildcard(), wildcard())
+        .with_neuron(
+            "TestNeuron",
+            neuron_with_bindings(
+                "TestNeuron",
+                vec![
+                    lazy_binding_with_kwargs(
+                        "a",
+                        "N",
+                        vec![],
+                        vec![("key".to_string(), Value::Name("b".to_string()))],
+                    ),
+                    lazy_binding("b", "N", vec![Value::Name("a".to_string())]),
+                ],
+            ),
+        )
+        .build();
+
+    assert_validation_error(&mut program, is_mutual_recursion);
 }

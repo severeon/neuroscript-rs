@@ -139,9 +139,8 @@ pub(super) fn validate_bindings(
     }
 
     // Mutual @lazy recursion detection within the same context block.
-    // Build a dependency graph: for each @lazy binding, find which other bindings
-    // it references (via Value::Name args that match another binding's name).
-    // Then detect cycles in this graph.
+    // Build a dependency graph: for each @lazy binding, find which other @lazy
+    // bindings it references (via Value::Name args). Then detect cycles.
     let lazy_bindings: BTreeSet<&str> = context_bindings
         .iter()
         .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
@@ -149,12 +148,7 @@ pub(super) fn validate_bindings(
         .collect();
 
     if lazy_bindings.len() >= 2 {
-        let binding_names: HashSet<&str> = context_bindings
-            .iter()
-            .map(|b| b.name.as_str())
-            .collect();
-
-        // Build adjacency list: binding name -> set of binding names it references
+        // Build adjacency list: only edges between @lazy bindings
         let mut deps: HashMap<&str, BTreeSet<&str>> = HashMap::new();
         for binding in context_bindings {
             if !lazy_bindings.contains(binding.name.as_str()) {
@@ -162,33 +156,26 @@ pub(super) fn validate_bindings(
             }
             let mut refs = BTreeSet::new();
             for arg in &binding.args {
-                collect_name_refs(arg, &binding_names, &mut refs);
+                collect_name_refs(arg, &lazy_bindings, &mut refs);
             }
             for (_key, val) in &binding.kwargs {
-                collect_name_refs(val, &binding_names, &mut refs);
+                collect_name_refs(val, &lazy_bindings, &mut refs);
             }
             refs.remove(binding.name.as_str());
             deps.insert(binding.name.as_str(), refs);
         }
 
-        // DFS cycle detection -- collect all independent cycles
-        let mut visited: HashSet<&str> = HashSet::new();
-        let mut stack: HashSet<&str> = HashSet::new();
-        let mut path: Vec<&str> = Vec::new();
-        let mut reported_in_cycle: HashSet<&str> = HashSet::new();
+        let mut dfs = CycleDfs {
+            deps: &deps,
+            visited: HashSet::new(),
+            stack: HashSet::new(),
+            path: Vec::new(),
+            reported_cycles: HashSet::new(),
+        };
 
         for &node in &lazy_bindings {
-            if !visited.contains(node) {
-                find_cycles(
-                    node,
-                    &deps,
-                    &mut visited,
-                    &mut stack,
-                    &mut path,
-                    &mut reported_in_cycle,
-                    &neuron.name,
-                    &mut errors,
-                );
+            if !dfs.visited.contains(node) {
+                dfs.find_cycles(node, &neuron.name, &mut errors);
             }
         }
     }
@@ -196,81 +183,101 @@ pub(super) fn validate_bindings(
     errors
 }
 
-/// Collect Value::Name references that match known binding names
+/// Collect Value::Name references that match a set of target names
 fn collect_name_refs<'a>(
     value: &'a Value,
-    binding_names: &HashSet<&str>,
+    targets: &BTreeSet<&str>,
     refs: &mut BTreeSet<&'a str>,
 ) {
     match value {
         Value::Int(_) | Value::Float(_) | Value::String(_) | Value::Bool(_) | Value::Global(_) => {}
-        Value::Name(name) if binding_names.contains(name.as_str()) => {
+        Value::Name(name) if targets.contains(name.as_str()) => {
             refs.insert(name.as_str());
         }
         Value::Name(_) => {}
         Value::BinOp { left, right, .. } => {
-            collect_name_refs(left, binding_names, refs);
-            collect_name_refs(right, binding_names, refs);
+            collect_name_refs(left, targets, refs);
+            collect_name_refs(right, targets, refs);
         }
         Value::Call { args, kwargs, .. } => {
             for arg in args {
-                collect_name_refs(arg, binding_names, refs);
+                collect_name_refs(arg, targets, refs);
             }
             for (_key, val) in kwargs {
-                collect_name_refs(val, binding_names, refs);
+                collect_name_refs(val, targets, refs);
             }
         }
     }
 }
 
-/// DFS-based cycle detection. Pushes errors for all independent cycles found.
-fn find_cycles<'a>(
-    node: &'a str,
-    deps: &HashMap<&'a str, BTreeSet<&'a str>>,
-    visited: &mut HashSet<&'a str>,
-    stack: &mut HashSet<&'a str>,
-    path: &mut Vec<&'a str>,
-    reported_in_cycle: &mut HashSet<&'a str>,
-    neuron_name: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    visited.insert(node);
-    stack.insert(node);
-    path.push(node);
+/// DFS state for cycle detection across @lazy bindings.
+struct CycleDfs<'a> {
+    deps: &'a HashMap<&'a str, BTreeSet<&'a str>>,
+    visited: HashSet<&'a str>,
+    stack: HashSet<&'a str>,
+    path: Vec<&'a str>,
+    /// Set of already-reported cycle strings to avoid exact duplicates.
+    reported_cycles: HashSet<String>,
+}
 
-    if let Some(neighbors) = deps.get(node) {
-        for &neighbor in neighbors {
-            if !visited.contains(neighbor) {
-                find_cycles(
-                    neighbor,
-                    deps,
-                    visited,
-                    stack,
-                    path,
-                    reported_in_cycle,
-                    neuron_name,
-                    errors,
-                );
-            } else if stack.contains(neighbor) && !reported_in_cycle.contains(neighbor) {
-                let cycle_start = path
-                    .iter()
-                    .position(|&n| n == neighbor)
-                    .expect("cycle node must be in path since it is on the stack");
-                let mut cycle: Vec<String> =
-                    path[cycle_start..].iter().map(|s| s.to_string()).collect();
-                cycle.push(neighbor.to_string());
-                for &n in &path[cycle_start..] {
-                    reported_in_cycle.insert(n);
+impl<'a> CycleDfs<'a> {
+    fn find_cycles(
+        &mut self,
+        node: &'a str,
+        neuron_name: &str,
+        errors: &mut Vec<ValidationError>,
+    ) {
+        self.visited.insert(node);
+        self.stack.insert(node);
+        self.path.push(node);
+
+        if let Some(neighbors) = self.deps.get(node) {
+            for &neighbor in neighbors {
+                if !self.visited.contains(neighbor) {
+                    self.find_cycles(neighbor, neuron_name, errors);
+                } else if self.stack.contains(neighbor) {
+                    let cycle_start = self
+                        .path
+                        .iter()
+                        .position(|&n| n == neighbor)
+                        .expect("cycle node must be in path since it is on the DFS stack");
+                    let mut cycle: Vec<String> =
+                        self.path[cycle_start..].iter().map(|s| s.to_string()).collect();
+                    cycle.push(neighbor.to_string());
+                    // Normalize: rotate so the lexicographically smallest node is first,
+                    // to deduplicate cycles found from different starting points.
+                    let key = normalize_cycle(&cycle);
+                    if self.reported_cycles.insert(key) {
+                        let cycle_str = cycle.join(" -> ");
+                        errors.push(ValidationError::MutualLazyRecursion {
+                            cycle: cycle_str,
+                            neuron: neuron_name.to_string(),
+                        });
+                    }
                 }
-                let cycle_str = cycle.join(" -> ");
-                errors.push(ValidationError::Custom(format!(
-                    "Mutual @lazy recursion detected between bindings: {} (in {})",
-                    cycle_str, neuron_name
-                )));
             }
         }
-    }
 
-    stack.remove(node);
-    path.pop();
+        self.stack.remove(node);
+        self.path.pop();
+    }
+}
+
+/// Normalize a cycle for deduplication: rotate the nodes (excluding the
+/// repeated tail) so the lexicographically smallest node comes first.
+fn normalize_cycle(cycle: &[String]) -> String {
+    // cycle is [a, b, ..., a] -- strip the repeated tail for rotation
+    let nodes = &cycle[..cycle.len() - 1];
+    if nodes.is_empty() {
+        return String::new();
+    }
+    let min_pos = nodes
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, n)| n.as_str())
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let mut rotated: Vec<&str> = nodes[min_pos..].iter().map(|s| s.as_str()).collect();
+    rotated.extend(nodes[..min_pos].iter().map(|s| s.as_str()));
+    rotated.join(",")
 }
