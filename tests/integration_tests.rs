@@ -911,6 +911,52 @@ fn snapshot_all_examples() {
 }
 
 // ============================================================================
+// Sanitization / Adversarial Identifier Tests
+// ============================================================================
+
+#[test]
+fn snapshot_codegen_adversarial_identifiers() {
+    // Python keywords as NeuroScript param/dimension names.
+    // The sanitizer must append '_' to produce valid Python.
+    let source = r#"
+neuron AdversarialNet(lambda, dim):
+    in: [batch, lambda]
+    out: [batch, dim]
+    graph:
+        in -> Linear(lambda, dim) -> ReLU() -> out
+
+neuron Linear(in_dim, out_dim):
+    in: [*, in_dim]
+    out: [*, out_dim]
+    impl: core,nn/Linear
+
+neuron ReLU:
+    in: [*shape]
+    out: [*shape]
+    impl: core,nn/ReLU
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+
+    let code = generate_pytorch(&program, "AdversarialNet").expect("Codegen failed");
+
+    // Verify 'lambda' (Python keyword) is sanitized to 'lambda_'
+    assert!(
+        !code.contains("self.lambda =") && !code.contains("self.lambda,"),
+        "Generated Python must not use bare 'lambda' as identifier.\nGot:\n{}",
+        code
+    );
+    assert!(
+        code.contains("lambda_"),
+        "Expected 'lambda' to be sanitized to 'lambda_'.\nGot:\n{}",
+        code
+    );
+
+    insta::assert_snapshot!("codegen_adversarial_identifiers", code);
+}
+
+// ============================================================================
 // Bundle Mode Tests
 // ============================================================================
 

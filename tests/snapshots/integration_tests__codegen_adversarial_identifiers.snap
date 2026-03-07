@@ -1,0 +1,22 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.activations import ReLU
+from neuroscript_runtime.primitives.linear import Linear
+
+class AdversarialNet(nn.Module):
+    def __init__(self, lambda_, dim):
+        super().__init__()
+        self.lambda_ = lambda_
+        self.dim = dim
+        self.linear_0 = Linear(lambda_, dim)
+        self.re_l_u_1 = ReLU()
+
+    def forward(self, x):
+        linear_0 = self.linear_0(x)
+        # Linear() output shape: [*, out_dim]
+        re_l_u_1 = self.re_l_u_1(linear_0)
+        return re_l_u_1
