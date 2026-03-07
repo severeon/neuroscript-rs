@@ -8,6 +8,10 @@ set -uo pipefail
 PR="${1:?Usage: wait-for-review.sh <PR_NUMBER> [--all]}"
 WAIT_ALL="${2:-}"
 POLL_INTERVAL=30
+# Require seeing at least one pending/running check before accepting a pass.
+# This prevents the race condition where we poll immediately after a push
+# and see stale completed results from the previous run.
+SEEN_PENDING=false
 
 echo "Watching PR #${PR}..."
 
@@ -27,8 +31,18 @@ while true; do
 
     # gh pr checks uses: pass, fail, pending
     if echo "$CHECKS" | grep -qiE "\bpending\b"; then
+        SEEN_PENDING=true
         PENDING=$(echo "$CHECKS" | grep -ciE "\bpending\b" || true)
         echo "  ${PENDING} check(s) still running..."
+        sleep "$POLL_INTERVAL"
+        continue
+    fi
+
+    # If we haven't seen any pending checks yet, the results may be stale.
+    # Wait one more cycle for GitHub to register the new run.
+    if [[ "$SEEN_PENDING" == false ]]; then
+        echo "  Checks show complete but no pending state observed — waiting for new run..."
+        SEEN_PENDING=true
         sleep "$POLL_INTERVAL"
         continue
     fi
