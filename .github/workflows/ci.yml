@@ -12,7 +12,9 @@ env:
 jobs:
   test:
     name: Test
-    runs-on: self-hosted
+    # Use self-hosted for pushes and same-repo PRs; never run untrusted fork code on self-hosted
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,14 +24,16 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-test-
+          key: ${{ runner.os }}-${{ runner.name }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.name }}-cargo-test-
       - run: cargo build --verbose
       - run: cargo test --verbose
 
   wasm:
     name: WASM Check
-    runs-on: self-hosted
+    # Use self-hosted for pushes and same-repo PRs; never run untrusted fork code on self-hosted
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -40,6 +44,6 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-wasm-
+          key: ${{ runner.os }}-${{ runner.name }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.name }}-cargo-wasm-
       - run: cargo check --target wasm32-unknown-unknown --features wasm --no-default-features
