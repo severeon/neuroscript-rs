@@ -1008,7 +1008,7 @@ fn process_destination(
                     )
                     .unwrap();
                 }
-                Some(TransformAnnotation::Reduce(strategy)) => match strategy {
+                Some(TransformAnnotation::Reduce { strategy, .. }) => match strategy {
                     TransformStrategy::Intrinsic(name) => {
                         let method = match name.as_str() {
                             "mean" => "mean",
@@ -1116,7 +1116,7 @@ fn process_destination(
                         .unwrap();
                     }
                 },
-                Some(TransformAnnotation::Repeat(strategy)) => match strategy {
+                Some(TransformAnnotation::Repeat { strategy, .. }) => match strategy {
                     TransformStrategy::Intrinsic(name) if name == "copy" => {
                         // Determine which target dims are new (not in source shape).
                         // These require unsqueeze before expand.

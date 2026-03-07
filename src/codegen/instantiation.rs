@@ -405,8 +405,8 @@ fn collect_reshape_transforms_from_endpoint(
             }
             if let Some(ref annotation) = reshape.annotation {
                 let strategy = match annotation {
-                    TransformAnnotation::Reduce(s) => s,
-                    TransformAnnotation::Repeat(s) => s,
+                    TransformAnnotation::Reduce { strategy, .. } => strategy,
+                    TransformAnnotation::Repeat { strategy, .. } => strategy,
                 };
                 if let TransformStrategy::Neuron { name, args, kwargs } = strategy {
                     seen.insert(reshape.id);

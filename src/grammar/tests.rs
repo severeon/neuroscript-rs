@@ -415,7 +415,7 @@ neuron Pool:
             crate::interfaces::Endpoint::Reshape(expr) => {
                 assert!(expr.annotation.is_some(), "expected annotation on reshape");
                 match expr.annotation.as_ref().unwrap() {
-                    crate::interfaces::TransformAnnotation::Reduce(strategy) => {
+                    crate::interfaces::TransformAnnotation::Reduce { strategy, .. } => {
                         match strategy {
                             crate::interfaces::TransformStrategy::Intrinsic(name) => {
                                 assert_eq!(name, "mean");
@@ -499,7 +499,7 @@ neuron CustomPool(dim):
         match &connections[0].destination {
             crate::interfaces::Endpoint::Reshape(expr) => {
                 match expr.annotation.as_ref().unwrap() {
-                    crate::interfaces::TransformAnnotation::Reduce(strategy) => {
+                    crate::interfaces::TransformAnnotation::Reduce { strategy, .. } => {
                         match strategy {
                             crate::interfaces::TransformStrategy::Neuron { name, args, .. } => {
                                 assert_eq!(name, "AttentionPool");
