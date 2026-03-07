@@ -696,7 +696,7 @@ pub enum ValidationError {
         #[label("not found")]
         span: Option<SourceSpan>,
     },
-    #[error("Port mismatch: {context}")]
+    #[error("Port mismatch: {source_node}.{source_port} {source_shape} -> {dest_node}.{dest_port} {dest_shape} (in {context})")]
     #[diagnostic(help("check if dimensions match or if a transpose/reshape is needed"))]
     PortMismatch {
         source_node: String,
