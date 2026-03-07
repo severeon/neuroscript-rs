@@ -16,11 +16,11 @@
 /// - dim: Input and output dimension
 ///
 /// Shape Contract:
-/// - Input: [*batch, dim]
-/// - Output: [*batch, dim]
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
 neuron ParallelFFN(dim):
-    in: [*batch, dim]
-    out: [*batch, dim]
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> FFN(dim, dim * 2) -> out
 
@@ -37,19 +37,19 @@ neuron ParallelFFN(dim):
 /// - bottleneck: Reduced intermediate dimension
 ///
 /// Shape Contract:
-/// - Input: [*batch, dim]
-/// - Output: [*batch, dim]
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
 ///
 /// Reference: Houlsby et al. (2019), "Parameter-Efficient Transfer Learning"
 neuron Adapter(dim, bottleneck):
-    in: [*batch, dim]
-    out: [*batch, dim]
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> (main, skip)
         main -> Linear(dim, bottleneck) -> ReLU() -> Linear(bottleneck, dim) -> adapted
         (adapted, skip) -> Add() -> out
 
-/// Prenorm Wrapper
+/// PreNorm Wrapper
 ///
 /// Applies layer normalization before passing through a sub-neuron.
 /// Generic version of PreNormResidual without the skip connection.
@@ -59,15 +59,15 @@ neuron Adapter(dim, bottleneck):
 /// - block: A neuron to apply after normalization
 ///
 /// Shape Contract:
-/// - Input: [*batch, dim]
-/// - Output: [*batch, dim]
-neuron Prenorm(dim, block: Neuron):
-    in: [*batch, dim]
-    out: [*batch, dim]
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+neuron PreNorm(dim, block: Neuron):
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> LayerNorm(dim) -> block -> out
 
-/// Postnorm Wrapper
+/// PostNorm Wrapper
 ///
 /// Applies a sub-neuron then normalizes the output.
 /// Generic version of PostNormResidual without the skip connection.
@@ -77,11 +77,11 @@ neuron Prenorm(dim, block: Neuron):
 /// - block: A neuron to apply before normalization
 ///
 /// Shape Contract:
-/// - Input: [*batch, dim]
-/// - Output: [*batch, dim]
-neuron Postnorm(dim, block: Neuron):
-    in: [*batch, dim]
-    out: [*batch, dim]
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
+neuron PostNorm(dim, block: Neuron):
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> block -> LayerNorm(dim) -> out
 
@@ -94,28 +94,28 @@ neuron Postnorm(dim, block: Neuron):
 /// - dim: Feature dimension
 ///
 /// Shape Contract:
-/// - Input: [*batch, dim]
-/// - Output: [*batch, dim]
+/// - Input: [*shape, dim]
+/// - Output: [*shape, dim]
 neuron ScaleShift(dim):
-    in: [*batch, dim]
-    out: [*batch, dim]
+    in: [*shape, dim]
+    out: [*shape, dim]
     graph:
         in -> Scale(dim) -> Bias(dim) -> out
 
 /// Projection
 ///
-/// Linear projection between dimensions. Useful for dimension
-/// adaptation between layers with different feature sizes.
+/// Linear projection with GELU activation for dimension adaptation
+/// between layers with different feature sizes.
 ///
 /// Parameters:
 /// - in_dim: Input dimension
 /// - out_dim: Output dimension
 ///
 /// Shape Contract:
-/// - Input: [*batch, in_dim]
-/// - Output: [*batch, out_dim]
+/// - Input: [*shape, in_dim]
+/// - Output: [*shape, out_dim]
 neuron Projection(in_dim, out_dim):
-    in: [*batch, in_dim]
-    out: [*batch, out_dim]
+    in: [*shape, in_dim]
+    out: [*shape, out_dim]
     graph:
-        in -> Linear(in_dim, out_dim) -> out
+        in -> Linear(in_dim, out_dim) -> GELU() -> out
