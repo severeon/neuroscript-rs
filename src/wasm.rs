@@ -346,6 +346,8 @@ fn format_dim(dim: &Dim) -> String {
                 crate::interfaces::BinOp::Ge => ">=",
                 crate::interfaces::BinOp::Eq => "==",
                 crate::interfaces::BinOp::Ne => "!=",
+                crate::interfaces::BinOp::And => "&&",
+                crate::interfaces::BinOp::Or => "||",
             };
             format!("{} {} {}", format_dim(&expr.left), op, format_dim(&expr.right))
         }
@@ -373,6 +375,8 @@ fn format_value(value: &crate::interfaces::Value) -> String {
                 crate::interfaces::BinOp::Ge => ">=",
                 crate::interfaces::BinOp::Eq => "==",
                 crate::interfaces::BinOp::Ne => "!=",
+                crate::interfaces::BinOp::And => "&&",
+                crate::interfaces::BinOp::Or => "||",
             };
             format!("{} {} {}", format_value(left), op_str, format_value(right))
         }
