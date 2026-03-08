@@ -1270,6 +1270,16 @@ impl ShapeInferenceEngine {
         }
 
         if s1.rank() != s2.rank() {
+            // Issue #119: A leading Dim::Wildcard can absorb multiple
+            // dimensions, matching PyTorch semantics where `*` means
+            // "any number of leading batch dimensions."
+            //
+            // If the shorter shape starts with Wildcard, the wildcard
+            // absorbs the extra leading dims and we unify the remaining
+            // trailing dims pairwise.
+            if let Some(result) = self.try_unify_wildcard_multi(s1, s2, ctx) {
+                return result;
+            }
             return Err(format!(
                 "Rank mismatch: {} (rank {}) != {} (rank {})",
                 s1,
@@ -1284,6 +1294,58 @@ impl ShapeInferenceEngine {
         }
 
         Ok(())
+    }
+
+    /// Try to unify two shapes of different rank when one has a leading
+    /// `Dim::Wildcard` that can absorb multiple dimensions.
+    ///
+    /// Returns `Some(result)` if the wildcard multi-dim rule applies,
+    /// or `None` if neither shape qualifies.
+    fn try_unify_wildcard_multi(
+        &self,
+        s1: &Shape,
+        s2: &Shape,
+        ctx: &mut InferenceContext,
+    ) -> Option<Result<(), String>> {
+        // Determine which shape is shorter and whether it has a leading wildcard.
+        let (shorter, longer) = if s1.rank() < s2.rank() {
+            (s1, s2)
+        } else {
+            (s2, s1)
+        };
+
+        // The shorter shape must start with Wildcard
+        if shorter.dims.first() != Some(&Dim::Wildcard) {
+            return None;
+        }
+
+        // If the longer shape also starts with Wildcard, don't apply
+        // multi-dim absorption. Both shapes use wildcard semantics and
+        // the shorter one is less specific — it shouldn't absorb the
+        // extra named dimensions from the longer shape.
+        if longer.dims.first() == Some(&Dim::Wildcard) {
+            return None;
+        }
+
+        // The non-wildcard tail of the shorter shape
+        let tail_len = shorter.rank() - 1; // dims after the leading wildcard
+        if longer.rank() < tail_len {
+            // Not enough dims in the longer shape to match the tail
+            return None;
+        }
+
+        // The wildcard absorbs the first (longer.rank() - tail_len) dims of
+        // the longer shape. Unify the remaining trailing dims pairwise.
+        let offset = longer.rank() - tail_len;
+        let shorter_tail = &shorter.dims[1..];
+        let longer_tail = &longer.dims[offset..];
+
+        let result = shorter_tail
+            .iter()
+            .zip(longer_tail.iter())
+            .try_for_each(|(d_short, d_long)| ctx.unify(d_short, d_long));
+
+        Some(result)
     }
 
     fn validate_connection_shapes(
