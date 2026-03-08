@@ -465,6 +465,8 @@ pub struct Binding {
     pub frozen: bool,
     /// If this binding was created by unroll expansion, metadata about its group
     pub unroll_group: Option<UnrollGroupInfo>,
+    /// Source span of this binding (for diagnostics)
+    pub span: Option<SourceSpan>,
 }
 
 /// A module-level global definition: @global name = Value
@@ -786,6 +788,8 @@ pub enum ValidationError {
         /// Binding names forming the cycle, e.g. ["a", "b", "a"]
         cycle: Vec<String>,
         neuron: String,
+        #[label("mutual @lazy recursion involves this binding")]
+        span: Option<SourceSpan>,
     },
     #[error("{0}")]
     Custom(String),
@@ -836,8 +840,8 @@ impl PartialEq for ValidationError {
             (Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
              Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. })
                 => a == e && b == f && c == g && d == h,
-            (Self::MutualLazyRecursion { cycle: a, neuron: b },
-             Self::MutualLazyRecursion { cycle: c, neuron: d }) => a == c && b == d,
+            (Self::MutualLazyRecursion { cycle: a, neuron: b, .. },
+             Self::MutualLazyRecursion { cycle: c, neuron: d, .. }) => a == c && b == d,
             (Self::Custom(a), Self::Custom(b)) => a == b,
             (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
             // discriminant check above ensures this is unreachable, but required for exhaustiveness
@@ -854,7 +858,8 @@ impl ValidationError {
             | Self::PortMismatch { span, .. }
             | Self::ArityMismatch { span, .. }
             | Self::InvalidReshape { span, .. }
-            | Self::InvalidAnnotation { span, .. } => *span,
+            | Self::InvalidAnnotation { span, .. }
+            | Self::MutualLazyRecursion { span, .. } => *span,
             _ => None,
         }
     }

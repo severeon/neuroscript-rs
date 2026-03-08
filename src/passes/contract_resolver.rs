@@ -1043,6 +1043,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],
@@ -1141,6 +1143,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],
@@ -1286,6 +1290,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],
@@ -1400,6 +1406,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],
@@ -1522,6 +1530,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],
@@ -1707,6 +1717,8 @@ mod tests {
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     }],
                     context_unrolls: vec![],
                     connections: vec![],

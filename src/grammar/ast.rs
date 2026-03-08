@@ -607,6 +607,10 @@ impl AstBuilder {
     fn build_context_binding(&mut self, pair: Pair<Rule>) -> Result<Binding, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::context_binding);
 
+        let pest_span = pair.as_span();
+        let source_span =
+            SourceSpan::new(pest_span.start().into(), pest_span.end() - pest_span.start());
+
         let mut inner = pair.into_inner();
         let mut first = inner.next().unwrap();
         let mut scope = crate::interfaces::Scope::Instance { lazy: false };
@@ -620,6 +624,7 @@ impl AstBuilder {
         // Build the binding
         let mut binding = self.build_binding(first)?;
         binding.scope = scope;
+        binding.span = Some(source_span);
 
         Ok(binding)
     }
@@ -664,6 +669,7 @@ impl AstBuilder {
             scope: crate::interfaces::Scope::Instance { lazy: false },
             frozen,
             unroll_group: None,
+            span: None,
         })
     }
 

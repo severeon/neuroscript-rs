@@ -28,6 +28,8 @@ fn lazy_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
         scope: Scope::Instance { lazy: true },
         frozen: false,
         unroll_group: None,
+
+        span: None,
     }
 }
 
@@ -45,6 +47,8 @@ fn lazy_binding_with_kwargs(
         scope: Scope::Instance { lazy: true },
         frozen: false,
         unroll_group: None,
+
+        span: None,
     }
 }
 
@@ -57,6 +61,8 @@ fn eager_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
         scope: Scope::Instance { lazy: false },
         frozen: false,
         unroll_group: None,
+
+        span: None,
     }
 }
 
