@@ -1456,6 +1456,7 @@ mod tests {
             ValidationError::MutualLazyRecursion {
                 cycle: vec!["a".into(), "b".into()],
                 neuron: "N".into(),
+                span: None,
             },
             ValidationError::Custom("test".into()),
             ValidationError::UseError {
