@@ -1,0 +1,29 @@
+name: Test Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: 'Runner label to target (e.g., X64, ARM64)'
+        required: true
+        default: 'X64'
+
+jobs:
+  test:
+    name: Test on ${{ github.event.inputs.runner_label }}
+    runs-on: [self-hosted, "${{ github.event.inputs.runner_label }}"]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner info
+        run: |
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $(uname -a)"
+          echo "Arch: $(uname -m)"
+          echo "Rust: $(rustc --version 2>/dev/null || echo 'not installed')"
+          echo "Cargo: $(cargo --version 2>/dev/null || echo 'not installed')"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
