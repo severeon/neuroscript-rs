@@ -6,6 +6,18 @@
 
 import {themes as prismThemes} from 'prism-react-renderer';
 
+// docusaurus-llms-generator is an optional local dependency.
+// If not installed, the site builds without llms.txt generation.
+// To enable: clone https://github.com/<org>/docusaurus-llms-generator
+// next to this repo and run `npm install` (the optionalDependency will resolve).
+let llmsGeneratorAvailable = false;
+try {
+  await import('docusaurus-llms-generator');
+  llmsGeneratorAvailable = true;
+} catch {
+  // Plugin not installed — skip silently
+}
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'NeuroScript',
@@ -35,13 +47,15 @@ const config = {
   },
   
   plugins: [
-    [
-      "docusaurus-llms-generator",
-      {
-        outputFileName: "llms.txt",
-        outputFileNameFull: "llms-full.txt",
-      },
-    ],
+    ...(llmsGeneratorAvailable
+      ? [[
+          "docusaurus-llms-generator",
+          {
+            outputFileName: "llms.txt",
+            outputFileNameFull: "llms-full.txt",
+          },
+        ]]
+      : []),
     require.resolve('./plugins/neuron-docs-plugin'),
   ],
 
