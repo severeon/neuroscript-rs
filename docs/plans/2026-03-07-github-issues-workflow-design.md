@@ -129,12 +129,16 @@ on:
 jobs:
   check-actor:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Revert to draft if not human
-        if: >
-          github.actor != 'severeon'
-        run: |
-          gh pr ready --undo ${{ github.event.pull_request.number }}
+        if: github.actor != 'severeon'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr ready --undo "${PR_NUMBER}" -R "${REPO}" \
+            || { echo "::error::Failed to revert PR to draft!"; exit 1; }
 ```

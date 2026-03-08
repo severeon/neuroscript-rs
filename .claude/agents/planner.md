@@ -131,7 +131,7 @@ After all issues are planned, output a summary table:
 - **No PR merge.** Never run `gh pr merge`.
 - **No draft-to-ready conversion.** Never run `gh pr ready`.
 - **All discussion on issue threads.** Post plans, questions, and updates as issue comments.
-- **Stay in the main repo directory.** Planner doesn't need worktree isolation — it only writes tests and creates branches.
+- **Run sequentially.** No concurrent planner instances. The planner works in the main repo directory and concurrent runs would cause branch collisions.
 - **One branch per issue.** Never combine multiple issues on one branch.
 
 ## Test Writing Guidelines
@@ -142,6 +142,7 @@ After all issues are planned, output a summary table:
 - For Rust: use `#[test]` functions in the relevant module's test suite
 - For .ns files: create example files that should validate/compile but currently don't
 - Include a comment explaining what the test verifies: `// Regression test for #NNN: <description>`
+- **Failing tests must still compile.** Use `assert!(false, "not yet implemented: #NNN")` or `todo!()` in test bodies — never leave uncompilable code, or `cargo test` will block ALL tests.
 
 ## Build Commands Quick Reference
 
