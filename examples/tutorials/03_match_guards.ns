@@ -50,6 +50,9 @@ neuron MultiScaleProcessor:
                 Linear(d, 768) -> GELU() -> Linear(768, 512) -> out
 
 # Example 5: Conditional projection based on target
+# Note: the original ConditionalResidual example used implicit fork inside
+# a match arm, which is not yet supported. This simpler ConditionalProjection
+# demonstrates the same guard pattern without requiring fork-in-match.
 neuron ConditionalProjection(target_dim):
     in: [*, dim]
     out: [*, target_dim]

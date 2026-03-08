@@ -598,6 +598,15 @@ fn process_ref(
                     &lazy_kwargs,
                     indent,
                 )?;
+
+                // Mark as primitive for imports (mirrors process_call)
+                if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
+                    if neuron.is_primitive() {
+                        gen.used_primitives.insert(call_name.clone());
+                    }
+                } else {
+                    gen.used_primitives.insert(call_name.clone());
+                }
             }
 
             // This is a bound module - generate a call with semantic name
