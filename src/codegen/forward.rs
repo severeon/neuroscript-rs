@@ -490,7 +490,7 @@ fn process_ref(
 ) -> Result<String, CodegenError> {
     // Check if this is a reference to a bound module (from context:)
     // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
-    if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
+    if let Some(module_ref) = gen.var_names.get(&port_ref.node).cloned() {
         if module_ref.starts_with("self.") {
             // Check if this is a direct reference to an aggregate name (e.g., "blocks")
             if let Some((base_name, count, is_static)) = gen.aggregate_to_group.get(&port_ref.node).cloned() {
@@ -534,14 +534,10 @@ fn process_ref(
                         ?;
                     }
 
-                    binding_call_results
-                        .insert(port_ref.node.clone(), source_var.clone());
-                    return Ok(source_var);
-                } else {
-                    binding_call_results
-                        .insert(port_ref.node.clone(), source_var.clone());
-                    return Ok(source_var);
                 }
+                binding_call_results
+                    .insert(port_ref.node.clone(), source_var.clone());
+                return Ok(source_var);
             }
 
             // Check if this is part of an unroll group (individual member)
@@ -571,18 +567,11 @@ fn process_ref(
 
                     // Emit shape comment once after the loop
                     emit_bound_module_shape_comment(gen, output, &port_ref.node, indent)?;
-
-                    // The result is the source var (mutated in-place through the loop)
-                    binding_call_results
-                        .insert(port_ref.node.clone(), source_var.clone());
-                    return Ok(source_var);
-                } else {
-                    // Subsequent member of already-emitted group: no-op
-                    // Just update binding_call_results to point to source_var
-                    binding_call_results
-                        .insert(port_ref.node.clone(), source_var.clone());
-                    return Ok(source_var);
                 }
+                // Both first-encounter and subsequent-member paths return source_var
+                binding_call_results
+                    .insert(port_ref.node.clone(), source_var.clone());
+                return Ok(source_var);
             }
 
             // Check if this is a lazy binding via lazy_bindings lookup
@@ -1356,8 +1345,9 @@ fn process_reshape_repeat(
             ?;
         }
         _ => {
-            // Validator rejects unknown intrinsics, so this is unreachable
-            unreachable!("unknown repeat strategy should be caught by validator")
+            return Err(CodegenError::UnsupportedFeature(
+                "unknown repeat strategy; expected Intrinsic(\"copy\") or Neuron".to_string(),
+            ));
         }
     }
     Ok(())
