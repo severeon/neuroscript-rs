@@ -231,12 +231,21 @@ cargo test --test integration_tests  # 228 snapshot tests
 
 Snapshot testing with [insta](https://insta.rs/) catches unintended changes to parser IR, codegen output, and error messages.
 
+## Built by AI Agents
+
+NeuroScript is developed with the help of autonomous AI agents — each named after a fictional AI character. They work in isolated git worktrees, implement GitHub issues, and submit PRs for human review.
+
+See the **[Agent Scoreboard](docs/AGENT-SCOREBOARD.md)** for the full roster and their contributions.
+
+> *Sprint 3 agents: Samantha, Sonny, TARS, Dolores, Ava, Vision, Roy, Bishop, Chappie*
+
 ## Documentation
 
 - [Language Reference](website/docs/language-reference.md) — Complete syntax and semantics guide
 - [Compiler Internals](website/docs/compiler.md) — Architecture and pipeline documentation
 - [Tutorials](website/docs/tutorials/) — Step-by-step guides for language features
 - [Standard Library Docs](website/docs/stdlib/) — Neuron signatures and usage
+- [Agent Scoreboard](docs/AGENT-SCOREBOARD.md) — AI agent roster and contributions
 - [Changelog](CHANGELOG.md) — Release history
 
 ## Contributing
