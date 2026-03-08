@@ -1,0 +1,24 @@
+name: Draft PR Guard
+
+on:
+  pull_request:
+    types: [ready_for_review]
+
+jobs:
+  check-actor:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Revert to draft if not human maintainer
+        # To add a maintainer: add another condition to the 'if' above
+        if: github.actor != 'severeon'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Actor '${GITHUB_ACTOR}' is not authorized to convert drafts to ready."
+          echo "Reverting PR #${PR_NUMBER} to draft."
+          gh pr ready --undo "${PR_NUMBER}" -R "${REPO}" \
+            || { echo "::error::Failed to revert PR to draft!"; exit 1; }
