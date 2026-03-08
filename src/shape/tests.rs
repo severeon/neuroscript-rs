@@ -638,6 +638,10 @@ fn test_issue_119_wildcard_star_matches_multiple_leading_dims() {
     assert!(
         engine.shapes_compatible(&source, &dest),
         "[batch, seq, dim] should be compatible with [*, in_dim]"
+    );
+}
+
+// ========================================
 // Issue #118: Variadic element-wise unification
 // ========================================
 
@@ -696,6 +700,10 @@ fn test_issue_119_wildcard_output_expands_to_match_dest() {
     assert!(
         engine.shapes_compatible(&source, &dest),
         "[*, out_dim] should be compatible with [batch, seq, dim]"
+    );
+}
+
+#[test]
 fn test_issue_118_same_variadic_name_gap_conflict() {
     // Bug: [A, *x, B] vs [A, C, *x, B] — same variadic name *x but
     // in s1 *x absorbs C+whatever while in s2 *x absorbs only whatever.
@@ -718,62 +726,5 @@ fn test_issue_118_same_variadic_name_gap_conflict() {
     assert!(
         engine.unify_shapes(&s1, &s2, &mut ctx).is_err(),
         "Same-named variadic absorbing different gap segments should fail unification"
-    );
-}
-
-// ========================================
-// Issue #119: Wildcard * should match multiple leading dims
-// ========================================
-
-#[test]
-fn test_issue_119_wildcard_star_matches_multiple_leading_dims() {
-    // Bug: [batch, seq, dim] should be compatible with [*, in_dim]
-    // because * in PyTorch semantics means "any number of leading
-    // batch dimensions". Currently * (Dim::Wildcard) only matches
-    // exactly one dimension, causing a rank mismatch (3 != 2).
-    let engine = ShapeInferenceEngine::new();
-    let source = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let dest = Shape::new(vec![Dim::Wildcard, Dim::Named("in_dim".to_string())]);
-    assert!(
-        engine.shapes_compatible(&source, &dest),
-        "[batch, seq, dim] should be compatible with [*, in_dim]"
-    );
-}
-
-#[test]
-fn test_issue_119_wildcard_star_unify_3d_vs_2d_pattern() {
-    // Same as above but using unify_shapes directly
-    let engine = ShapeInferenceEngine::new();
-    let mut ctx = InferenceContext::new();
-    let s1 = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    let s2 = Shape::new(vec![Dim::Wildcard, Dim::Named("in_dim".to_string())]);
-    assert!(
-        engine.unify_shapes(&s1, &s2, &mut ctx).is_ok(),
-        "[batch, seq, dim] should unify with [*, in_dim]"
-    );
-}
-
-#[test]
-fn test_issue_119_wildcard_output_expands_to_match_dest() {
-    // The reverse direction: Linear output [*, out_dim] should be
-    // compatible with destination [batch, seq, dim]
-    let engine = ShapeInferenceEngine::new();
-    let source = Shape::new(vec![Dim::Wildcard, Dim::Named("out_dim".to_string())]);
-    let dest = Shape::new(vec![
-        Dim::Named("batch".to_string()),
-        Dim::Named("seq".to_string()),
-        Dim::Named("dim".to_string()),
-    ]);
-    assert!(
-        engine.shapes_compatible(&source, &dest),
-        "[*, out_dim] should be compatible with [batch, seq, dim]"
     );
 }
