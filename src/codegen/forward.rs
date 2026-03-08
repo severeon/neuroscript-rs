@@ -441,201 +441,153 @@ fn process_destination(
     reshape_source_shape: Option<&Shape>,
 ) -> Result<String, CodegenError> {
     match endpoint {
-        Endpoint::Ref(port_ref) => {
-            // Check if this is a reference to a bound module (from context:)
-            // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
-            if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
-                if module_ref.starts_with("self.") {
-                    // Check if this is a direct reference to an aggregate name (e.g., "blocks")
-                    if let Some((base_name, count, is_static)) = gen.aggregate_to_group.get(&port_ref.node).cloned() {
-                        let list_name = &port_ref.node;
+        Endpoint::Ref(port_ref) => process_ref(
+            output, gen, port_ref, source_var, indent,
+            used_var_names, binding_call_results, emitted_unroll_groups,
+        ),
+        Endpoint::Tuple(refs) => process_tuple(
+            output, gen, refs, source_var, indent,
+            used_var_names, source_output_count,
+        ),
+        Endpoint::Call { name, args: _, kwargs: _, id, frozen: _ } => process_call(
+            output, gen, endpoint, name, *id, source_var, indent,
+            used_var_names,
+        ),
+        Endpoint::Match(match_expr) => process_match(
+            output, gen, match_expr, source_var, indent,
+            used_var_names, call_to_result, match_to_result, if_to_result,
+            binding_call_results, emitted_unroll_groups,
+        ),
+        Endpoint::If(if_expr) => process_if(
+            output, gen, if_expr, source_var, indent,
+            used_var_names, call_to_result, match_to_result, if_to_result,
+            binding_call_results, emitted_unroll_groups,
+        ),
+        Endpoint::Reshape(reshape) => process_reshape(
+            output, gen, endpoint, reshape, source_var, indent,
+            used_var_names, call_to_result, reshape_source_shape,
+        ),
+        Endpoint::Wrap(_) => Err(CodegenError::InvalidConnection(
+            "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
+        )),
+    }
+}
 
-                        if !emitted_unroll_groups.contains(list_name) {
-                            emitted_unroll_groups.insert(list_name.clone());
+/// Process a `Ref` destination endpoint.
+///
+/// Handles bound modules (from `context:` blocks), unroll groups, lazy bindings,
+/// and simple port references.
+fn process_ref(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    port_ref: &PortRef,
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    binding_call_results: &mut HashMap<String, String>,
+    emitted_unroll_groups: &mut HashSet<String>,
+) -> Result<String, CodegenError> {
+    // Check if this is a reference to a bound module (from context:)
+    // Bound modules have var_names entries like "norm" -> "self.norm" or "extra" -> "self._extra"
+    if let Some(module_ref) = gen.var_names.get(&port_ref.node) {
+        if module_ref.starts_with("self.") {
+            // Check if this is a direct reference to an aggregate name (e.g., "blocks")
+            if let Some((base_name, count, is_static)) = gen.aggregate_to_group.get(&port_ref.node).cloned() {
+                let list_name = &port_ref.node;
 
-                            if is_static {
-                                // @static: call same class-level instance N times
-                                let range_expr = match &count {
-                                    Value::Name(param_name) => format!("self.{}", param_name),
-                                    Value::Int(n) => n.to_string(),
-                                    _ => "1".to_string(),
-                                };
-                                writeln!(
-                                    output,
-                                    "{}for _ in range({}):",
-                                    indent, range_expr
-                                )
-                                .unwrap();
-                                writeln!(
-                                    output,
-                                    "{}    {} = self.__class__.{}({})",
-                                    indent, source_var, base_name, source_var
-                                )
-                                .unwrap();
-                            } else {
-                                // Instance: iterate over nn.ModuleList
-                                writeln!(
-                                    output,
-                                    "{}for {} in self.{}:",
-                                    indent, base_name, list_name
-                                )
-                                .unwrap();
-                                writeln!(
-                                    output,
-                                    "{}    {} = {}({})",
-                                    indent, source_var, base_name, source_var
-                                )
-                                .unwrap();
-                            }
+                if !emitted_unroll_groups.contains(list_name) {
+                    emitted_unroll_groups.insert(list_name.clone());
 
-                            binding_call_results
-                                .insert(port_ref.node.clone(), source_var.clone());
-                            return Ok(source_var);
-                        } else {
-                            binding_call_results
-                                .insert(port_ref.node.clone(), source_var.clone());
-                            return Ok(source_var);
-                        }
-                    }
-
-                    // Check if this is part of an unroll group (individual member)
-                    if let Some(group_info) = gen.binding_to_unroll_group.get(&port_ref.node).cloned() {
-                        let base_name = &group_info.base_name;
-                        let list_name = group_info.aggregate_name.clone();
-
-                        if !emitted_unroll_groups.contains(&list_name) {
-                            // First encounter of this group: emit a for loop
-                            emitted_unroll_groups.insert(list_name.clone());
-
-                            let safe_base = sanitize_python_ident(base_name);
-                            let safe_list = sanitize_python_ident(&list_name);
-                            // Use the source var as the loop variable (mutated in-place)
-                            writeln!(
-                                output,
-                                "{}for {} in self.{}:",
-                                indent, safe_base, safe_list
-                            )
-                            .unwrap();
-                            writeln!(
-                                output,
-                                "{}    {} = {}({})",
-                                indent, source_var, safe_base, source_var
-                            )
-                            .unwrap();
-
-                            // Emit shape comment once after the loop
-                            emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
-
-                            // The result is the source var (mutated in-place through the loop)
-                            binding_call_results
-                                .insert(port_ref.node.clone(), source_var.clone());
-                            return Ok(source_var);
-                        } else {
-                            // Subsequent member of already-emitted group: no-op
-                            // Just update binding_call_results to point to source_var
-                            binding_call_results
-                                .insert(port_ref.node.clone(), source_var.clone());
-                            return Ok(source_var);
-                        }
-                    }
-
-                    // Check if this is a lazy binding via lazy_bindings lookup
-                    if let Some((call_name, lazy_args, lazy_kwargs)) =
-                        gen.lazy_bindings.get(&port_ref.node).cloned()
-                    {
-                        emit_lazy_instantiation(
-                            gen,
+                    if is_static {
+                        // @static: call same class-level instance N times
+                        let range_expr = match &count {
+                            Value::Name(param_name) => format!("self.{}", param_name),
+                            Value::Int(n) => n.to_string(),
+                            _ => "1".to_string(),
+                        };
+                        writeln!(
                             output,
-                            &module_ref,
-                            &call_name,
-                            &lazy_args,
-                            &lazy_kwargs,
-                            indent,
-                        );
+                            "{}for _ in range({}):",
+                            indent, range_expr
+                        )
+                        .unwrap();
+                        writeln!(
+                            output,
+                            "{}    {} = self.__class__.{}({})",
+                            indent, source_var, base_name, source_var
+                        )
+                        .unwrap();
+                    } else {
+                        // Instance: iterate over nn.ModuleList
+                        writeln!(
+                            output,
+                            "{}for {} in self.{}:",
+                            indent, base_name, list_name
+                        )
+                        .unwrap();
+                        writeln!(
+                            output,
+                            "{}    {} = {}({})",
+                            indent, source_var, base_name, source_var
+                        )
+                        .unwrap();
                     }
 
-                    // This is a bound module - generate a call with semantic name
-                    let result_var = make_var_name(used_var_names, &port_ref.node);
+                    binding_call_results
+                        .insert(port_ref.node.clone(), source_var.clone());
+                    return Ok(source_var);
+                } else {
+                    binding_call_results
+                        .insert(port_ref.node.clone(), source_var.clone());
+                    return Ok(source_var);
+                }
+            }
+
+            // Check if this is part of an unroll group (individual member)
+            if let Some(group_info) = gen.binding_to_unroll_group.get(&port_ref.node).cloned() {
+                let base_name = &group_info.base_name;
+                let list_name = group_info.aggregate_name.clone();
+
+                if !emitted_unroll_groups.contains(&list_name) {
+                    // First encounter of this group: emit a for loop
+                    emitted_unroll_groups.insert(list_name.clone());
+
+                    let safe_base = sanitize_python_ident(base_name);
+                    let safe_list = sanitize_python_ident(&list_name);
+                    // Use the source var as the loop variable (mutated in-place)
                     writeln!(
                         output,
-                        "{}{} = {}({})",
-                        indent, result_var, module_ref, source_var
+                        "{}for {} in self.{}:",
+                        indent, safe_base, safe_list
+                    )
+                    .unwrap();
+                    writeln!(
+                        output,
+                        "{}    {} = {}({})",
+                        indent, source_var, safe_base, source_var
                     )
                     .unwrap();
 
-                    // Emit shape comment using the called neuron's output shape
+                    // Emit shape comment once after the loop
                     emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
 
-                    // Store the call result separately so the module reference is preserved
-                    // in var_names for subsequent calls (e.g., @static called N times).
+                    // The result is the source var (mutated in-place through the loop)
                     binding_call_results
-                        .insert(port_ref.node.clone(), result_var.clone());
-                    return Ok(result_var);
+                        .insert(port_ref.node.clone(), source_var.clone());
+                    return Ok(source_var);
+                } else {
+                    // Subsequent member of already-emitted group: no-op
+                    // Just update binding_call_results to point to source_var
+                    binding_call_results
+                        .insert(port_ref.node.clone(), source_var.clone());
+                    return Ok(source_var);
                 }
             }
 
-            // Simple port reference - the source becomes this port's variable
-            gen.var_names
-                .insert(port_ref.node.clone(), source_var.clone());
-
-            // Emit shape comment/assertion for intermediate nodes
-            if port_ref.node != "in" && port_ref.node != "out" {
-                emit_shape_comment_and_assertion(gen, output, &source_var, &port_ref.node, indent);
-            }
-
-            Ok(source_var)
-        }
-        Endpoint::Tuple(refs) => {
-            // Tuple unpacking with semantic names
-            let var_names: Vec<String> = refs
-                .iter()
-                .map(|r| {
-                    let v = make_var_name(used_var_names, &r.node);
-                    gen.var_names.insert(r.node.clone(), v.clone());
-                    v
-                })
-                .collect();
-
-            if source_output_count == 1 && var_names.len() > 1 {
-                // Implicit fork: assign source to each binding individually
-                for var_name in &var_names {
-                    writeln!(output, "{}{} = {}", indent, var_name, source_var).unwrap();
-                }
-            } else {
-                // Multi-output source: standard tuple unpacking
-                writeln!(
-                    output,
-                    "{}{} = {}",
-                    indent,
-                    var_names.join(", "),
-                    source_var
-                )
-                .unwrap();
-            }
-            Ok(source_var) // Return tuple as result
-        }
-        Endpoint::Call {
-            name,
-            args: _,
-            kwargs: _,
-            id,
-            frozen: _,
-        } => {
-            // Generate a call to the module
-            let key = endpoint_key_impl(endpoint);
-            let module_name = gen.call_to_module.get(&key).cloned().ok_or_else(|| {
-                CodegenError::InvalidConnection(format!("Module for call to {} not found", name))
-            })?;
-
-            // Semantic name from module attribute name
-            let result_var = make_var_name(used_var_names, &module_name);
-
-            // Check if this call needs lazy instantiation by looking up
-            // lazy_bindings (unified with the Ref path above).
+            // Check if this is a lazy binding via lazy_bindings lookup
             if let Some((call_name, lazy_args, lazy_kwargs)) =
-                gen.lazy_bindings.get(&module_name).cloned()
+                gen.lazy_bindings.get(&port_ref.node).cloned()
             {
-                let module_ref = format!("self._{}", module_name);
                 emit_lazy_instantiation(
                     gen,
                     output,
@@ -645,571 +597,761 @@ fn process_destination(
                     &lazy_kwargs,
                     indent,
                 );
+            }
 
-                // Mark as primitive for imports
-                if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
-                    if neuron.is_primitive() {
-                        gen.used_primitives.insert(call_name.clone());
-                    }
-                } else {
-                    gen.used_primitives.insert(call_name.clone());
-                }
+            // This is a bound module - generate a call with semantic name
+            let result_var = make_var_name(used_var_names, &port_ref.node);
+            writeln!(
+                output,
+                "{}{} = {}({})",
+                indent, result_var, module_ref, source_var
+            )
+            .unwrap();
 
-                // Call the lazily-instantiated module
+            // Emit shape comment using the called neuron's output shape
+            emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
+
+            // Store the call result separately so the module reference is preserved
+            // in var_names for subsequent calls (e.g., @static called N times).
+            binding_call_results
+                .insert(port_ref.node.clone(), result_var.clone());
+            return Ok(result_var);
+        }
+    }
+
+    // Simple port reference - the source becomes this port's variable
+    gen.var_names
+        .insert(port_ref.node.clone(), source_var.clone());
+
+    // Emit shape comment/assertion for intermediate nodes
+    if port_ref.node != "in" && port_ref.node != "out" {
+        emit_shape_comment_and_assertion(gen, output, &source_var, &port_ref.node, indent);
+    }
+
+    Ok(source_var)
+}
+
+/// Process a `Tuple` destination endpoint.
+///
+/// Handles tuple unpacking with semantic names and implicit fork (when source
+/// produces a single output but destination is a multi-element tuple).
+fn process_tuple(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    refs: &[PortRef],
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    source_output_count: usize,
+) -> Result<String, CodegenError> {
+    // Tuple unpacking with semantic names
+    let var_names: Vec<String> = refs
+        .iter()
+        .map(|r| {
+            let v = make_var_name(used_var_names, &r.node);
+            gen.var_names.insert(r.node.clone(), v.clone());
+            v
+        })
+        .collect();
+
+    if source_output_count == 1 && var_names.len() > 1 {
+        // Implicit fork: assign source to each binding individually
+        for var_name in &var_names {
+            writeln!(output, "{}{} = {}", indent, var_name, source_var).unwrap();
+        }
+    } else {
+        // Multi-output source: standard tuple unpacking
+        writeln!(
+            output,
+            "{}{} = {}",
+            indent,
+            var_names.join(", "),
+            source_var
+        )
+        .unwrap();
+    }
+    Ok(source_var) // Return tuple as result
+}
+
+/// Process a `Call` destination endpoint.
+///
+/// Generates a call to the instantiated module, handling lazy instantiation and
+/// shape comments/assertions.
+fn process_call(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    endpoint: &Endpoint,
+    name: &str,
+    id: usize,
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+) -> Result<String, CodegenError> {
+    // Generate a call to the module
+    let key = endpoint_key_impl(endpoint);
+    let module_name = gen.call_to_module.get(&key).cloned().ok_or_else(|| {
+        CodegenError::InvalidConnection(format!("Module for call to {} not found", name))
+    })?;
+
+    // Semantic name from module attribute name
+    let result_var = make_var_name(used_var_names, &module_name);
+
+    // Check if this call needs lazy instantiation by looking up
+    // lazy_bindings (unified with the Ref path above).
+    if let Some((call_name, lazy_args, lazy_kwargs)) =
+        gen.lazy_bindings.get(&module_name).cloned()
+    {
+        let module_ref = format!("self._{}", module_name);
+        emit_lazy_instantiation(
+            gen,
+            output,
+            &module_ref,
+            &call_name,
+            &lazy_args,
+            &lazy_kwargs,
+            indent,
+        );
+
+        // Mark as primitive for imports
+        if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
+            if neuron.is_primitive() {
+                gen.used_primitives.insert(call_name.clone());
+            }
+        } else {
+            gen.used_primitives.insert(call_name.clone());
+        }
+
+        // Call the lazily-instantiated module
+        writeln!(
+            output,
+            "{}{} = self._{}({})",
+            indent, result_var, module_name, source_var
+        )
+        .unwrap();
+    } else {
+        // Normal call to pre-instantiated module
+        writeln!(
+            output,
+            "{}{} = self.{}({})",
+            indent, result_var, module_name, source_var
+        )
+        .unwrap();
+    }
+
+    // Emit shape comment/assertion for the call result
+    // Look up the output shape from call_outputs using the call ID
+    if let Some(shapes) = gen.inference_ctx.call_outputs.get(&id) {
+        if !shapes.is_empty() {
+            let shape = &shapes[0];
+            let shape_comment = gen.format_shape_for_comment(shape);
+
+            // Only emit if shape changed
+            if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
                 writeln!(
                     output,
-                    "{}{} = self._{}({})",
-                    indent, result_var, module_name, source_var
+                    "{}# {}() output shape: {}",
+                    indent, name, shape_comment
+                )
+                .unwrap();
+                gen.last_emitted_shape = Some(shape_comment.clone());
+            }
+
+            if gen.should_assert_shape(shape) {
+                if let Some(expected_shape) = gen.format_shape_for_assertion(shape) {
+                    writeln!(
+                        output,
+                        "{}assert {}.shape == {}, f\"{}() shape mismatch: expected {}, got {{{}.shape}}\"",
+                        indent, result_var, expected_shape, name, shape_comment, result_var
+                    ).unwrap();
+                }
+            }
+        }
+    }
+
+    Ok(result_var)
+}
+
+/// Process a `Match` destination endpoint.
+///
+/// Generates if/elif/else chains for shape-based pattern matching, with
+/// dimension bindings, guard conditions, and per-arm pipelines.
+fn process_match(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    match_expr: &MatchExpr,
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    call_to_result: &mut HashMap<String, String>,
+    match_to_result: &mut HashMap<String, String>,
+    if_to_result: &mut HashMap<String, String>,
+    binding_call_results: &mut HashMap<String, String>,
+    emitted_unroll_groups: &mut HashSet<String>,
+) -> Result<String, CodegenError> {
+    let result_var = make_var_name(used_var_names, "match_out");
+
+    // Initialize result_var to None for safety (though not strictly needed if all paths return)
+    writeln!(output, "{}{} = None", indent, result_var).unwrap();
+
+    let mut first = true;
+    let mut prev_condition = String::new();
+
+    // Check if there's a reachable catch-all arm (all wildcards, no guard)
+    let has_reachable_catchall = match_expr.arms.iter().any(|arm| {
+        arm.is_reachable
+            && arm.guard.is_none()
+            && match &arm.pattern {
+                MatchPattern::Shape(shape) => shape
+                    .dims
+                    .iter()
+                    .all(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Variadic(_))),
+                MatchPattern::NeuronContract(_) => false,
+            }
+    });
+
+    for arm in &match_expr.arms {
+        // Skip unreachable arms (pruned by optimizer)
+        if !arm.is_reachable {
+            continue;
+        }
+
+        let shape = match &arm.pattern {
+            MatchPattern::Shape(s) => s,
+            MatchPattern::NeuronContract(_) => {
+                // NeuronContract should be resolved before codegen
+                return Err(CodegenError::UnsupportedFeature(
+                    "NeuronContract patterns must be resolved before codegen".to_string(),
+                ));
+            }
+        };
+        let shape_check =
+            generate_shape_check(gen, shape, arm.guard.as_ref(), &source_var);
+
+        // Determine prefix: use "else:" if pattern condition is same as previous
+        let prefix = if first {
+            "if"
+        } else if shape_check.condition == prev_condition {
+            // Same pattern, different guard (or no guard) -> use else
+            "else"
+        } else {
+            "elif"
+        };
+        first = false;
+
+        // Only output condition if it's not "else"
+        if prefix == "else" {
+            writeln!(output, "{}{}:", indent, prefix).unwrap();
+        } else {
+            writeln!(output, "{}{} {}:", indent, prefix, shape_check.condition).unwrap();
+            prev_condition = shape_check.condition.clone();
+        }
+
+        // Process pipeline - save var_names to avoid pollution from match arm scope
+        let saved_var_names = gen.var_names.clone();
+        let arm_indent = format!("{}    ", indent);
+
+        // Emit dimension bindings before processing pipeline
+        for binding in &shape_check.bindings {
+            writeln!(output, "{}{}", arm_indent, binding).unwrap();
+        }
+
+        // If guard uses captured dimensions, check it after binding
+        let pipeline_indent = if let Some(guard_cond) = &shape_check.guard_condition {
+            writeln!(output, "{}if {}:", arm_indent, guard_cond).unwrap();
+            format!("{}    ", arm_indent)
+        } else {
+            arm_indent.clone()
+        };
+
+        let mut current_var = source_var.clone();
+
+        let mut prev_endpoint: Option<&Endpoint> = None;
+        for ep in &arm.pipeline {
+            // For Reshape endpoints, try to resolve source shape from previous endpoint.
+            // When reshape is the first endpoint in a match arm (prev_endpoint is None),
+            // use the match arm's pattern shape as the source — the pattern defines
+            // the shape of the data flowing into the arm pipeline.
+            let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+                resolve_endpoint_source_shape(prev_endpoint, gen)
+                    .or_else(|| {
+                        if prev_endpoint.is_none() {
+                            Some(shape.clone())
+                        } else {
+                            None
+                        }
+                    })
+            } else {
+                None
+            };
+
+            current_var = process_destination(
+                output,
+                gen,
+                ep,
+                current_var,
+                &pipeline_indent,
+                used_var_names,
+                call_to_result,
+                match_to_result,
+                if_to_result,
+                binding_call_results,
+                emitted_unroll_groups,
+                1,
+                arm_reshape_src.as_ref(),
+            )?;
+
+            // If endpoint was a Call, store result in call_to_result
+            if let Endpoint::Call { .. } = ep {
+                let key = endpoint_key_impl(ep);
+                call_to_result.insert(key, current_var.clone());
+            }
+            prev_endpoint = Some(ep);
+        }
+
+        writeln!(
+            output,
+            "{}{} = {}",
+            pipeline_indent, result_var, current_var
+        )
+        .unwrap();
+
+        // Restore var_names to prevent match arm scope from leaking
+        gen.var_names = saved_var_names;
+    }
+
+    // Else clause: only raise if no reachable catch-all exists
+    if !has_reachable_catchall {
+        writeln!(output, "{}else:", indent).unwrap();
+        writeln!(
+            output,
+            "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')",
+            indent, source_var
+        )
+        .unwrap();
+    }
+
+    Ok(result_var)
+}
+
+/// Process a pipeline of endpoints within a branch, caching call/match/if results.
+///
+/// Shared helper for `process_if` branches to avoid duplicating the
+/// pipeline-processing loop.
+fn process_branch_pipeline(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    pipeline: &[Endpoint],
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    call_to_result: &mut HashMap<String, String>,
+    match_to_result: &mut HashMap<String, String>,
+    if_to_result: &mut HashMap<String, String>,
+    binding_call_results: &mut HashMap<String, String>,
+    emitted_unroll_groups: &mut HashSet<String>,
+) -> Result<String, CodegenError> {
+    let mut current_var = source_var;
+    let mut prev_ep: Option<&Endpoint> = None;
+
+    for ep in pipeline {
+        let reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
+            resolve_endpoint_source_shape(prev_ep, gen)
+        } else {
+            None
+        };
+
+        current_var = process_destination(
+            output,
+            gen,
+            ep,
+            current_var,
+            indent,
+            used_var_names,
+            call_to_result,
+            match_to_result,
+            if_to_result,
+            binding_call_results,
+            emitted_unroll_groups,
+            1,
+            reshape_src.as_ref(),
+        )?;
+
+        // Cache call/match/if results inside the pipeline
+        if let Endpoint::Call { .. } = ep {
+            let key = endpoint_key_impl(ep);
+            call_to_result.insert(key, current_var.clone());
+        } else if let Endpoint::Match(_) = ep {
+            let key = endpoint_key_impl(ep);
+            match_to_result.insert(key, current_var.clone());
+        } else if let Endpoint::If(_) = ep {
+            let key = endpoint_key_impl(ep);
+            if_to_result.insert(key, current_var.clone());
+        }
+        prev_ep = Some(ep);
+    }
+
+    Ok(current_var)
+}
+
+/// Process an `If` destination endpoint.
+///
+/// Generates if/elif/else chains for parameter-based conditional dispatch,
+/// with per-branch pipelines.
+fn process_if(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    if_expr: &IfExpr,
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    call_to_result: &mut HashMap<String, String>,
+    match_to_result: &mut HashMap<String, String>,
+    if_to_result: &mut HashMap<String, String>,
+    binding_call_results: &mut HashMap<String, String>,
+    emitted_unroll_groups: &mut HashSet<String>,
+) -> Result<String, CodegenError> {
+    let result_var = make_var_name(used_var_names, "cond_out");
+
+    // Initialize result variable to None
+    writeln!(output, "{}{} = None", indent, result_var).unwrap();
+
+    // Handle branches
+    for (i, branch) in if_expr.branches.iter().enumerate() {
+        let prefix = if i == 0 { "if" } else { "elif" };
+        // Ensure self.param is used in conditions
+        let cond_str = gen.value_to_python_dim(&branch.condition);
+
+        writeln!(output, "{}{} {}:", indent, prefix, cond_str).unwrap();
+        let branch_indent = format!("{}    ", indent);
+
+        // Process pipeline
+        let saved_var_names = gen.var_names.clone();
+        let current_var = process_branch_pipeline(
+            output, gen, &branch.pipeline, source_var.clone(), &branch_indent,
+            used_var_names, call_to_result, match_to_result, if_to_result,
+            binding_call_results, emitted_unroll_groups,
+        )?;
+
+        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+        gen.var_names = saved_var_names;
+    }
+
+    // Else branch
+    if let Some(else_branch) = &if_expr.else_branch {
+        writeln!(output, "{}else:", indent).unwrap();
+        let branch_indent = format!("{}    ", indent);
+        let saved_var_names = gen.var_names.clone();
+        let current_var = process_branch_pipeline(
+            output, gen, else_branch, source_var.clone(), &branch_indent,
+            used_var_names, call_to_result, match_to_result, if_to_result,
+            binding_call_results, emitted_unroll_groups,
+        )?;
+        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+        gen.var_names = saved_var_names;
+    } else {
+        // Implicit else: pass-through/Identity
+        writeln!(output, "{}else:", indent).unwrap();
+        writeln!(output, "{}    {} = {}", indent, result_var, source_var).unwrap();
+    }
+
+    Ok(result_var)
+}
+
+/// Process a `Reshape` destination endpoint.
+///
+/// Handles bare reshapes, `@reduce` (with intrinsic or neuron strategies),
+/// and `@repeat` (with copy/expand or neuron strategies).
+fn process_reshape(
+    output: &mut String,
+    gen: &mut CodeGenerator,
+    endpoint: &Endpoint,
+    reshape: &ReshapeExpr,
+    source_var: String,
+    indent: &str,
+    used_var_names: &mut HashSet<String>,
+    call_to_result: &mut HashMap<String, String>,
+    reshape_source_shape: Option<&Shape>,
+) -> Result<String, CodegenError> {
+    let result_var = make_var_name(used_var_names, "x");
+
+    // Emit binding assignments for all cases (bare, @reduce, @repeat).
+    // Binding dims like `dh=dim/heads` must be assigned before any use.
+    for dim in &reshape.dims {
+        if let ReshapeDim::Binding { name, expr } = dim {
+            let expr_str = gen.value_to_python_dim(expr);
+            writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str).unwrap();
+        }
+    }
+
+    match &reshape.annotation {
+        None => {
+            process_reshape_bare(output, gen, reshape, &result_var, &source_var, indent)?;
+        }
+        Some(TransformAnnotation::Reduce { strategy, .. }) => {
+            process_reshape_reduce(output, gen, reshape, &result_var, &source_var, indent, strategy, reshape_source_shape)?;
+        }
+        Some(TransformAnnotation::Repeat { strategy, .. }) => {
+            process_reshape_repeat(output, gen, reshape, &result_var, &source_var, indent, strategy, reshape_source_shape, used_var_names)?;
+        }
+    }
+
+    // Store result for when this reshape is used as a source
+    let key = endpoint_key_impl(endpoint);
+    call_to_result.insert(key, result_var.clone());
+
+    Ok(result_var)
+}
+
+/// Emit code for a bare `=>` reshape (element-preserving).
+fn process_reshape_bare(
+    output: &mut String,
+    gen: &CodeGenerator,
+    reshape: &ReshapeExpr,
+    result_var: &str,
+    source_var: &str,
+    indent: &str,
+) -> Result<(), CodegenError> {
+    let shape_args = reshape
+        .dims
+        .iter()
+        .map(|d| reshape_dim_to_python(gen, d))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+
+    writeln!(
+        output,
+        "{}{} = {}.reshape({})",
+        indent, result_var, source_var, shape_args
+    )
+    .unwrap();
+    Ok(())
+}
+
+/// Emit code for `=> @reduce(strategy) [shape]`.
+fn process_reshape_reduce(
+    output: &mut String,
+    _gen: &CodeGenerator,
+    reshape: &ReshapeExpr,
+    result_var: &str,
+    source_var: &str,
+    indent: &str,
+    strategy: &TransformStrategy,
+    reshape_source_shape: Option<&Shape>,
+) -> Result<(), CodegenError> {
+    match strategy {
+        TransformStrategy::Intrinsic(name) => {
+            let method = match name.as_str() {
+                "mean" => "mean",
+                "sum" => "sum",
+                "min" => "amin",
+                "max" => "amax",
+                "prod" => "prod",
+                "logsumexp" => "logsumexp",
+                _ => {
+                    return Err(CodegenError::UnsupportedFeature(format!(
+                        "unknown reduce intrinsic: {}",
+                        name
+                    )))
+                }
+            };
+
+            // Determine which source dims to reduce by comparing
+            // source shape dim names with target dim names
+            let target_dim_names: HashSet<String> = reshape
+                .dims
+                .iter()
+                .filter_map(|d| match d {
+                    ReshapeDim::Named(n) => Some(n.clone()),
+                    ReshapeDim::Binding { name, .. } => Some(name.clone()),
+                    _ => None,
+                })
+                .collect();
+
+            let reduce_dims: Vec<usize> =
+                if let Some(src_shape) = reshape_source_shape {
+                    // Primary strategy: find source Named dims not present in target
+                    let named_reduce: Vec<usize> = src_shape
+                        .dims
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, dim)| {
+                            if let Dim::Named(name) = dim {
+                                if !target_dim_names.contains(name) {
+                                    return Some(i);
+                                }
+                            }
+                            None
+                        })
+                        .collect();
+
+                    if !named_reduce.is_empty() {
+                        named_reduce
+                    } else {
+                        return Err(CodegenError::InvalidConnection(
+                            "cannot determine @reduce dimensions: source shape dims \
+                             are not sufficiently named to identify which axes to \
+                             reduce. Use fully named dimensions in the source shape \
+                             (e.g., [batch, heads, seq, dim]) so the compiler can \
+                             match them against the target shape."
+                                .to_string(),
+                        ));
+                    }
+                } else {
+                    return Err(CodegenError::InvalidConnection(
+                        "cannot determine reduce dimensions: source shape unavailable".to_string(),
+                    ));
+                };
+
+            if reduce_dims.is_empty() {
+                return Err(CodegenError::InvalidConnection(
+                    "cannot determine reduce dimensions: no dims identified to reduce".to_string(),
+                ));
+            }
+
+            if reduce_dims.len() == 1 {
+                writeln!(
+                    output,
+                    "{}{} = {}.{}(dim={})",
+                    indent, result_var, source_var, method, reduce_dims[0]
                 )
                 .unwrap();
             } else {
-                // Normal call to pre-instantiated module
+                let dims_str = reduce_dims
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 writeln!(
                     output,
-                    "{}{} = self.{}({})",
-                    indent, result_var, module_name, source_var
+                    "{}{} = {}.{}(dim=({}))",
+                    indent, result_var, source_var, method, dims_str
                 )
                 .unwrap();
             }
-
-            // Emit shape comment/assertion for the call result
-            // Look up the output shape from call_outputs using the call ID
-            if let Some(shapes) = gen.inference_ctx.call_outputs.get(id) {
-                if !shapes.is_empty() {
-                    let shape = &shapes[0];
-                    let shape_comment = gen.format_shape_for_comment(shape);
-
-                    // Only emit if shape changed
-                    if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
-                        writeln!(
-                            output,
-                            "{}# {}() output shape: {}",
-                            indent, name, shape_comment
-                        )
-                        .unwrap();
-                        gen.last_emitted_shape = Some(shape_comment.clone());
-                    }
-
-                    if gen.should_assert_shape(shape) {
-                        if let Some(expected_shape) = gen.format_shape_for_assertion(shape) {
-                            writeln!(
-                                output,
-                                "{}assert {}.shape == {}, f\"{}() shape mismatch: expected {}, got {{{}.shape}}\"",
-                                indent, result_var, expected_shape, name, shape_comment, result_var
-                            ).unwrap();
-                        }
-                    }
-                }
-            }
-
-            Ok(result_var)
         }
-        Endpoint::Match(match_expr) => {
-            let result_var = make_var_name(used_var_names, "match_out");
+        TransformStrategy::Neuron { .. } => {
+            let module_name = format!("self._transform_{}", reshape.id);
+            writeln!(
+                output,
+                "{}{} = {}({})",
+                indent, result_var, module_name, source_var
+            )
+            .unwrap();
+        }
+    }
+    Ok(())
+}
 
-            // Initialize result_var to None for safety (though not strictly needed if all paths return)
-            writeln!(output, "{}{} = None", indent, result_var).unwrap();
+/// Emit code for `=> @repeat(strategy) [shape]`.
+fn process_reshape_repeat(
+    output: &mut String,
+    gen: &CodeGenerator,
+    reshape: &ReshapeExpr,
+    result_var: &str,
+    source_var: &str,
+    indent: &str,
+    strategy: &TransformStrategy,
+    reshape_source_shape: Option<&Shape>,
+    used_var_names: &mut HashSet<String>,
+) -> Result<(), CodegenError> {
+    match strategy {
+        TransformStrategy::Intrinsic(name) if name == "copy" => {
+            // Determine which target dims are new (not in source shape).
+            // These require unsqueeze before expand.
+            let source_dim_names: HashSet<String> =
+                if let Some(src_shape) = reshape_source_shape {
+                    src_shape
+                        .dims
+                        .iter()
+                        .filter_map(|d| {
+                            if let Dim::Named(n) = d {
+                                Some(n.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    HashSet::new()
+                };
 
-            let mut first = true;
-            let mut prev_condition = String::new();
-
-            // Check if there's a reachable catch-all arm (all wildcards, no guard)
-            let has_reachable_catchall = match_expr.arms.iter().any(|arm| {
-                arm.is_reachable
-                    && arm.guard.is_none()
-                    && match &arm.pattern {
-                        MatchPattern::Shape(shape) => shape
-                            .dims
-                            .iter()
-                            .all(|d| matches!(d, Dim::Wildcard | Dim::Inferred | Dim::Variadic(_))),
-                        MatchPattern::NeuronContract(_) => false,
+            // Find indices of new dims in target that need unsqueeze
+            let mut unsqueeze_indices: Vec<usize> = Vec::new();
+            for (i, dim) in reshape.dims.iter().enumerate() {
+                let is_new = match dim {
+                    ReshapeDim::Literal(_) => {
+                        // Literal dims like `1` are new dimensions
+                        true
                     }
-            });
-
-            for arm in &match_expr.arms {
-                // Skip unreachable arms (pruned by optimizer)
-                if !arm.is_reachable {
-                    continue;
-                }
-
-                let shape = match &arm.pattern {
-                    MatchPattern::Shape(s) => s,
-                    MatchPattern::NeuronContract(_) => {
-                        // NeuronContract should be resolved before codegen
+                    ReshapeDim::Named(n) => !source_dim_names.contains(n),
+                    ReshapeDim::Binding { name, .. } => {
+                        !source_dim_names.contains(name)
+                    }
+                    ReshapeDim::Expr(_) => {
+                        // Expressions reference existing dims; not new
+                        false
+                    }
+                    ReshapeDim::Others => {
+                        // Others represents a variable number of remaining
+                        // dims and cannot map to a single expand() slot.
                         return Err(CodegenError::UnsupportedFeature(
-                            "NeuronContract patterns must be resolved before codegen".to_string(),
+                            "Others (`...`) cannot appear in @repeat(copy) target shape: \
+                             expand() requires fixed-rank dimensions".to_string(),
                         ));
                     }
                 };
-                let shape_check =
-                    generate_shape_check(gen, shape, arm.guard.as_ref(), &source_var);
-
-                // Determine prefix: use "else:" if pattern condition is same as previous
-                let prefix = if first {
-                    "if"
-                } else if shape_check.condition == prev_condition {
-                    // Same pattern, different guard (or no guard) -> use else
-                    "else"
-                } else {
-                    "elif"
-                };
-                first = false;
-
-                // Only output condition if it's not "else"
-                if prefix == "else" {
-                    writeln!(output, "{}{}:", indent, prefix).unwrap();
-                } else {
-                    writeln!(output, "{}{} {}:", indent, prefix, shape_check.condition).unwrap();
-                    prev_condition = shape_check.condition.clone();
+                if is_new {
+                    unsqueeze_indices.push(i);
                 }
+            }
 
-                // Process pipeline - save var_names to avoid pollution from match arm scope
-                let saved_var_names = gen.var_names.clone();
-                let arm_indent = format!("{}    ", indent);
-
-                // Emit dimension bindings before processing pipeline
-                for binding in &shape_check.bindings {
-                    writeln!(output, "{}{}", arm_indent, binding).unwrap();
-                }
-
-                // If guard uses captured dimensions, check it after binding
-                let pipeline_indent = if let Some(guard_cond) = &shape_check.guard_condition {
-                    writeln!(output, "{}if {}:", arm_indent, guard_cond).unwrap();
-                    format!("{}    ", arm_indent)
-                } else {
-                    arm_indent.clone()
-                };
-
-                let mut current_var = source_var.clone();
-
-                let mut prev_endpoint: Option<&Endpoint> = None;
-                for ep in &arm.pipeline {
-                    // For Reshape endpoints, try to resolve source shape from previous endpoint.
-                    // When reshape is the first endpoint in a match arm (prev_endpoint is None),
-                    // use the match arm's pattern shape as the source — the pattern defines
-                    // the shape of the data flowing into the arm pipeline.
-                    let arm_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
-                        resolve_endpoint_source_shape(prev_endpoint, gen)
-                            .or_else(|| {
-                                if prev_endpoint.is_none() {
-                                    Some(shape.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                    } else {
-                        None
-                    };
-
-                    current_var = process_destination(
-                        output,
-                        gen,
-                        ep,
-                        current_var,
-                        &pipeline_indent,
-                        used_var_names,
-                        call_to_result,
-                        match_to_result,
-                        if_to_result,
-                        binding_call_results,
-                        emitted_unroll_groups,
-                        1,
-                        arm_reshape_src.as_ref(),
-                    )?;
-
-                    // If endpoint was a Call, store result in call_to_result
-                    if let Endpoint::Call { .. } = ep {
-                        let key = endpoint_key_impl(ep);
-                        call_to_result.insert(key, current_var.clone());
-                    }
-                    prev_endpoint = Some(ep);
-                }
-
+            // Emit unsqueeze for each new dimension (in order).
+            // Use "_unsq" prefix to avoid confusion with the result_var numbering.
+            let mut current = source_var.to_string();
+            for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
+                let unsqueezed = make_var_name(used_var_names, "_unsq");
                 writeln!(
                     output,
-                    "{}{} = {}",
-                    pipeline_indent, result_var, current_var
+                    "{}{} = {}.unsqueeze({})",
+                    indent,
+                    unsqueezed,
+                    current,
+                    idx + offset // Account for previous unsqueezes shifting indices
                 )
                 .unwrap();
-
-                // Restore var_names to prevent match arm scope from leaking
-                gen.var_names = saved_var_names;
+                current = unsqueezed;
             }
 
-            // Else clause: only raise if no reachable catch-all exists
-            if !has_reachable_catchall {
-                writeln!(output, "{}else:", indent).unwrap();
-                writeln!(
-                    output,
-                    "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')",
-                    indent, source_var
-                )
-                .unwrap();
-            }
+            let shape_args = reshape
+                .dims
+                .iter()
+                .map(|d| reshape_dim_to_python(gen, d))
+                .collect::<Result<Vec<_>, _>>()?
+                .join(", ");
 
-            Ok(result_var)
+            // Expand (current == source_var when no unsqueezes were needed)
+            writeln!(
+                output,
+                "{}{} = {}.expand({})",
+                indent, result_var, current, shape_args
+            )
+            .unwrap();
         }
-        Endpoint::If(if_expr) => {
-            let result_var = make_var_name(used_var_names, "cond_out");
-
-            // Initialize result variable to None
-            writeln!(output, "{}{} = None", indent, result_var).unwrap();
-
-            // Handle branches
-            for (i, branch) in if_expr.branches.iter().enumerate() {
-                let prefix = if i == 0 { "if" } else { "elif" };
-                // Ensure self.param is used in conditions
-                let cond_str = gen.value_to_python_dim(&branch.condition);
-
-                writeln!(output, "{}{} {}:", indent, prefix, cond_str).unwrap();
-                let branch_indent = format!("{}    ", indent);
-
-                // Process pipeline
-                let saved_var_names = gen.var_names.clone();
-                let mut current_var = source_var.clone();
-
-                let mut prev_ep: Option<&Endpoint> = None;
-                for ep in &branch.pipeline {
-                    let branch_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
-                        resolve_endpoint_source_shape(prev_ep, gen)
-                    } else {
-                        None
-                    };
-
-                    current_var = process_destination(
-                        output,
-                        gen,
-                        ep,
-                        current_var,
-                        &branch_indent,
-                        used_var_names,
-                        call_to_result,
-                        match_to_result,
-                        if_to_result,
-                        binding_call_results,
-                        emitted_unroll_groups,
-                        1,
-                        branch_reshape_src.as_ref(),
-                    )?;
-                    // Cache call/match/if results inside branch
-                    if let Endpoint::Call { .. } = ep {
-                        let key = endpoint_key_impl(ep);
-                        call_to_result.insert(key, current_var.clone());
-                    } else if let Endpoint::Match(_) = ep {
-                        let key = endpoint_key_impl(ep);
-                        match_to_result.insert(key, current_var.clone());
-                    } else if let Endpoint::If(_) = ep {
-                        let key = endpoint_key_impl(ep);
-                        if_to_result.insert(key, current_var.clone());
-                    }
-                    prev_ep = Some(ep);
-                }
-
-                writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
-                gen.var_names = saved_var_names;
-            }
-
-            // Else branch
-            if let Some(else_branch) = &if_expr.else_branch {
-                writeln!(output, "{}else:", indent).unwrap();
-                let branch_indent = format!("{}    ", indent);
-                let saved_var_names = gen.var_names.clone();
-                let mut current_var = source_var.clone();
-
-                let mut prev_ep: Option<&Endpoint> = None;
-                for ep in else_branch {
-                    let else_reshape_src = if matches!(ep, Endpoint::Reshape(_)) {
-                        resolve_endpoint_source_shape(prev_ep, gen)
-                    } else {
-                        None
-                    };
-
-                    current_var = process_destination(
-                        output,
-                        gen,
-                        ep,
-                        current_var,
-                        &branch_indent,
-                        used_var_names,
-                        call_to_result,
-                        match_to_result,
-                        if_to_result,
-                        binding_call_results,
-                        emitted_unroll_groups,
-                        1,
-                        else_reshape_src.as_ref(),
-                    )?;
-                    if let Endpoint::Call { .. } = ep {
-                        let key = endpoint_key_impl(ep);
-                        call_to_result.insert(key, current_var.clone());
-                    } else if let Endpoint::Match(_) = ep {
-                        let key = endpoint_key_impl(ep);
-                        match_to_result.insert(key, current_var.clone());
-                    } else if let Endpoint::If(_) = ep {
-                        let key = endpoint_key_impl(ep);
-                        if_to_result.insert(key, current_var.clone());
-                    }
-                    prev_ep = Some(ep);
-                }
-                writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
-                gen.var_names = saved_var_names;
-            } else {
-                // Implicit else: pass-through/Identity
-                writeln!(output, "{}else:", indent).unwrap();
-                writeln!(output, "{}    {} = {}", indent, result_var, source_var).unwrap();
-            }
-
-            Ok(result_var)
+        TransformStrategy::Neuron { .. } => {
+            let module_name = format!("self._transform_{}", reshape.id);
+            writeln!(
+                output,
+                "{}{} = {}({})",
+                indent, result_var, module_name, source_var
+            )
+            .unwrap();
         }
-        Endpoint::Reshape(reshape) => {
-            let result_var = make_var_name(used_var_names, "x");
-
-            // Emit binding assignments for all cases (bare, @reduce, @repeat).
-            // Binding dims like `dh=dim/heads` must be assigned before any use.
-            for dim in &reshape.dims {
-                if let ReshapeDim::Binding { name, expr } = dim {
-                    let expr_str = gen.value_to_python_dim(expr);
-                    writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str).unwrap();
-                }
-            }
-
-            match &reshape.annotation {
-                None => {
-                    // Bare => : element-preserving reshape
-                    // Build target shape args
-                    let shape_args = reshape
-                        .dims
-                        .iter()
-                        .map(|d| reshape_dim_to_python(gen, d))
-                        .collect::<Result<Vec<_>, _>>()?
-                        .join(", ");
-
-                    writeln!(
-                        output,
-                        "{}{} = {}.reshape({})",
-                        indent, result_var, source_var, shape_args
-                    )
-                    .unwrap();
-                }
-                Some(TransformAnnotation::Reduce { strategy, .. }) => match strategy {
-                    TransformStrategy::Intrinsic(name) => {
-                        let method = match name.as_str() {
-                            "mean" => "mean",
-                            "sum" => "sum",
-                            "min" => "amin",
-                            "max" => "amax",
-                            "prod" => "prod",
-                            "logsumexp" => "logsumexp",
-                            _ => {
-                                return Err(CodegenError::UnsupportedFeature(format!(
-                                    "unknown reduce intrinsic: {}",
-                                    name
-                                )))
-                            }
-                        };
-
-                        // Determine which source dims to reduce by comparing
-                        // source shape dim names with target dim names
-                        let target_dim_names: HashSet<String> = reshape
-                            .dims
-                            .iter()
-                            .filter_map(|d| match d {
-                                ReshapeDim::Named(n) => Some(n.clone()),
-                                ReshapeDim::Binding { name, .. } => Some(name.clone()),
-                                _ => None,
-                            })
-                            .collect();
-
-                        let reduce_dims: Vec<usize> =
-                            if let Some(src_shape) = reshape_source_shape {
-                                // Primary strategy: find source Named dims not present in target
-                                let named_reduce: Vec<usize> = src_shape
-                                    .dims
-                                    .iter()
-                                    .enumerate()
-                                    .filter_map(|(i, dim)| {
-                                        if let Dim::Named(name) = dim {
-                                            if !target_dim_names.contains(name) {
-                                                return Some(i);
-                                            }
-                                        }
-                                        None
-                                    })
-                                    .collect();
-
-                                if !named_reduce.is_empty() {
-                                    named_reduce
-                                } else {
-                                    // Cannot reliably determine which dimensions to reduce.
-                                    // The source shape has no named dims that are absent
-                                    // from the target, so we cannot infer the reduction axes.
-                                    // Previously this used a trailing-dims heuristic that
-                                    // silently produced wrong code for non-trailing reductions
-                                    // (e.g., reducing dim index 1 from [*, heads, seq, dh]
-                                    // to [*, seq, dh]).
-                                    return Err(CodegenError::InvalidConnection(
-                                        "cannot determine @reduce dimensions: source shape dims \
-                                         are not sufficiently named to identify which axes to \
-                                         reduce. Use fully named dimensions in the source shape \
-                                         (e.g., [batch, heads, seq, dim]) so the compiler can \
-                                         match them against the target shape."
-                                            .to_string(),
-                                    ));
-                                }
-                            } else {
-                                return Err(CodegenError::InvalidConnection(
-                                    "cannot determine reduce dimensions: source shape unavailable".to_string(),
-                                ));
-                            };
-
-                        if reduce_dims.is_empty() {
-                            return Err(CodegenError::InvalidConnection(
-                                "cannot determine reduce dimensions: no dims identified to reduce".to_string(),
-                            ));
-                        }
-
-                        if reduce_dims.len() == 1 {
-                            writeln!(
-                                output,
-                                "{}{} = {}.{}(dim={})",
-                                indent, result_var, source_var, method, reduce_dims[0]
-                            )
-                            .unwrap();
-                        } else {
-                            let dims_str = reduce_dims
-                                .iter()
-                                .map(|d| d.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            writeln!(
-                                output,
-                                "{}{} = {}.{}(dim=({}))",
-                                indent, result_var, source_var, method, dims_str
-                            )
-                            .unwrap();
-                        }
-                    }
-                    TransformStrategy::Neuron { .. } => {
-                        let module_name = format!("self._transform_{}", reshape.id);
-                        writeln!(
-                            output,
-                            "{}{} = {}({})",
-                            indent, result_var, module_name, source_var
-                        )
-                        .unwrap();
-                    }
-                },
-                Some(TransformAnnotation::Repeat { strategy, .. }) => match strategy {
-                    TransformStrategy::Intrinsic(name) if name == "copy" => {
-                        // Determine which target dims are new (not in source shape).
-                        // These require unsqueeze before expand.
-                        let source_dim_names: HashSet<String> =
-                            if let Some(src_shape) = reshape_source_shape {
-                                src_shape
-                                    .dims
-                                    .iter()
-                                    .filter_map(|d| {
-                                        if let Dim::Named(n) = d {
-                                            Some(n.clone())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect()
-                            } else {
-                                HashSet::new()
-                            };
-
-                        // Find indices of new dims in target that need unsqueeze
-                        let mut unsqueeze_indices: Vec<usize> = Vec::new();
-                        for (i, dim) in reshape.dims.iter().enumerate() {
-                            let is_new = match dim {
-                                ReshapeDim::Literal(_) => {
-                                    // Literal dims like `1` are new dimensions
-                                    true
-                                }
-                                ReshapeDim::Named(n) => !source_dim_names.contains(n),
-                                ReshapeDim::Binding { name, .. } => {
-                                    !source_dim_names.contains(name)
-                                }
-                                ReshapeDim::Expr(_) => {
-                                    // Expressions reference existing dims; not new
-                                    false
-                                }
-                                ReshapeDim::Others => {
-                                    // Others represents a variable number of remaining
-                                    // dims and cannot map to a single expand() slot.
-                                    return Err(CodegenError::UnsupportedFeature(
-                                        "Others (`...`) cannot appear in @repeat(copy) target shape: \
-                                         expand() requires fixed-rank dimensions".to_string(),
-                                    ));
-                                }
-                            };
-                            if is_new {
-                                unsqueeze_indices.push(i);
-                            }
-                        }
-
-                        // Emit unsqueeze for each new dimension (in order).
-                        // Use "_unsq" prefix to avoid confusion with the result_var numbering.
-                        let mut current = source_var.clone();
-                        for (offset, &idx) in unsqueeze_indices.iter().enumerate() {
-                            let unsqueezed = make_var_name(used_var_names, "_unsq");
-                            writeln!(
-                                output,
-                                "{}{} = {}.unsqueeze({})",
-                                indent,
-                                unsqueezed,
-                                current,
-                                idx + offset // Account for previous unsqueezes shifting indices
-                            )
-                            .unwrap();
-                            current = unsqueezed;
-                        }
-
-                        let shape_args = reshape
-                            .dims
-                            .iter()
-                            .map(|d| reshape_dim_to_python(gen, d))
-                            .collect::<Result<Vec<_>, _>>()?
-                            .join(", ");
-
-                        // Expand (current == source_var when no unsqueezes were needed)
-                        writeln!(
-                            output,
-                            "{}{} = {}.expand({})",
-                            indent, result_var, current, shape_args
-                        )
-                        .unwrap();
-                    }
-                    TransformStrategy::Neuron { .. } => {
-                        let module_name = format!("self._transform_{}", reshape.id);
-                        writeln!(
-                            output,
-                            "{}{} = {}({})",
-                            indent, result_var, module_name, source_var
-                        )
-                        .unwrap();
-                    }
-                    _ => {
-                        // Validator rejects unknown intrinsics, so this is unreachable
-                        unreachable!("unknown repeat strategy should be caught by validator")
-                    }
-                },
-            }
-
-            // Store result for when this reshape is used as a source
-            let key = endpoint_key_impl(endpoint);
-            call_to_result.insert(key, result_var.clone());
-
-            Ok(result_var)
-        }
-        Endpoint::Wrap(_) => {
-            Err(CodegenError::InvalidConnection(
-                "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
-            ))
+        _ => {
+            // Validator rejects unknown intrinsics, so this is unreachable
+            unreachable!("unknown repeat strategy should be caught by validator")
         }
     }
+    Ok(())
 }
 /// Resolve a dimension name to a Python expression.
 ///
