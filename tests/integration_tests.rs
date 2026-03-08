@@ -849,6 +849,32 @@ neuron Test
     insta::assert_snapshot!("error_parse_failure", error_text);
 }
 
+#[test]
+fn snapshot_codegen_match_logical_guards() {
+    let source = r#"
+neuron LogicalGuardRouter:
+    in: [*, dim]
+    out: [*, 512]
+    graph:
+        in -> match: ->
+            [*, d] where d >= 128 && d < 512:
+                Linear(d, 512) -> out
+            [*, d] where d < 128 || d >= 512:
+                Linear(d, 256) -> Linear(256, 512) -> out
+
+neuron Linear(n, m):
+    in: [*, n]
+    out: [*, m]
+    impl: core,nn/Linear
+"#;
+
+    let mut program = parse(source).expect("Parse failed");
+    validate(&mut program).expect("Validation failed");
+    let code =
+        generate_pytorch(&program, "LogicalGuardRouter").expect("Codegen failed");
+    insta::assert_snapshot!("codegen_match_logical_guards", code);
+}
+
 // ============================================================================
 // Comprehensive Snapshot Tests (iterate all examples)
 // ============================================================================
