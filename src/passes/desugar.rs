@@ -209,6 +209,8 @@ fn desugar_endpoint_wraps(
                         scope: Scope::Instance { lazy: false },
                         frozen: false,
                         unroll_group: None,
+
+                        span: None,
                     });
 
                     // Rewrite the endpoint to a Call to the wrapper
@@ -338,6 +340,8 @@ mod tests {
                     scope: Scope::Instance { lazy: false },
                     frozen: false,
                     unroll_group: None,
+
+                    span: None,
                 }],
                 context_unrolls: vec![],
                 connections: vec![Connection {
@@ -556,6 +560,8 @@ mod tests {
                     scope: Scope::Instance { lazy: false },
                     frozen: false,
                     unroll_group: None,
+
+                    span: None,
                 }],
                 context_unrolls: vec![],
                 connections: vec![Connection {
@@ -640,6 +646,8 @@ mod tests {
                     scope: Scope::Instance { lazy: false },
                     frozen: false,
                     unroll_group: None,
+
+                    span: None,
                 }],
                 context_unrolls: vec![],
                 connections: vec![Connection {

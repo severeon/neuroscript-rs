@@ -5,15 +5,39 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.1] - 2026-03-07
+
+Sprint 3: 12 issues resolved by 9 AI agents across 3 batches. See [Agent Scoreboard](docs/AGENT-SCOREBOARD.md).
+
+### Added
+
+- **Logical operators `&&`/`||` in guard expressions** with correct precedence (OR < AND < comparison) (#121, PR #144 — Vision)
+- **Source spans for `MutualLazyRecursion` errors** — `Binding` struct carries `Option<SourceSpan>`, miette diagnostics show source context (#117, PR #145 — Ava)
+- **Wildcard `*` matches multiple leading dimensions** — `[batch, seq, dim]` now unifies with `[*, in_dim]`, unblocking stdlib attention neurons (#119, PR #149 — Roy)
+- **Variadic element-wise shape unification** with abstract-shape guard to avoid stdlib false positives (#118, PR #147 — Dolores)
+- Regression test for embeddings.ns fat arrow syntax (#120, PR #146 — TARS)
+- CLI binary existence assertion with helpful error message (#116, PR #148 — Sonny)
+- Agent Scoreboard with persona roster and sprint history
+- GitHub Issues-centric sprint workflow with planner/implementer agent definitions
+- `draft-pr-guard.yml` GitHub Actions workflow to block merging draft PRs
+- `CONTRIBUTING.md` guide for external contributors
+- `LICENSE` (MIT)
+- `.github/FUNDING.yml` for sponsorship
 
 ### Changed
 
-- CONTRIBUTING.md now clarifies that CLAUDE.md doubles as AI assistant configuration alongside architecture documentation
+- **`process_destination` decomposed** from 850-line monolith into 10 focused per-variant handlers (#128, PR #150 — Bishop)
+- **Non-test `unwrap()` calls eliminated** (~150 → 0) — codegen uses `?` propagation, AST builder uses `.expect()` with grammar guarantees (#129, PR #151 — Chappie)
+- README rewritten for public audience with badges, quick-start, and feature overview (#140)
+- CONTRIBUTING.md clarifies that CLAUDE.md doubles as AI assistant configuration
+- Retired `backlog-worker.md` agent in favor of `planner.md` + `implementer.md`
 
 ### Fixed
 
-- Verified Cargo.lock is in sync with Cargo.toml version (0.6.0)
+- **ValidationError PartialEq safety** — replaced `unreachable!()` with `_ => false` fallback (#114, PR #142 — Samantha)
+- **Hardcoded agent paths** replaced with `$(git rev-parse --show-toplevel)` (#125, PR #148 — Sonny)
+- **Website `file://` dependency** — `docusaurus-llms-generator` moved to `optionalDependencies` with runtime fallback (#124, PR #146 — TARS)
+- Documented non-recursive Tuple/Call endpoint cases in `compute_reachability` (#115, PR #142 — Samantha)
 
 ## [0.6.0] - 2026-03-07
 

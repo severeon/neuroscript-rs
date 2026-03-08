@@ -3,13 +3,13 @@
 //! Converts pest parse trees (Pair<Rule>) into NeuroScript IR types.
 //! Handles indentation validation during the conversion.
 //!
-//! # Safety of `.unwrap()` calls
+//! # Safety of `.expect()` calls
 //!
-//! This module contains many `.unwrap()` calls on `inner.next()` (pest `Pairs` iterators).
-//! These are safe because the PEG grammar (`neuroscript.pest`) guarantees the required
-//! children exist — pest will not produce a successful parse tree missing mandatory
-//! sub-rules. Each `unwrap()` corresponds to a mandatory child in the grammar rule
-//! being destructured.
+//! This module contains many `.expect("guaranteed by grammar")` calls on `inner.next()`
+//! (pest `Pairs` iterators). These are safe because the PEG grammar (`neuroscript.pest`)
+//! guarantees the required children exist — pest will not produce a successful parse tree
+//! missing mandatory sub-rules. Each `.expect()` corresponds to a mandatory child in the
+//! grammar rule being destructured.
 
 use miette::SourceSpan;
 use pest::iterators::Pair;
@@ -100,7 +100,7 @@ impl AstBuilder {
         inner.next(); // Skip at
         inner.next(); // Skip keyword_global
 
-        let content = inner.next().unwrap();
+        let content = inner.next().expect("guaranteed by grammar");
         match content.as_rule() {
             Rule::binding => {
                 let binding = self.build_binding(content)?;
@@ -116,9 +116,9 @@ impl AstBuilder {
             }
             Rule::global_value_binding => {
                 let mut v_inner = content.into_inner();
-                let name = self.extract_ident(v_inner.next().unwrap())?;
+                let name = self.extract_ident(v_inner.next().expect("guaranteed by grammar"))?;
                 v_inner.next(); // Skip assign
-                let value = self.build_value(v_inner.next().unwrap())?;
+                let value = self.build_value(v_inner.next().expect("guaranteed by grammar"))?;
                 Ok(GlobalBinding { name, value })
             }
             _ => unreachable!(),
@@ -135,13 +135,13 @@ impl AstBuilder {
         inner.next();
 
         // Get source identifier
-        let source = self.extract_ident(inner.next().unwrap())?;
+        let source = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         // Skip comma
         inner.next();
 
         // Get path
-        let path_pair = inner.next().unwrap();
+        let path_pair = inner.next().expect("guaranteed by grammar");
         let path = self.build_impl_path(path_pair)?;
 
         Ok(UseStmt { source, path })
@@ -197,7 +197,7 @@ impl AstBuilder {
         }
 
         // Get name
-        let name = self.extract_ident(next.unwrap())?;
+        let name = self.extract_ident(next.expect("guaranteed by grammar"))?;
 
         // Check for params (optional)
         let mut params = vec![];
@@ -277,7 +277,7 @@ impl AstBuilder {
     ) -> Result<(), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::neuron_section);
 
-        let section = pair.into_inner().next().unwrap();
+        let section = pair.into_inner().next().expect("guaranteed by grammar");
 
         match section.as_rule() {
             Rule::in_section => {
@@ -326,7 +326,7 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::param);
 
         let mut inner = pair.into_inner();
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         let mut default = None;
         let mut type_annotation = None;
@@ -408,12 +408,12 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::port_def);
 
         let mut inner = pair.into_inner();
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         // Skip colon
         inner.next();
 
-        let shape = self.build_shape(inner.next().unwrap())?;
+        let shape = self.build_shape(inner.next().expect("guaranteed by grammar"))?;
 
         Ok(Port { name, shape, variadic: false })
     }
@@ -492,7 +492,7 @@ impl AstBuilder {
                 // Skip '@', 'global'
                 inner.next();
                 inner.next();
-                let ident = inner.next().unwrap().as_str().to_string();
+                let ident = inner.next().expect("guaranteed by grammar").as_str().to_string();
                 Ok(Dim::Global(ident))
             }
             Rule::dim => self.build_dim(first.clone()),
@@ -504,7 +504,7 @@ impl AstBuilder {
     fn build_dim_op(&mut self, pair: Pair<Rule>) -> Result<BinOp, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::dim_op);
 
-        let inner = pair.into_inner().next().unwrap();
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
 
         match inner.as_rule() {
             Rule::plus => Ok(BinOp::Add),
@@ -561,12 +561,12 @@ impl AstBuilder {
         let mut inner = pair.into_inner();
 
         // Parse: ident = unroll(count):
-        let aggregate_name = inner.next().unwrap().as_str().to_string(); // ident
+        let aggregate_name = inner.next().expect("guaranteed by grammar").as_str().to_string(); // ident
         inner.next(); // Skip assign (=)
         inner.next(); // Skip keyword_unroll
         inner.next(); // Skip lparen
 
-        let count = self.build_value(inner.next().unwrap())?;
+        let count = self.build_value(inner.next().expect("guaranteed by grammar"))?;
 
         // Skip rparen, colon
         inner.next();
@@ -607,19 +607,24 @@ impl AstBuilder {
     fn build_context_binding(&mut self, pair: Pair<Rule>) -> Result<Binding, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::context_binding);
 
+        let pest_span = pair.as_span();
+        let source_span =
+            SourceSpan::new(pest_span.start().into(), pest_span.end() - pest_span.start());
+
         let mut inner = pair.into_inner();
-        let mut first = inner.next().unwrap();
+        let mut first = inner.next().expect("guaranteed by grammar");
         let mut scope = crate::interfaces::Scope::Instance { lazy: false };
 
         // Check for annotation
         if first.as_rule() == Rule::binding_annotation {
             scope = self.build_binding_annotation(first)?;
-            first = inner.next().unwrap(); // Move to binding
+            first = inner.next().expect("guaranteed by grammar"); // Move to binding
         }
 
         // Build the binding
         let mut binding = self.build_binding(first)?;
         binding.scope = scope;
+        binding.span = Some(source_span);
 
         Ok(binding)
     }
@@ -634,7 +639,7 @@ impl AstBuilder {
         let mut inner = pair.into_inner();
         inner.next(); // Skip 'at'
 
-        let keyword = inner.next().unwrap();
+        let keyword = inner.next().expect("guaranteed by grammar");
         match keyword.as_rule() {
             Rule::keyword_static => Ok(crate::interfaces::Scope::Static),
             Rule::keyword_global => Ok(crate::interfaces::Scope::Global),
@@ -648,12 +653,12 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::binding);
 
         let mut inner = pair.into_inner();
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         // Skip assign
         inner.next();
 
-        let neuron_expr = inner.next().unwrap();
+        let neuron_expr = inner.next().expect("guaranteed by grammar");
         let (call_name, args, kwargs, frozen) = self.build_neuron_expr(neuron_expr)?;
 
         Ok(Binding {
@@ -664,6 +669,7 @@ impl AstBuilder {
             scope: crate::interfaces::Scope::Instance { lazy: false },
             frozen,
             unroll_group: None,
+            span: None,
         })
     }
 
@@ -675,7 +681,7 @@ impl AstBuilder {
     ) -> Result<(String, Vec<Value>, Vec<Kwarg>, bool), ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::neuron_expr);
 
-        let inner = pair.into_inner().next().unwrap();
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
         match inner.as_rule() {
             Rule::call_expr => {
                 let (name, args, kwargs) = self.build_call_expr(inner)?;
@@ -698,7 +704,7 @@ impl AstBuilder {
                 let mut f_inner = inner.into_inner();
                 f_inner.next(); // Skip keyword_freeze
                 f_inner.next(); // Skip lparen
-                let sub_expr = f_inner.next().unwrap();
+                let sub_expr = f_inner.next().expect("guaranteed by grammar");
                 let (sub_name, sub_args, sub_kwargs, _) = self.build_neuron_expr(sub_expr)?;
 
                 // Wrap in Freeze call
@@ -722,7 +728,7 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::call_expr);
 
         let mut inner = pair.into_inner();
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         let mut args = vec![];
         let mut kwargs = vec![];
@@ -767,12 +773,12 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::kwarg);
 
         let mut inner = pair.into_inner();
-        let name = self.extract_ident(inner.next().unwrap())?;
+        let name = self.extract_ident(inner.next().expect("guaranteed by grammar"))?;
 
         // Skip assign
         inner.next();
 
-        let value = self.build_value(inner.next().unwrap())?;
+        let value = self.build_value(inner.next().expect("guaranteed by grammar"))?;
 
         Ok((name, value))
     }
@@ -795,7 +801,7 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::impl_ref);
 
         let mut inner = pair.into_inner();
-        let first = inner.next().unwrap();
+        let first = inner.next().expect("guaranteed by grammar");
 
         match first.as_rule() {
             Rule::keyword_external => {
@@ -821,7 +827,7 @@ impl AstBuilder {
                 // Skip comma
                 inner.next();
 
-                let path_pair = inner.next().unwrap();
+                let path_pair = inner.next().expect("guaranteed by grammar");
                 let path_parts = self.build_impl_path(path_pair)?;
 
                 Ok(ImplRef::Source {
@@ -856,14 +862,14 @@ impl AstBuilder {
         let mut inner = pair.into_inner();
 
         // First endpoint
-        let first_endpoint = self.build_endpoint(inner.next().unwrap())?;
+        let first_endpoint = self.build_endpoint(inner.next().expect("guaranteed by grammar"))?;
 
         // Second pair is either arrow (for connection_tail) or fat_arrow_step
-        let second = inner.next().unwrap();
+        let second = inner.next().expect("guaranteed by grammar");
         match second.as_rule() {
             Rule::arrow => {
                 // connection_tail
-                let tail = inner.next().unwrap();
+                let tail = inner.next().expect("guaranteed by grammar");
                 self.build_connection_tail(first_endpoint, tail)
             }
             Rule::fat_arrow_step => {
@@ -1022,7 +1028,7 @@ impl AstBuilder {
     fn build_endpoint(&mut self, pair: Pair<Rule>) -> Result<Endpoint, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::endpoint);
 
-        let inner = pair.into_inner().next().unwrap();
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
 
         match inner.as_rule() {
             Rule::match_eval_expr => Ok(Endpoint::Match(self.build_match_eval_expr(inner)?)),
@@ -1047,9 +1053,9 @@ impl AstBuilder {
 
         // if condition : pipeline
         inner.next(); // Skip 'if'
-        let condition = self.build_value(inner.next().unwrap())?;
+        let condition = self.build_value(inner.next().expect("guaranteed by grammar"))?;
         inner.next(); // Skip ':'
-        let pipeline = self.build_branch_pipeline(inner.next().unwrap())?;
+        let pipeline = self.build_branch_pipeline(inner.next().expect("guaranteed by grammar"))?;
         branches.push(crate::interfaces::IfBranch {
             condition,
             pipeline,
@@ -1059,9 +1065,9 @@ impl AstBuilder {
         while let Some(token) = inner.next() {
             match token.as_rule() {
                 Rule::keyword_elif => {
-                    let condition = self.build_value(inner.next().unwrap())?;
+                    let condition = self.build_value(inner.next().expect("guaranteed by grammar"))?;
                     inner.next(); // Skip ':'
-                    let pipeline = self.build_branch_pipeline(inner.next().unwrap())?;
+                    let pipeline = self.build_branch_pipeline(inner.next().expect("guaranteed by grammar"))?;
                     branches.push(crate::interfaces::IfBranch {
                         condition,
                         pipeline,
@@ -1069,7 +1075,7 @@ impl AstBuilder {
                 }
                 Rule::keyword_else => {
                     inner.next(); // Skip ':'
-                    else_branch = Some(self.build_branch_pipeline(inner.next().unwrap())?);
+                    else_branch = Some(self.build_branch_pipeline(inner.next().expect("guaranteed by grammar"))?);
                 }
                 Rule::NEWLINE => continue,
                 _ => break,
@@ -1087,7 +1093,7 @@ impl AstBuilder {
     fn build_branch_pipeline(&mut self, pair: Pair<Rule>) -> Result<Vec<Endpoint>, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::branch_pipeline);
 
-        let inner = pair.clone().into_inner().next().unwrap();
+        let inner = pair.clone().into_inner().next().expect("guaranteed by grammar");
         match inner.as_rule() {
             Rule::indented_pipeline => {
                 // We're already in a pipeline structure, but we need a starting endpoint for the indented pipeline logic
@@ -1293,7 +1299,7 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::ref_endpoint);
 
         let mut inner = pair.into_inner();
-        let first = inner.next().unwrap();
+        let first = inner.next().expect("guaranteed by grammar");
 
         let node = match first.as_rule() {
             Rule::keyword_in => "in".to_string(),
@@ -1325,7 +1331,7 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::call_endpoint);
 
         let mut inner = pair.into_inner();
-        let first = inner.next().unwrap();
+        let first = inner.next().expect("guaranteed by grammar");
 
         let (name, args, kwargs, frozen) = match first.as_rule() {
             Rule::call_expr => {
@@ -1334,7 +1340,7 @@ impl AstBuilder {
             }
             Rule::keyword_freeze => {
                 inner.next(); // Skip lparen
-                let sub_expr = inner.next().unwrap();
+                let sub_expr = inner.next().expect("guaranteed by grammar");
                 let (sub_name, sub_args, sub_kwargs, _) = self.build_neuron_expr(sub_expr)?;
 
                 (
@@ -1405,7 +1411,7 @@ impl AstBuilder {
         inner.next(); // lparen
 
         // Extract subject name from value
-        let subject_value = inner.next().unwrap();
+        let subject_value = inner.next().expect("guaranteed by grammar");
         let subject_name = match self.build_value(subject_value)? {
             Value::Name(name) => name,
             other => {
@@ -1444,7 +1450,7 @@ impl AstBuilder {
         let mut inner = pair.into_inner();
 
         // Parse port contract
-        let contract = self.build_neuron_port_contract(inner.next().unwrap())?;
+        let contract = self.build_neuron_port_contract(inner.next().expect("guaranteed by grammar"))?;
 
         // Optional guard and pipeline
         let mut guard = None;
@@ -1481,10 +1487,10 @@ impl AstBuilder {
 
         // Parse input: keyword_in, optional ident, shape
         inner.next(); // keyword_in
-        let mut next = inner.next().unwrap();
+        let mut next = inner.next().expect("guaranteed by grammar");
         let in_name = if next.as_rule() == Rule::ident {
             let name = next.as_str().to_string();
-            next = inner.next().unwrap(); // advance to shape
+            next = inner.next().expect("guaranteed by grammar"); // advance to shape
             name
         } else {
             "default".to_string()
@@ -1496,10 +1502,10 @@ impl AstBuilder {
 
         // Parse output: keyword_out, optional ident, shape
         inner.next(); // keyword_out
-        let mut next = inner.next().unwrap();
+        let mut next = inner.next().expect("guaranteed by grammar");
         let out_name = if next.as_rule() == Rule::ident {
             let name = next.as_str().to_string();
-            next = inner.next().unwrap(); // advance to shape
+            next = inner.next().expect("guaranteed by grammar"); // advance to shape
             name
         } else {
             "default".to_string()
@@ -1519,7 +1525,7 @@ impl AstBuilder {
         let mut inner = pair.into_inner();
 
         // Pattern (shape)
-        let pattern = self.build_shape(inner.next().unwrap())?;
+        let pattern = self.build_shape(inner.next().expect("guaranteed by grammar"))?;
 
         // Optional guard and pipeline
         let mut guard = None;
@@ -1608,8 +1614,62 @@ impl AstBuilder {
     fn build_value(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::value);
 
-        let inner = pair.into_inner().next().unwrap();
-        self.build_value_comparison(inner)
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
+        self.build_logical_or(inner)
+    }
+
+    /// Build a logical OR expression (lowest precedence among logical ops)
+    fn build_logical_or(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::value_logical_or);
+
+        let mut inner: Vec<_> = pair.into_inner().collect();
+
+        if inner.len() == 1 {
+            return self.build_logical_and(inner.remove(0));
+        }
+
+        // Build left-associative binary ops
+        let mut result = self.build_logical_and(inner.remove(0))?;
+
+        while inner.len() >= 2 {
+            // Skip the or_op token
+            inner.remove(0);
+            let right = self.build_logical_and(inner.remove(0))?;
+            result = Value::BinOp {
+                op: BinOp::Or,
+                left: Box::new(result),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(result)
+    }
+
+    /// Build a logical AND expression
+    fn build_logical_and(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::value_logical_and);
+
+        let mut inner: Vec<_> = pair.into_inner().collect();
+
+        if inner.len() == 1 {
+            return self.build_value_comparison(inner.remove(0));
+        }
+
+        // Build left-associative binary ops
+        let mut result = self.build_value_comparison(inner.remove(0))?;
+
+        while inner.len() >= 2 {
+            // Skip the and_op token
+            inner.remove(0);
+            let right = self.build_value_comparison(inner.remove(0))?;
+            result = Value::BinOp {
+                op: BinOp::And,
+                left: Box::new(result),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(result)
     }
 
     /// Build a comparison expression
@@ -1638,7 +1698,7 @@ impl AstBuilder {
     fn build_comparison_op(&mut self, pair: Pair<Rule>) -> Result<BinOp, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::comparison_op);
 
-        let inner = pair.into_inner().next().unwrap();
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
 
         match inner.as_rule() {
             Rule::eq_op => Ok(BinOp::Eq),
@@ -1718,11 +1778,11 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::value_primary);
 
         let mut inner_iter = pair.into_inner();
-        let inner = inner_iter.next().unwrap();
+        let inner = inner_iter.next().expect("guaranteed by grammar");
 
         // Handle parenthesized expressions: lparen ~ value ~ rparen
         if inner.as_rule() == Rule::lparen {
-            let value_pair = inner_iter.next().unwrap();
+            let value_pair = inner_iter.next().expect("guaranteed by grammar");
             return self.build_value(value_pair);
         }
 
@@ -1762,7 +1822,7 @@ impl AstBuilder {
                 Ok(Value::String(s.to_string()))
             }
             Rule::bool => {
-                let inner2 = inner.into_inner().next().unwrap();
+                let inner2 = inner.into_inner().next().expect("guaranteed by grammar");
                 match inner2.as_rule() {
                     Rule::keyword_true => Ok(Value::Bool(true)),
                     Rule::keyword_false => Ok(Value::Bool(false)),
@@ -1778,7 +1838,7 @@ impl AstBuilder {
                 // Skip '@', 'global'
                 inner_pairs.next();
                 inner_pairs.next();
-                let ident = inner_pairs.next().unwrap().as_str().to_string();
+                let ident = inner_pairs.next().expect("guaranteed by grammar").as_str().to_string();
                 Ok(Value::Global(ident))
             }
             Rule::ident => Ok(Value::Name(inner.as_str().to_string())),
@@ -1918,10 +1978,10 @@ impl AstBuilder {
 
         let mut inner = pair.into_inner();
         inner.next(); // Skip '@'
-        let annotation_name = inner.next().unwrap(); // ident: "reduce" or "repeat"
+        let annotation_name = inner.next().expect("guaranteed by grammar"); // ident: "reduce" or "repeat"
         let name = annotation_name.as_str().to_string();
         inner.next(); // Skip '('
-        let arg = inner.next().unwrap(); // annotation_arg
+        let arg = inner.next().expect("guaranteed by grammar"); // annotation_arg
         let strategy = self.build_annotation_arg(arg)?;
         // Skip ')' (if present)
 
@@ -1936,7 +1996,7 @@ impl AstBuilder {
     fn build_annotation_arg(&mut self, pair: Pair<Rule>) -> Result<TransformStrategy, ParseError> {
         debug_assert_eq!(pair.as_rule(), Rule::annotation_arg);
 
-        let inner = pair.into_inner().next().unwrap();
+        let inner = pair.into_inner().next().expect("guaranteed by grammar");
 
         match inner.as_rule() {
             Rule::call_expr => {

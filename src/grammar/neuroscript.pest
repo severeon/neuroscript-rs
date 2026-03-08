@@ -178,12 +178,23 @@ fat_arrow_step = {
 
 // Value: used in parameters, arguments, guards
 value = {
-    value_comparison
+    value_logical_or
+}
+
+value_logical_or = {
+    value_logical_and ~ (or_op ~ value_logical_and)*
+}
+
+value_logical_and = {
+    value_comparison ~ (and_op ~ value_comparison)*
 }
 
 value_comparison = {
     value_additive ~ (comparison_op ~ value_additive)*
 }
+
+and_op = { "&&" }
+or_op = { "||" }
 
 comparison_op = {
     eq_op | ne_op | le_op | ge_op | lt_op | gt_op

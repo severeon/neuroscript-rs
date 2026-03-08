@@ -99,6 +99,8 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+    And,
+    Or,
 }
 
 /// A tensor shape: [batch, seq, dim] or [*, 512] or []
@@ -465,6 +467,8 @@ pub struct Binding {
     pub frozen: bool,
     /// If this binding was created by unroll expansion, metadata about its group
     pub unroll_group: Option<UnrollGroupInfo>,
+    /// Source span of this binding (for diagnostics)
+    pub span: Option<SourceSpan>,
 }
 
 /// A module-level global definition: @global name = Value
@@ -786,6 +790,8 @@ pub enum ValidationError {
         /// Binding names forming the cycle, e.g. ["a", "b", "a"]
         cycle: Vec<String>,
         neuron: String,
+        #[label("mutual @lazy recursion involves this binding")]
+        span: Option<SourceSpan>,
     },
     #[error("{0}")]
     Custom(String),
@@ -836,12 +842,15 @@ impl PartialEq for ValidationError {
             (Self::InconsistentArmPorts { expr_kind: a, arm_index: b, expected_count: c, got_count: d, .. },
              Self::InconsistentArmPorts { expr_kind: e, arm_index: f, expected_count: g, got_count: h, .. })
                 => a == e && b == f && c == g && d == h,
-            (Self::MutualLazyRecursion { cycle: a, neuron: b },
-             Self::MutualLazyRecursion { cycle: c, neuron: d }) => a == c && b == d,
+            (Self::MutualLazyRecursion { cycle: a, neuron: b, .. },
+             Self::MutualLazyRecursion { cycle: c, neuron: d, .. }) => a == c && b == d,
             (Self::Custom(a), Self::Custom(b)) => a == b,
             (Self::UseError { message: a }, Self::UseError { message: b }) => a == b,
-            // discriminant check above ensures this is unreachable, but required for exhaustiveness
-            _ => unreachable!(),
+            // Safety net: the discriminant guard above means this arm only fires for
+            // same-discriminant pairs that lack an explicit match. Returning false is
+            // conservative and safe — and avoids a runtime panic if a new variant is
+            // added without updating this block.
+            _ => false,
         }
     }
 }
@@ -854,7 +863,8 @@ impl ValidationError {
             | Self::PortMismatch { span, .. }
             | Self::ArityMismatch { span, .. }
             | Self::InvalidReshape { span, .. }
-            | Self::InvalidAnnotation { span, .. } => *span,
+            | Self::InvalidAnnotation { span, .. }
+            | Self::MutualLazyRecursion { span, .. } => *span,
             _ => None,
         }
     }
@@ -943,6 +953,8 @@ impl std::fmt::Display for BinOp {
             BinOp::Ge => write!(f, ">="),
             BinOp::Eq => write!(f, "=="),
             BinOp::Ne => write!(f, "!="),
+            BinOp::And => write!(f, "&&"),
+            BinOp::Or => write!(f, "||"),
         }
     }
 }
@@ -1355,6 +1367,122 @@ impl std::fmt::Display for Program {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Acceptance test for #114: every ValidationError variant must have an
+    /// explicit arm in the manual `PartialEq` impl.  This test constructs one
+    /// instance of each variant and asserts reflexivity (`v == v`).
+    ///
+    /// If a new variant is added without updating the `PartialEq` match:
+    ///   - Before fix: `unreachable!()` panics at runtime (bad — silent until hit)
+    ///   - After fix:  `_ => false` returns false, and THIS test fails with a
+    ///     clear assertion message (good — caught immediately in CI)
+    #[test]
+    fn validation_error_partialeq_reflexivity_all_variants() {
+        // One representative instance per variant.  If you add a new variant to
+        // `ValidationError`, add it here too — the test failing is the signal
+        // that the `PartialEq` impl also needs a new arm.
+        let variants: Vec<ValidationError> = vec![
+            ValidationError::MissingNeuron {
+                name: "Foo".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::PortMismatch {
+                source_node: "A".into(),
+                source_port: "out".into(),
+                source_shape: Shape::scalar(),
+                dest_node: "B".into(),
+                dest_port: "in".into(),
+                dest_shape: Shape::scalar(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::CycleDetected {
+                cycle: vec!["a".into(), "b".into()],
+                context: "test".into(),
+            },
+            ValidationError::ArityMismatch {
+                expected: 1,
+                got: 2,
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::UnknownNode {
+                node: "x".into(),
+                context: "test".into(),
+            },
+            ValidationError::NonExhaustiveMatch {
+                context: "test".into(),
+                suggestion: "add wildcard".into(),
+            },
+            ValidationError::UnreachableMatchArm {
+                arm_index: 0,
+                shadowed_by: 1,
+                context: "test".into(),
+            },
+            ValidationError::DuplicateBinding {
+                name: "x".into(),
+                neuron: "N".into(),
+            },
+            ValidationError::InvalidRecursion {
+                binding: "x".into(),
+                neuron: "N".into(),
+                reason: "no @lazy".into(),
+            },
+            ValidationError::InvalidUnrollCount {
+                neuron: "N".into(),
+                reason: "negative".into(),
+            },
+            ValidationError::InvalidReshape {
+                message: "bad".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::InvalidAnnotation {
+                annotation: "@foo".into(),
+                reason: "unknown".into(),
+                context: "test".into(),
+                span: None,
+            },
+            ValidationError::InconsistentArmPorts {
+                expr_kind: "match".into(),
+                arm_index: Some(1),
+                expected_count: 2,
+                got_count: 3,
+                expected_names: vec!["a".into()],
+                got_names: vec!["b".into()],
+                context: "test".into(),
+            },
+            ValidationError::MutualLazyRecursion {
+                cycle: vec!["a".into(), "b".into()],
+                neuron: "N".into(),
+                span: None,
+            },
+            ValidationError::Custom("test".into()),
+            ValidationError::UseError {
+                message: "not found".into(),
+            },
+        ];
+
+        // Count must match the number of variants in the enum.  Update this
+        // constant when adding new variants so the test catches omissions.
+        const EXPECTED_VARIANT_COUNT: usize = 16;
+        assert_eq!(
+            variants.len(),
+            EXPECTED_VARIANT_COUNT,
+            "variant count mismatch — did you add a new ValidationError variant? \
+             Update this test AND the PartialEq impl in interfaces.rs"
+        );
+
+        for (i, v) in variants.iter().enumerate() {
+            assert_eq!(
+                v, v,
+                "ValidationError variant at index {} is not reflexive under PartialEq — \
+                 its arm is likely missing from the manual PartialEq impl",
+                i
+            );
+        }
+    }
 
     #[test]
     fn port_mismatch_different_ports_are_not_equal() {

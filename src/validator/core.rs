@@ -359,13 +359,13 @@ impl Validator {
                         };
                         for name in unreachable_names {
                             errors.push(ValidationError::InvalidAnnotation {
-                                annotation: reshape.annotation.as_ref().unwrap().to_string(),
+                                annotation: reshape.annotation.as_ref().expect("checked by enclosing if-let").to_string(),
                                 reason: format!(
                                     "dimension '{}' in @reduce target shape is not defined in any input/output port shape or parameter of neuron '{}'",
                                     name, context_neuron
                                 ),
                                 context: format!("in {}", context_neuron),
-                                span: reshape.annotation.as_ref().unwrap().span(),
+                                span: reshape.annotation.as_ref().expect("checked by enclosing if-let").span(),
                             });
                         }
                     }
@@ -622,7 +622,7 @@ impl Validator {
 
         // Check exhaustiveness: last pattern should be a catch-all
         if !match_expr.arms.is_empty() {
-            let last_pattern = &match_expr.arms.last().unwrap().pattern;
+            let last_pattern = &match_expr.arms.last().expect("checked non-empty above").pattern;
             if let Some(shape) = last_pattern.as_shape() {
                 if !Self::is_catch_all_pattern(shape) {
                     errors.push(ValidationError::NonExhaustiveMatch {

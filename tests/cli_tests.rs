@@ -13,6 +13,10 @@ fn neuroscript_bin() -> PathBuf {
     path.push("target");
     path.push("debug");
     path.push("neuroscript");
+    assert!(
+        path.exists(),
+        "neuroscript binary not found at {path:?} — run `cargo build` first"
+    );
     path
 }
 
@@ -72,8 +76,8 @@ fn parse_fails_on_missing_file() {
     let (_stdout, stderr, success) = run(&["parse", "nonexistent_file.ns"]);
     assert!(!success, "parse should fail on missing file");
     assert!(
-        stderr.contains("Failed to read") || stderr.contains("No such file"),
-        "expected file-not-found error, got: {}",
+        stderr.contains("Failed to read"),
+        "expected file-not-found error containing 'Failed to read', got: {}",
         stderr
     );
 }
@@ -150,8 +154,8 @@ fn validate_fails_on_missing_file() {
     let (_stdout, stderr, success) = run(&["validate", "nonexistent_file.ns"]);
     assert!(!success, "validate should fail on missing file");
     assert!(
-        stderr.contains("Failed to read") || stderr.contains("No such file"),
-        "expected file-not-found error, got: {}",
+        stderr.contains("Failed to read"),
+        "expected file-not-found error containing 'Failed to read', got: {}",
         stderr
     );
 }
@@ -356,8 +360,8 @@ fn compile_fails_on_missing_file() {
     let (_stdout, stderr, success) = run(&["compile", "nonexistent_file.ns"]);
     assert!(!success, "compile should fail on missing file");
     assert!(
-        stderr.contains("Failed to read") || stderr.contains("No such file"),
-        "expected file-not-found error, got: {}",
+        stderr.contains("Failed to read"),
+        "expected file-not-found error containing 'Failed to read', got: {}",
         stderr
     );
 }

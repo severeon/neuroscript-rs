@@ -1,0 +1,35 @@
+---
+source: tests/integration_tests.rs
+expression: code
+---
+import torch
+import torch.nn as nn
+from neuroscript_runtime.primitives.linear import Linear
+
+class LogicalGuardRouter(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self._linear_0 = None  # Lazy instantiation (captured)
+        self._linear_1 = None  # Lazy instantiation (captured)
+        self.linear_2 = Linear(256, 512)
+
+    def forward(self, x):
+        match_out = None
+        if x.ndim == 2:
+            d = x.shape[1]
+            if d >= 128 and d < 512:
+                if self._linear_0 is None:
+                    self._linear_0 = Linear(d, 512)
+                linear_0 = self._linear_0(x)
+                match_out = linear_0
+        else:
+            d = x.shape[1]
+            if d < 128 or d >= 512:
+                if self._linear_1 is None:
+                    self._linear_1 = Linear(d, 256)
+                linear_1 = self._linear_1(x)
+                linear_2 = self.linear_2(linear_1)
+                match_out = linear_2
+        else:
+            raise ValueError(f'No match found for shape { x.shape }')
+        return match_out

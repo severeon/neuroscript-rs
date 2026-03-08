@@ -1,4 +1,5 @@
 use crate::interfaces::*;
+use miette::SourceSpan;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Validate context:, let: and set: bindings
@@ -153,6 +154,13 @@ pub(super) fn validate_bindings(
         .map(|b| b.name.as_str())
         .collect();
 
+    // Build a map from binding name to its source span (for diagnostics).
+    let binding_spans: BTreeMap<&str, Option<SourceSpan>> = context_bindings
+        .iter()
+        .filter(|b| matches!(b.scope, Scope::Instance { lazy: true }))
+        .map(|b| (b.name.as_str(), b.span))
+        .collect();
+
     // A single @lazy binding cannot form mutual recursion with itself;
     // self-recursion is already checked in the per-binding loop above.
     if lazy_bindings.len() >= 2 {
@@ -180,6 +188,7 @@ pub(super) fn validate_bindings(
             stack: HashSet::new(),
             path: Vec::new(),
             reported_cycles: HashSet::new(),
+            binding_spans: &binding_spans,
         };
 
         for &node in &lazy_bindings {
@@ -227,6 +236,8 @@ struct CycleDfs<'a> {
     path: Vec<&'a str>,
     /// Set of already-reported cycle strings to avoid exact duplicates.
     reported_cycles: HashSet<String>,
+    /// Map from binding name to source span (for diagnostics).
+    binding_spans: &'a BTreeMap<&'a str, Option<SourceSpan>>,
 }
 
 impl<'a> CycleDfs<'a> {
@@ -257,9 +268,19 @@ impl<'a> CycleDfs<'a> {
                     // to deduplicate cycles found from different starting points.
                     let key = normalize_cycle(&cycle);
                     if self.reported_cycles.insert(key) {
+                        // Use the span of the first binding in the cycle for diagnostics.
+                        let span = cycle
+                            .first()
+                            .and_then(|name| {
+                                self.binding_spans
+                                    .get(name.as_str())
+                                    .copied()
+                                    .flatten()
+                            });
                         errors.push(ValidationError::MutualLazyRecursion {
                             cycle,
                             neuron: neuron_name.to_string(),
+                            span,
                         });
                     }
                 }

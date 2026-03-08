@@ -43,10 +43,13 @@ fn shapes_compatible_with_bindings(
         (None, Some(var_pos)) => {
             match_variadic_shape_with_bindings(&dest.dims, var_pos, &source.dims, dim_bindings)
         }
-        // Neither has variadic - must match exactly
+        // Neither has variadic - must match exactly (or via wildcard multi-dim)
         (None, None) => {
             if source.dims.len() != dest.dims.len() {
-                return false;
+                // Issue #119: A leading Dim::Wildcard can absorb multiple
+                // dimensions, matching PyTorch semantics where `*` means
+                // "any number of leading batch dimensions."
+                return wildcard_multi_dim_compatible(source, dest, dim_bindings);
             }
             // Check each dimension pair
             for (src_dim, dst_dim) in source.dims.iter().zip(dest.dims.iter()) {
@@ -112,6 +115,57 @@ fn dims_compatible_with_bindings(
         (Dim::Global(n1), Dim::Global(n2)) => n1 == n2,
         (Dim::Global(_), _) | (_, Dim::Global(_)) => true,
     }
+}
+
+/// Check if two shapes of different rank are compatible when one has a leading
+/// `Dim::Wildcard` that can absorb multiple dimensions (Issue #119).
+///
+/// In PyTorch semantics, `*` means "any number of leading batch dimensions."
+/// So `[*, in_dim]` is compatible with `[batch, seq, dim]` — the wildcard
+/// absorbs `[batch, seq]` and `in_dim` matches `dim`.
+fn wildcard_multi_dim_compatible(
+    source: &Shape,
+    dest: &Shape,
+    dim_bindings: &mut HashMap<String, i64>,
+) -> bool {
+    let (shorter, longer) = if source.dims.len() < dest.dims.len() {
+        (source, dest)
+    } else {
+        (dest, source)
+    };
+
+    // The shorter shape must start with Wildcard
+    if shorter.dims.first() != Some(&Dim::Wildcard) {
+        return false;
+    }
+
+    // If the longer shape also starts with Wildcard, the shorter one is
+    // less specific (fewer explicit dims) and should NOT absorb the extra
+    // named dimensions from the longer shape. For example, [*, dim] should
+    // NOT match [*, seq, dim] because the longer shape explicitly requires
+    // a `seq` dimension that the shorter shape doesn't guarantee.
+    if longer.dims.first() == Some(&Dim::Wildcard) {
+        return false;
+    }
+
+    let tail_len = shorter.dims.len() - 1; // dims after the leading wildcard
+    if longer.dims.len() < tail_len {
+        return false;
+    }
+
+    // The wildcard absorbs the first (longer.rank() - tail_len) dims.
+    // Unify the remaining trailing dims pairwise.
+    let offset = longer.dims.len() - tail_len;
+    let shorter_tail = &shorter.dims[1..];
+    let longer_tail = &longer.dims[offset..];
+
+    for (d_short, d_long) in shorter_tail.iter().zip(longer_tail.iter()) {
+        if !dims_compatible_with_bindings(d_short, d_long, dim_bindings) {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// Match a shape with a variadic against a concrete shape, tracking dimension bindings.
