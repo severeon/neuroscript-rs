@@ -47,7 +47,11 @@ fn compute_endpoint_reachability(endpoint: &mut Endpoint) {
         }
         // Wrap endpoints are desugared into Call endpoints by desugar_wraps()
         // before this pass runs, so they never contain match expressions here.
-        // Other leaf endpoints (Ref, Call, Tuple, Reshape) cannot nest matches.
+        // Tuple and Call endpoints are treated as leaves. The current grammar
+        // does not produce match expressions inside tuples or call arguments,
+        // so no reachability tracking is needed here. If the grammar evolves
+        // to allow nested match expressions, this arm will need updating.
+        // Other leaf endpoints (Ref, Reshape) also cannot nest matches.
         _ => {}
     }
 }

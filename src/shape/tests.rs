@@ -638,6 +638,30 @@ fn test_issue_119_wildcard_star_matches_multiple_leading_dims() {
     assert!(
         engine.shapes_compatible(&source, &dest),
         "[batch, seq, dim] should be compatible with [*, in_dim]"
+// Issue #118: Variadic element-wise unification
+// ========================================
+
+#[test]
+fn test_issue_118_same_variadic_name_different_rank_absorbed() {
+    // Bug: [A, *shape] vs [A, *shape, B] — same variadic name but
+    // *shape absorbs different numbers of dims in each shape.
+    // This should fail because the same variadic name cannot bind
+    // to segments of different lengths.
+    let engine = ShapeInferenceEngine::new();
+    let mut ctx = InferenceContext::new();
+
+    let s1 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("shape".to_string()),
+    ]);
+    let s2 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("shape".to_string()),
+        Dim::Literal(64),
+    ]);
+    assert!(
+        engine.unify_shapes(&s1, &s2, &mut ctx).is_err(),
+        "Same-named variadic absorbing different segment lengths should fail unification"
     );
 }
 
@@ -672,5 +696,27 @@ fn test_issue_119_wildcard_output_expands_to_match_dest() {
     assert!(
         engine.shapes_compatible(&source, &dest),
         "[*, out_dim] should be compatible with [batch, seq, dim]"
+fn test_issue_118_same_variadic_name_gap_conflict() {
+    // Bug: [A, *x, B] vs [A, C, *x, B] — same variadic name *x but
+    // in s1 *x absorbs C+whatever while in s2 *x absorbs only whatever.
+    // The gap dim C is between prefix and variadic in s2, absorbed by
+    // *x in s1. Same name means same binding — contradiction.
+    let engine = ShapeInferenceEngine::new();
+    let mut ctx = InferenceContext::new();
+
+    let s1 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(64),
+    ]);
+    let s2 = Shape::new(vec![
+        Dim::Literal(32),
+        Dim::Literal(256),
+        Dim::Variadic("x".to_string()),
+        Dim::Literal(64),
+    ]);
+    assert!(
+        engine.unify_shapes(&s1, &s2, &mut ctx).is_err(),
+        "Same-named variadic absorbing different gap segments should fail unification"
     );
 }

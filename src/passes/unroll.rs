@@ -99,6 +99,7 @@ pub fn expand_unrolls(program: &mut Program) -> Result<(), Vec<ValidationError>>
                                             index: i,
                                             aggregate_name: unroll.aggregate_name.clone(),
                                         }),
+                                        span: binding.span,
                                     });
                                 }
                             }
@@ -222,6 +223,8 @@ mod tests {
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         }],
                     }],
                     connections: vec![],
@@ -280,6 +283,8 @@ mod tests {
                             scope: Scope::Static,
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         }],
                     }],
                     connections: vec![],
@@ -362,6 +367,8 @@ mod tests {
                                 scope: Scope::Instance { lazy: false },
                                 frozen: false,
                                 unroll_group: None,
+
+                                span: None,
                             }],
                         },
                         ContextUnroll {
@@ -375,6 +382,8 @@ mod tests {
                                 scope: Scope::Instance { lazy: false },
                                 frozen: false,
                                 unroll_group: None,
+
+                                span: None,
                             }],
                         },
                     ],
@@ -430,6 +439,8 @@ mod tests {
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         },
                         // layer2 comes after the unroll in the source, but the AST
                         // builder moves overflow bindings back to context_bindings
@@ -444,6 +455,8 @@ mod tests {
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         },
                     ],
                     context_unrolls: vec![ContextUnroll {
@@ -457,6 +470,8 @@ mod tests {
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         }],
                     }],
                     connections: vec![],
@@ -514,6 +529,8 @@ mod tests {
                             scope: Scope::Instance { lazy: true },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         }],
                     }],
                     connections: vec![],
@@ -574,6 +591,8 @@ mod tests {
                             scope: Scope::Instance { lazy: false },
                             frozen: false,
                             unroll_group: None,
+
+                            span: None,
                         }],
                     }],
                     connections: vec![],
@@ -615,6 +634,8 @@ mod tests {
                 scope: Scope::Instance { lazy: false },
                 frozen: false,
                 unroll_group: None,
+
+                span: None,
             });
         }
         let mut bindings_b: Vec<Binding> = Vec::new();
@@ -627,6 +648,8 @@ mod tests {
                 scope: Scope::Instance { lazy: false },
                 frozen: false,
                 unroll_group: None,
+
+                span: None,
             });
         }
         program.neurons.insert(
@@ -680,6 +703,8 @@ mod tests {
                 scope: Scope::Instance { lazy: false },
                 frozen: false,
                 unroll_group: None,
+
+                span: None,
             });
         }
         program.neurons.insert(
