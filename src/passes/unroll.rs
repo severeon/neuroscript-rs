@@ -215,17 +215,11 @@ mod tests {
                     context_unrolls: vec![ContextUnroll {
                         aggregate_name: "blocks".to_string(),
                         count: Value::Name("num_layers".to_string()),
-                        bindings: vec![Binding {
-                            name: "block".to_string(),
-                            call_name: "TransformerBlock".to_string(),
-                            args: vec![Value::Name("d_model".to_string())],
-                            kwargs: vec![],
-                            scope: Scope::Instance { lazy: false },
-                            frozen: false,
-                            unroll_group: None,
-
-                            span: None,
-                        }],
+                        bindings: vec![Binding::new(
+                            "block",
+                            "TransformerBlock",
+                            vec![Value::Name("d_model".to_string())],
+                        )],
                     }],
                     connections: vec![],
                 },
@@ -359,32 +353,12 @@ mod tests {
                         ContextUnroll {
                             aggregate_name: "attns".to_string(),
                             count: Value::Int(2),
-                            bindings: vec![Binding {
-                                name: "attn".to_string(),
-                                call_name: "Attention".to_string(),
-                                args: vec![],
-                                kwargs: vec![],
-                                scope: Scope::Instance { lazy: false },
-                                frozen: false,
-                                unroll_group: None,
-
-                                span: None,
-                            }],
+                            bindings: vec![Binding::new("attn", "Attention", vec![])],
                         },
                         ContextUnroll {
                             aggregate_name: "ffns".to_string(),
                             count: Value::Int(3),
-                            bindings: vec![Binding {
-                                name: "ffn".to_string(),
-                                call_name: "FFN".to_string(),
-                                args: vec![],
-                                kwargs: vec![],
-                                scope: Scope::Instance { lazy: false },
-                                frozen: false,
-                                unroll_group: None,
-
-                                span: None,
-                            }],
+                            bindings: vec![Binding::new("ffn", "FFN", vec![])],
                         },
                     ],
                     connections: vec![],
@@ -428,51 +402,33 @@ mod tests {
                 outputs: vec![],
                 body: NeuronBody::Graph {
                     context_bindings: vec![
-                        Binding {
-                            name: "layer1".to_string(),
-                            call_name: "Linear".to_string(),
-                            args: vec![
+                        Binding::new(
+                            "layer1",
+                            "Linear",
+                            vec![
                                 Value::Name("dim".to_string()),
                                 Value::Name("dim".to_string()),
                             ],
-                            kwargs: vec![],
-                            scope: Scope::Instance { lazy: false },
-                            frozen: false,
-                            unroll_group: None,
-
-                            span: None,
-                        },
+                        ),
                         // layer2 comes after the unroll in the source, but the AST
                         // builder moves overflow bindings back to context_bindings
-                        Binding {
-                            name: "layer2".to_string(),
-                            call_name: "Linear".to_string(),
-                            args: vec![
+                        Binding::new(
+                            "layer2",
+                            "Linear",
+                            vec![
                                 Value::Name("dim".to_string()),
                                 Value::Name("dim".to_string()),
                             ],
-                            kwargs: vec![],
-                            scope: Scope::Instance { lazy: false },
-                            frozen: false,
-                            unroll_group: None,
-
-                            span: None,
-                        },
+                        ),
                     ],
                     context_unrolls: vec![ContextUnroll {
                         aggregate_name: "blocks".to_string(),
                         count: Value::Int(3),
-                        bindings: vec![Binding {
-                            name: "block".to_string(),
-                            call_name: "TransformerBlock".to_string(),
-                            args: vec![Value::Name("dim".to_string())],
-                            kwargs: vec![],
-                            scope: Scope::Instance { lazy: false },
-                            frozen: false,
-                            unroll_group: None,
-
-                            span: None,
-                        }],
+                        bindings: vec![Binding::new(
+                            "block",
+                            "TransformerBlock",
+                            vec![Value::Name("dim".to_string())],
+                        )],
                     }],
                     connections: vec![],
                 },
@@ -583,17 +539,7 @@ mod tests {
                     context_unrolls: vec![ContextUnroll {
                         aggregate_name: "blocks".to_string(),
                         count: Value::Name("num_layers".to_string()), // not a param!
-                        bindings: vec![Binding {
-                            name: "block".to_string(),
-                            call_name: "Block".to_string(),
-                            args: vec![],
-                            kwargs: vec![],
-                            scope: Scope::Instance { lazy: false },
-                            frozen: false,
-                            unroll_group: None,
-
-                            span: None,
-                        }],
+                        bindings: vec![Binding::new("block", "Block", vec![])],
                     }],
                     connections: vec![],
                 },
@@ -626,31 +572,11 @@ mod tests {
         let mut program = Program::new();
         let mut bindings_a: Vec<Binding> = Vec::new();
         for i in 0..51 {
-            bindings_a.push(Binding {
-                name: format!("a{}", i),
-                call_name: "Block".to_string(),
-                args: vec![],
-                kwargs: vec![],
-                scope: Scope::Instance { lazy: false },
-                frozen: false,
-                unroll_group: None,
-
-                span: None,
-            });
+            bindings_a.push(Binding::new(format!("a{}", i), "Block", vec![]));
         }
         let mut bindings_b: Vec<Binding> = Vec::new();
         for i in 0..51 {
-            bindings_b.push(Binding {
-                name: format!("b{}", i),
-                call_name: "Block".to_string(),
-                args: vec![],
-                kwargs: vec![],
-                scope: Scope::Instance { lazy: false },
-                frozen: false,
-                unroll_group: None,
-
-                span: None,
-            });
+            bindings_b.push(Binding::new(format!("b{}", i), "Block", vec![]));
         }
         program.neurons.insert(
             "Explosive".to_string(),
@@ -695,17 +621,7 @@ mod tests {
         let mut program = Program::new();
         let mut bindings: Vec<Binding> = Vec::new();
         for i in 0..10 {
-            bindings.push(Binding {
-                name: format!("block{}", i),
-                call_name: "Block".to_string(),
-                args: vec![],
-                kwargs: vec![],
-                scope: Scope::Instance { lazy: false },
-                frozen: false,
-                unroll_group: None,
-
-                span: None,
-            });
+            bindings.push(Binding::new(format!("block{}", i), "Block", vec![]));
         }
         program.neurons.insert(
             "JustOk".to_string(),

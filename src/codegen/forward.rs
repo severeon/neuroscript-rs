@@ -202,8 +202,8 @@ pub(super) fn generate_forward_body(
 
     let indent = "        ";
 
-    // Build a map from Call endpoints to their result variable names
-    let mut call_to_result: HashMap<String, String> = HashMap::new();
+    // Build a map from processed endpoints (Call, Reshape, etc.) to their result variable names
+    let mut endpoint_to_result: HashMap<String, String> = HashMap::new();
 
     // Build a map from Match endpoints to their result variable names
     let mut match_to_result: HashMap<String, String> = HashMap::new();
@@ -254,9 +254,9 @@ pub(super) fn generate_forward_body(
             }
             Endpoint::Call { name, .. } => {
                 // This Call should have been processed in a previous connection
-                // Look it up in our call_to_result map
+                // Look it up in our endpoint_to_result map
                 let key = endpoint_key_impl(&conn.source);
-                call_to_result.get(&key).cloned().ok_or_else(|| {
+                endpoint_to_result.get(&key).cloned().ok_or_else(|| {
                     CodegenError::InvalidConnection(format!(
                         "Call to {} used as source before being defined",
                         name
@@ -283,7 +283,7 @@ pub(super) fn generate_forward_body(
             }
             Endpoint::Reshape(_) => {
                 let key = endpoint_key_impl(&conn.source);
-                call_to_result.get(&key).cloned().ok_or_else(|| {
+                endpoint_to_result.get(&key).cloned().ok_or_else(|| {
                     CodegenError::InvalidConnection(format!(
                         "Reshape used as source before being processed"
                     ))
@@ -383,7 +383,7 @@ pub(super) fn generate_forward_body(
             source_var,
             indent,
             &mut used_var_names,
-            &mut call_to_result,
+            &mut endpoint_to_result,
             &mut match_to_result,
             &mut if_to_result,
             &mut binding_call_results,
@@ -395,10 +395,10 @@ pub(super) fn generate_forward_body(
         // Track the last result for implicit output
         last_result = Some(result_var.clone());
 
-        // If destination was a Call, store result in call_to_result
+        // If destination was a Call/Reshape/etc., store result in endpoint_to_result
         if let Endpoint::Call { .. } = &conn.destination {
             let key = endpoint_key_impl(&conn.destination);
-            call_to_result.insert(key, result_var.clone());
+            endpoint_to_result.insert(key, result_var.clone());
         } else if let Endpoint::Match(_) = &conn.destination {
             let key = endpoint_key_impl(&conn.destination);
             match_to_result.insert(key, result_var.clone());
@@ -433,7 +433,7 @@ fn process_destination(
     source_var: String,
     indent: &str,
     used_var_names: &mut HashSet<String>,
-    call_to_result: &mut HashMap<String, String>,
+    endpoint_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
     binding_call_results: &mut HashMap<String, String>,
@@ -456,17 +456,17 @@ fn process_destination(
         ),
         Endpoint::Match(match_expr) => process_match(
             output, gen, match_expr, source_var, indent,
-            used_var_names, call_to_result, match_to_result, if_to_result,
+            used_var_names, endpoint_to_result, match_to_result, if_to_result,
             binding_call_results, emitted_unroll_groups,
         ),
         Endpoint::If(if_expr) => process_if(
             output, gen, if_expr, source_var, indent,
-            used_var_names, call_to_result, match_to_result, if_to_result,
+            used_var_names, endpoint_to_result, match_to_result, if_to_result,
             binding_call_results, emitted_unroll_groups,
         ),
         Endpoint::Reshape(reshape) => process_reshape(
             output, gen, endpoint, reshape, source_var, indent,
-            used_var_names, call_to_result, reshape_source_shape,
+            used_var_names, endpoint_to_result, reshape_source_shape,
         ),
         Endpoint::Wrap(_) => Err(CodegenError::InvalidConnection(
             "@wrap endpoint was not desugared before codegen; call validate() first".to_string(),
@@ -780,7 +780,7 @@ fn process_match(
     source_var: String,
     indent: &str,
     used_var_names: &mut HashSet<String>,
-    call_to_result: &mut HashMap<String, String>,
+    endpoint_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
     binding_call_results: &mut HashMap<String, String>,
@@ -889,7 +889,7 @@ fn process_match(
                 current_var,
                 &pipeline_indent,
                 used_var_names,
-                call_to_result,
+                endpoint_to_result,
                 match_to_result,
                 if_to_result,
                 binding_call_results,
@@ -898,10 +898,10 @@ fn process_match(
                 arm_reshape_src.as_ref(),
             )?;
 
-            // If endpoint was a Call, store result in call_to_result
+            // If endpoint was a Call/Reshape/etc., store result in endpoint_to_result
             if let Endpoint::Call { .. } = ep {
                 let key = endpoint_key_impl(ep);
-                call_to_result.insert(key, current_var.clone());
+                endpoint_to_result.insert(key, current_var.clone());
             }
             prev_endpoint = Some(ep);
         }
@@ -942,7 +942,7 @@ fn process_branch_pipeline(
     source_var: String,
     indent: &str,
     used_var_names: &mut HashSet<String>,
-    call_to_result: &mut HashMap<String, String>,
+    endpoint_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
     binding_call_results: &mut HashMap<String, String>,
@@ -965,7 +965,7 @@ fn process_branch_pipeline(
             current_var,
             indent,
             used_var_names,
-            call_to_result,
+            endpoint_to_result,
             match_to_result,
             if_to_result,
             binding_call_results,
@@ -977,7 +977,7 @@ fn process_branch_pipeline(
         // Cache call/match/if results inside the pipeline
         if let Endpoint::Call { .. } = ep {
             let key = endpoint_key_impl(ep);
-            call_to_result.insert(key, current_var.clone());
+            endpoint_to_result.insert(key, current_var.clone());
         } else if let Endpoint::Match(_) = ep {
             let key = endpoint_key_impl(ep);
             match_to_result.insert(key, current_var.clone());
@@ -1002,7 +1002,7 @@ fn process_if(
     source_var: String,
     indent: &str,
     used_var_names: &mut HashSet<String>,
-    call_to_result: &mut HashMap<String, String>,
+    endpoint_to_result: &mut HashMap<String, String>,
     match_to_result: &mut HashMap<String, String>,
     if_to_result: &mut HashMap<String, String>,
     binding_call_results: &mut HashMap<String, String>,
@@ -1026,7 +1026,7 @@ fn process_if(
         let saved_var_names = gen.var_names.clone();
         let current_var = process_branch_pipeline(
             output, gen, &branch.pipeline, source_var.clone(), &branch_indent,
-            used_var_names, call_to_result, match_to_result, if_to_result,
+            used_var_names, endpoint_to_result, match_to_result, if_to_result,
             binding_call_results, emitted_unroll_groups,
         )?;
 
@@ -1041,7 +1041,7 @@ fn process_if(
         let saved_var_names = gen.var_names.clone();
         let current_var = process_branch_pipeline(
             output, gen, else_branch, source_var.clone(), &branch_indent,
-            used_var_names, call_to_result, match_to_result, if_to_result,
+            used_var_names, endpoint_to_result, match_to_result, if_to_result,
             binding_call_results, emitted_unroll_groups,
         )?;
         writeln!(output, "{}{} = {}", branch_indent, result_var, current_var)?;
@@ -1067,7 +1067,7 @@ fn process_reshape(
     source_var: String,
     indent: &str,
     used_var_names: &mut HashSet<String>,
-    call_to_result: &mut HashMap<String, String>,
+    endpoint_to_result: &mut HashMap<String, String>,
     reshape_source_shape: Option<&Shape>,
 ) -> Result<String, CodegenError> {
     let result_var = make_var_name(used_var_names, "x");
@@ -1095,7 +1095,7 @@ fn process_reshape(
 
     // Store result for when this reshape is used as a source
     let key = endpoint_key_impl(endpoint);
-    call_to_result.insert(key, result_var.clone());
+    endpoint_to_result.insert(key, result_var.clone());
 
     Ok(result_var)
 }
