@@ -22,8 +22,8 @@ The team lead provides:
 ### 1. Setup
 ```bash
 # Create isolated worktree — NEVER use the main repo directory
-git worktree add /Users/tquick/projects/neuroscript-rs/.claude/worktrees/<short-name> <base-branch>
-cd /Users/tquick/projects/neuroscript-rs/.claude/worktrees/<short-name>
+git worktree add $(git rev-parse --show-toplevel)/.claude/worktrees/<short-name> <base-branch>
+cd $(git rev-parse --show-toplevel)/.claude/worktrees/<short-name>
 git checkout -b fix/<story-id-slug>
 ```
 
