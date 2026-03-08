@@ -1290,6 +1290,8 @@ fn test_lazy_binding_cross_referencing_context_bindings() {
                     scope: Scope::Instance { lazy: false },
                     frozen: false,
                     unroll_group: None,
+
+                    span: None,
                 },
                 Binding {
                     name: "adapter".to_string(),
@@ -1300,6 +1302,8 @@ fn test_lazy_binding_cross_referencing_context_bindings() {
                     scope: Scope::Instance { lazy: true },
                     frozen: false,
                     unroll_group: None,
+
+                    span: None,
                 },
             ],
             context_unrolls: vec![],
