@@ -695,6 +695,7 @@ pub struct StdlibRegistry {
 #[derive(Debug, Clone, Error, Diagnostic)]
 pub enum ValidationError {
     #[error("Neuron '{name}' not found (in {context})")]
+    #[diagnostic(code(neuroscript::missing_neuron))]
     MissingNeuron {
         name: String,
         context: String,
@@ -702,7 +703,7 @@ pub enum ValidationError {
         span: Option<SourceSpan>,
     },
     #[error("Port mismatch: {source_node}.{source_port} {source_shape} -> {dest_node}.{dest_port} {dest_shape} (in {context})")]
-    #[diagnostic(help("check if dimensions match or if a transpose/reshape is needed"))]
+    #[diagnostic(code(neuroscript::port_mismatch), help("check if dimensions match or if a transpose/reshape is needed"))]
     PortMismatch {
         source_node: String,
         source_port: String,
@@ -715,11 +716,13 @@ pub enum ValidationError {
         span: Option<SourceSpan>,
     },
     #[error("Cycle detected in {context}: {}", cycle.join(" -> "))]
+    #[diagnostic(code(neuroscript::cycle_detected))]
     CycleDetected {
         cycle: Vec<String>,
         context: String,
     },
     #[error("Arity mismatch: expected {expected} ports, got {got} (in {context})")]
+    #[diagnostic(code(neuroscript::arity_mismatch))]
     ArityMismatch {
         expected: usize,
         got: usize,
@@ -728,38 +731,45 @@ pub enum ValidationError {
         span: Option<SourceSpan>,
     },
     #[error("Unknown node '{node}' (in {context})")]
+    #[diagnostic(code(neuroscript::unknown_node))]
     UnknownNode {
         node: String,
         context: String,
     },
     #[error("Non-exhaustive match expression (in {context}): {suggestion}")]
+    #[diagnostic(code(neuroscript::non_exhaustive_match))]
     NonExhaustiveMatch {
         context: String,
         suggestion: String,
     },
     #[error("Unreachable match arm {arm_index} shadowed by arm {shadowed_by} (in {context})")]
+    #[diagnostic(code(neuroscript::unreachable_match_arm))]
     UnreachableMatchArm {
         arm_index: usize,
         shadowed_by: usize,
         context: String,
     },
     #[error("Duplicate binding '{name}' in neuron '{neuron}'")]
+    #[diagnostic(code(neuroscript::duplicate_binding))]
     DuplicateBinding {
         name: String,
         neuron: String,
     },
     #[error("Invalid recursion in binding '{binding}' of neuron '{neuron}': {reason}")]
+    #[diagnostic(code(neuroscript::invalid_recursion))]
     InvalidRecursion {
         binding: String,
         neuron: String,
         reason: String,
     },
     #[error("Invalid unroll count in neuron '{neuron}': {reason}")]
+    #[diagnostic(code(neuroscript::invalid_unroll_count))]
     InvalidUnrollCount {
         neuron: String,
         reason: String,
     },
     #[error("Invalid reshape: {message} (in {context})")]
+    #[diagnostic(code(neuroscript::invalid_reshape))]
     InvalidReshape {
         message: String,
         context: String,
@@ -767,6 +777,7 @@ pub enum ValidationError {
         span: Option<SourceSpan>,
     },
     #[error("Invalid annotation {annotation}: {reason} ({context})")]
+    #[diagnostic(code(neuroscript::invalid_annotation))]
     InvalidAnnotation {
         annotation: String,
         reason: String,
@@ -776,6 +787,7 @@ pub enum ValidationError {
     },
     /// Match/if arms produce different port signatures.
     #[error("Inconsistent ports in {expr_kind} expression (in {context})")]
+    #[diagnostic(code(neuroscript::inconsistent_arm_ports))]
     InconsistentArmPorts {
         expr_kind: String,
         arm_index: Option<usize>, // None = else branch, Some(n) = 1-based arm number
@@ -786,6 +798,7 @@ pub enum ValidationError {
         context: String,
     },
     #[error("Mutual @lazy recursion detected between bindings: {} (in {neuron})", cycle.join(" -> "))]
+    #[diagnostic(code(neuroscript::mutual_lazy_recursion))]
     MutualLazyRecursion {
         /// Binding names forming the cycle, e.g. ["a", "b", "a"]
         cycle: Vec<String>,
@@ -794,8 +807,10 @@ pub enum ValidationError {
         span: Option<SourceSpan>,
     },
     #[error("{0}")]
+    #[diagnostic(code(neuroscript::custom))]
     Custom(String),
     #[error("Import error: {message}")]
+    #[diagnostic(code(neuroscript::use_error))]
     UseError {
         message: String,
     },
@@ -1536,5 +1551,27 @@ mod tests {
 
         // Spans are excluded from comparison; all other fields match
         assert_eq!(err_a, err_b, "PortMismatch errors with identical fields (ignoring span) should be equal");
+    }
+
+    /// Every `ValidationError` variant must carry a `#[diagnostic(code(...))]`
+    /// attribute so that errors are machine-parseable (useful for LSP integration).
+    #[test]
+    fn validation_error_implements_diagnostic() {
+        use miette::Diagnostic;
+        let err = ValidationError::MissingNeuron {
+            name: "Foo".into(),
+            context: "test".into(),
+            span: None,
+        };
+        assert!(
+            err.code().is_some(),
+            "MissingNeuron should have a diagnostic code"
+        );
+
+        // Verify the code value is what we expect
+        assert_eq!(
+            err.code().unwrap().to_string(),
+            "neuroscript::missing_neuron"
+        );
     }
 }
