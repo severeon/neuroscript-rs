@@ -1086,7 +1086,7 @@ fn process_reshape(
             process_reshape_bare(output, gen, reshape, &result_var, &source_var, indent)?;
         }
         Some(TransformAnnotation::Reduce { strategy, .. }) => {
-            process_reshape_reduce(output, gen, reshape, &result_var, &source_var, indent, strategy, reshape_source_shape)?;
+            process_reshape_reduce(output, reshape, &result_var, &source_var, indent, strategy, reshape_source_shape)?;
         }
         Some(TransformAnnotation::Repeat { strategy, .. }) => {
             process_reshape_repeat(output, gen, reshape, &result_var, &source_var, indent, strategy, reshape_source_shape, used_var_names)?;
@@ -1128,7 +1128,6 @@ fn process_reshape_bare(
 /// Emit code for `=> @reduce(strategy) [shape]`.
 fn process_reshape_reduce(
     output: &mut String,
-    _gen: &CodeGenerator,
     reshape: &ReshapeExpr,
     result_var: &str,
     source_var: &str,
@@ -1200,11 +1199,8 @@ fn process_reshape_reduce(
                     ));
                 };
 
-            if reduce_dims.is_empty() {
-                return Err(CodegenError::InvalidConnection(
-                    "cannot determine reduce dimensions: no dims identified to reduce".to_string(),
-                ));
-            }
+            // Note: reduce_dims is guaranteed non-empty here because the
+            // named_reduce path above returns an error when no dims are found.
 
             if reduce_dims.len() == 1 {
                 writeln!(

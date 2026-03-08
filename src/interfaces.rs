@@ -1464,8 +1464,8 @@ mod tests {
             },
         ];
 
-        // Count must match the number of variants in the enum.  Update this
-        // constant when adding new variants so the test catches omissions.
+        // SYNC: This count must match the number of variants in `ValidationError` enum (defined above).
+        // When adding a new variant, update this constant AND the `PartialEq` impl.
         const EXPECTED_VARIANT_COUNT: usize = 16;
         assert_eq!(
             variants.len(),
