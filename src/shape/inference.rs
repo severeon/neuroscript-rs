@@ -1011,10 +1011,70 @@ impl ShapeInferenceEngine {
             }
             (Some(pos1), Some(pos2)) => {
                 // Both have variadics - complex case
-                // Instead of strict equality, check structural compatibility:
-                // 1. Match constant prefixes
-                // 2. Match constant suffixes
-                // 3. Assume variadics absorb the difference
+                // Strategy:
+                // 1. If either variadic is already resolved in ctx, substitute
+                //    it and fall through to the one-variadic path for precise
+                //    element-wise checking.
+                // 2. Otherwise: match constant prefixes/suffixes and, for
+                //    same-named variadics, verify they absorb segments of the
+                //    same length (their structural position must match).
+
+                // Extract variadic names
+                let var1_name = match &s1.dims[pos1] {
+                    Dim::Variadic(n) => n.clone(),
+                    _ => unreachable!(),
+                };
+                let var2_name = match &s2.dims[pos2] {
+                    Dim::Variadic(n) => n.clone(),
+                    _ => unreachable!(),
+                };
+
+                // If either variadic is already resolved, substitute and retry
+                // with one concrete / one variadic shape for precise checking.
+                let s1_resolved = ctx.resolved_variadics.contains_key(&var1_name);
+                let s2_resolved = ctx.resolved_variadics.contains_key(&var2_name);
+                if s1_resolved || s2_resolved {
+                    let s1_sub = self.substitute_variadics(s1, ctx);
+                    let s2_sub = self.substitute_variadics(s2, ctx);
+                    return self.unify_shapes(&s1_sub, &s2_sub, ctx);
+                }
+
+                // Neither variadic is resolved yet.
+                let tail1_len = s1.dims.len() - 1 - pos1;
+                let tail2_len = s2.dims.len() - 1 - pos2;
+
+                // For same-named variadics that are not yet bound: they must
+                // absorb segments of identical length for any concrete shape.
+                // s1's variadic absorbs (concrete_rank - fixed1) dims where
+                // fixed1 = len1 - 1, and likewise for s2. Equal absorption
+                // requires len1 == len2. Additionally, the position within the
+                // shape must match (pos1 == pos2, tail1 == tail2) so the
+                // absorbed segments are element-wise identical.
+                //
+                // However, when shapes originate from different neuron port
+                // definitions (e.g., a parent neuron with `[*shape, dim]` and
+                // a callee with `[*shape]`), the same variadic name is merely
+                // a naming convention — the variables are logically distinct.
+                // We detect this by checking for Named dimensions: if either
+                // shape contains an unresolved Named dim, the shapes are still
+                // abstract port patterns and the same-name check is deferred
+                // until concrete dimensions are available.
+                if var1_name == var2_name {
+                    let has_abstract_dim = s1
+                        .dims
+                        .iter()
+                        .chain(s2.dims.iter())
+                        .any(|d| matches!(d, Dim::Named(_) | Dim::Expr(_)));
+
+                    if !has_abstract_dim && (pos1 != pos2 || tail1_len != tail2_len) {
+                        return Err(format!(
+                            "Variadic *{} appears at incompatible positions in {} vs {} \
+                             (prefix gap {}/{}, suffix gap {}/{}): \
+                             same-named variadic would absorb segments of different lengths",
+                            var1_name, s1, s2, pos1, pos2, tail1_len, tail2_len
+                        ));
+                    }
+                }
 
                 // 1. Unify common prefix
                 let common_prefix_len = std::cmp::min(pos1, pos2);
@@ -1032,8 +1092,6 @@ impl ShapeInferenceEngine {
                 }
 
                 // 2. Unify common suffix
-                let tail1_len = s1.dims.len() - 1 - pos1;
-                let tail2_len = s2.dims.len() - 1 - pos2;
                 let common_suffix_len = std::cmp::min(tail1_len, tail2_len);
 
                 let suffix1_start = s1.dims.len() - common_suffix_len;
@@ -1052,13 +1110,10 @@ impl ShapeInferenceEngine {
                     })?;
                 }
 
-                // 3. Middle gap: fixed dims between each variadic and the
-                // prefix/suffix boundaries are absorbed by the other shape's
-                // variadic. Prefix unification already checks dims before
-                // min(pos1, pos2), and suffix unification checks dims after
-                // each variadic's tail. Any remaining fixed dims in the gap
-                // (e.g., [A, C, *y, B] vs [A, *x, B] — C is absorbed by *x)
-                // are unconstrained and valid by construction.
+                // 3. Middle gap: for different-named variadics, fixed dims in
+                // the gap are absorbed by the other shape's variadic and are
+                // valid by construction. For same-named variadics, we verified
+                // structural equality above so all fixed dims align.
 
                 Ok(())
             }
