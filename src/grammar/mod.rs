@@ -24,7 +24,7 @@ impl NeuroScriptParser {
             NeuroScriptParser::parse(Rule::program, source).map_err(error::from_pest_error)?;
 
         let mut builder = ast::AstBuilder::new();
-        builder.build_program(pairs.into_iter().next().unwrap())
+        builder.build_program(pairs.into_iter().next().expect("pest parse guarantees program rule"))
     }
 }
 

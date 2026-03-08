@@ -560,7 +560,7 @@ pub(super) fn check_port_compatibility(
                     let target_rank = reshape.dims.len();
                     if target_rank >= source_rank {
                         errors.push(ValidationError::InvalidAnnotation {
-                            annotation: format!("{}", reshape.annotation.as_ref().unwrap()),
+                            annotation: format!("{}", reshape.annotation.as_ref().expect("checked by enclosing if-let")),
                             reason: format!(
                                 "@reduce must decrease rank: source has {} dimensions but target has {}",
                                 source_rank, target_rank

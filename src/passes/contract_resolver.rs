@@ -662,7 +662,7 @@ fn resolve_match_in_endpoint(
                                 // Multi-endpoint pipeline: replace match with first endpoint
                                 // and return remaining endpoints for splicing
                                 let mut pipeline_iter = pipeline.into_iter();
-                                *endpoint = pipeline_iter.next().unwrap();
+                                *endpoint = pipeline_iter.next().expect("multi-endpoint pipeline has at least one element");
                                 let remaining: Vec<Endpoint> = pipeline_iter.collect();
                                 return (errors, Some(remaining));
                             }

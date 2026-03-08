@@ -20,6 +20,8 @@ pub enum CodegenError {
     InvalidConnection(String),
     #[error("Unsupported feature: {0}")]
     UnsupportedFeature(String),
+    #[error("Format error: {0}")]
+    FormatError(#[from] std::fmt::Error),
 }
 
 /// Result of shape check generation containing condition and dimension bindings
@@ -224,12 +226,12 @@ impl<'a> CodeGenerator<'a> {
         let mut output = String::new();
 
         // Generate class definition
-        writeln!(output, "class {}(nn.Module):", sanitize_python_ident(&neuron.name)).unwrap();
+        writeln!(output, "class {}(nn.Module):", sanitize_python_ident(&neuron.name))?;
 
         // Generate __init__
         self.generate_init(&mut output, neuron)?;
 
-        writeln!(output).unwrap();
+        writeln!(output)?;
 
         // Generate forward
         self.generate_forward(&mut output, neuron)?;
@@ -262,19 +264,19 @@ impl<'a> CodeGenerator<'a> {
             format!("self, {}", param_strs.join(", "))
         };
 
-        writeln!(output, "    def __init__({}):", params).unwrap();
-        writeln!(output, "        super().__init__()").unwrap();
+        writeln!(output, "    def __init__({}):", params)?;
+        writeln!(output, "        super().__init__()")?;
 
         // Store parameters as instance variables (needed for guards)
         for param in &neuron.params {
             let safe_name = sanitize_python_ident(&param.name);
-            writeln!(output, "        self.{} = {}", safe_name, safe_name).unwrap();
+            writeln!(output, "        self.{} = {}", safe_name, safe_name)?;
         }
 
         match &neuron.body {
             NeuronBody::Primitive(_) => {
                 // Primitives don't instantiate sub-modules
-                writeln!(output, "        pass").unwrap();
+                writeln!(output, "        pass")?;
             }
             NeuronBody::Graph {
                 context_bindings,
@@ -315,7 +317,7 @@ impl<'a> CodeGenerator<'a> {
                 .join(", ")
         };
 
-        writeln!(output, "    def forward(self, {}):", input_params).unwrap();
+        writeln!(output, "    def forward(self, {}):", input_params)?;
 
         // Register all params in var_names with self. prefix so that lazy
         // instantiation can resolve them (e.g., dim → self.dim, layer → self.layer).
@@ -332,7 +334,7 @@ impl<'a> CodeGenerator<'a> {
         match &neuron.body {
             NeuronBody::Primitive(_impl_ref) => {
                 // Primitive neurons just pass through
-                writeln!(output, "        return {}", input_params).unwrap();
+                writeln!(output, "        return {}", input_params)?;
             }
             NeuronBody::Graph { connections, .. } => {
                 forward::generate_forward_body(
@@ -500,11 +502,10 @@ pub fn generate_pytorch_with_options(
             "{} = {}",
             sanitize_python_ident(&global.name),
             dummy_gen.value_to_python(&global.value)
-        )
-        .unwrap();
+        )?;
     }
     if !program.globals.is_empty() {
-        writeln!(globals_output).unwrap();
+        writeln!(globals_output)?;
     }
 
     // Generate code for all dependencies in order
@@ -512,7 +513,8 @@ pub fn generate_pytorch_with_options(
     let mut all_primitives = HashSet::new();
 
     for dep_name in &dependencies {
-        let neuron = program.neurons.get(dep_name).unwrap(); // Safe because we just collected it
+        let neuron = program.neurons.get(dep_name)
+            .expect("dependency was just collected from program"); // Safe: collected above
 
         // Run shape inference for this neuron
         let inference_ctx = run_shape_inference_for_neuron(neuron, program);
@@ -535,32 +537,32 @@ pub fn generate_pytorch_with_options(
     if options.bundle {
         // Bundle mode: emit a unified import block (superset of what all primitive
         // files use) then inline only the class definitions that are needed.
-        writeln!(imports_output, "import math").unwrap();
-        writeln!(imports_output, "from typing import List, Optional, Tuple, Union").unwrap();
-        writeln!(imports_output, "import torch").unwrap();
-        writeln!(imports_output, "import torch.nn as nn").unwrap();
-        writeln!(imports_output, "import torch.nn.functional as F").unwrap();
-        writeln!(imports_output).unwrap();
+        writeln!(imports_output, "import math")?;
+        writeln!(imports_output, "from typing import List, Optional, Tuple, Union")?;
+        writeln!(imports_output, "import torch")?;
+        writeln!(imports_output, "import torch.nn as nn")?;
+        writeln!(imports_output, "import torch.nn.functional as F")?;
+        writeln!(imports_output)?;
 
         // Inline only the needed primitive modules
         let modules = registry.modules_for_primitives(&primitives);
         for module_path in &modules {
             if let Some(source) = embedded_source_for_module(module_path) {
-                writeln!(imports_output, "# --- inlined from {} ---\n", module_path).unwrap();
+                writeln!(imports_output, "# --- inlined from {} ---\n", module_path)?;
                 imports_output.push_str(&strip_preamble(source));
-                writeln!(imports_output).unwrap();
+                writeln!(imports_output)?;
             }
         }
     } else {
         // Normal mode: generate import statements
-        writeln!(imports_output, "import torch").unwrap();
-        writeln!(imports_output, "import torch.nn as nn").unwrap();
+        writeln!(imports_output, "import torch")?;
+        writeln!(imports_output, "import torch.nn as nn")?;
 
         let imports = registry.generate_imports(&primitives);
         for import in imports {
-            writeln!(imports_output, "{}", import).unwrap();
+            writeln!(imports_output, "{}", import)?;
         }
-        writeln!(imports_output).unwrap();
+        writeln!(imports_output)?;
     }
 
     // Combine imports, globals and all neuron code

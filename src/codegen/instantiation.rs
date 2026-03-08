@@ -74,7 +74,7 @@ pub(super) fn generate_module_instantiations(
                 Scope::Instance { lazy: false } => {
                     if args.is_empty() && kwargs.is_empty() {
                         // Pass-through: the param is already an nn.Module instance
-                        writeln!(output, "        self.{} = {}", module_name, name).unwrap();
+                        writeln!(output, "        self.{} = {}", module_name, name)?;
                     } else {
                         // Construct from type: the param is a class reference
                         let (args_str, kwargs_str) = extract_kwargs(args, kwargs);
@@ -83,7 +83,7 @@ pub(super) fn generate_module_instantiations(
                             "        self.{} = {}({}{})",
                             module_name, name, args_str, kwargs_str
                         )
-                        .unwrap();
+                        ?;
                     }
                     gen.var_names
                         .insert(module_name.clone(), format!("self.{}", module_name));
@@ -92,7 +92,7 @@ pub(super) fn generate_module_instantiations(
                 _ => {
                     // Lazy or other scopes: store the param reference as a submodule.
                     // This allows higher-order neurons to forward the passed-in module.
-                    writeln!(output, "        self.{} = {}", module_name, name).unwrap();
+                    writeln!(output, "        self.{} = {}", module_name, name)?;
                     gen.var_names
                         .insert(module_name.clone(), format!("self.{}", module_name));
                     instantiated_count += 1;
@@ -123,11 +123,11 @@ pub(super) fn generate_module_instantiations(
                 })
                 .collect();
 
-            writeln!(output, "        self.{} = nn.Sequential(", module_name).unwrap();
+            writeln!(output, "        self.{} = nn.Sequential(", module_name)?;
             for item in &items {
-                writeln!(output, "            {},", item).unwrap();
+                writeln!(output, "            {},", item)?;
             }
-            writeln!(output, "        )").unwrap();
+            writeln!(output, "        )")?;
 
             // Track primitives used in the sequential
             for arg in args {
@@ -168,13 +168,13 @@ pub(super) fn generate_module_instantiations(
                     "        if not hasattr(self.__class__, '{}'):",
                     module_name
                 )
-                .unwrap();
+                ?;
                 writeln!(
                     output,
                     "            self.__class__.{} = {}({}{})",
                     module_name, name, args_str, kwargs_str
                 )
-                .unwrap();
+                ?;
 
                 gen.var_names.insert(
                     module_name.clone(),
@@ -188,7 +188,7 @@ pub(super) fn generate_module_instantiations(
                     "        self._{} = None  # Lazy instantiation (@lazy)",
                     module_name
                 )
-                .unwrap();
+                ?;
 
                 gen.lazy_bindings.insert(
                     module_name.clone(),
@@ -206,7 +206,7 @@ pub(super) fn generate_module_instantiations(
                     "        self.{} = {}({}{})",
                     module_name, name, args_str, kwargs_str
                 )
-                .unwrap();
+                ?;
 
                 gen.var_names
                     .insert(module_name.clone(), format!("self.{}", module_name));
@@ -253,13 +253,13 @@ pub(super) fn generate_module_instantiations(
                 "        if not hasattr(self.__class__, '{}'):",
                 base_name
             )
-            .unwrap();
+            ?;
             writeln!(
                 output,
                 "            self.__class__.{} = {}({}{})",
                 base_name, call_name, args_str, kwargs_str
             )
-            .unwrap();
+            ?;
 
             // Register the class-level var name for the base binding
             gen.var_names.insert(
@@ -277,14 +277,14 @@ pub(super) fn generate_module_instantiations(
                 "        self.{} = nn.ModuleList([",
                 list_name
             )
-            .unwrap();
+            ?;
             writeln!(
                 output,
                 "            {}({}{}) for _ in range({})",
                 call_name, args_str, kwargs_str, range_expr
             )
-            .unwrap();
-            writeln!(output, "        ])").unwrap();
+            ?;
+            writeln!(output, "        ])")?;
 
             // Register the ModuleList var name
             gen.var_names
@@ -342,7 +342,7 @@ pub(super) fn generate_module_instantiations(
                 "        self._{} = None  # Lazy instantiation (captured)",
                 module_name
             )
-            .unwrap();
+            ?;
 
             gen.lazy_bindings.insert(
                 module_name.clone(),
@@ -369,16 +369,16 @@ pub(super) fn generate_module_instantiations(
             "        self.{} = {}({}{})",
             module_name, name, args_str, kwargs_str
         )
-        .unwrap();
+        ?;
         instantiated_count += 1;
     }
 
     // 4. Collect and instantiate neuron-based transform strategies from Reshape endpoints
     let mut seen_transforms: HashSet<usize> = HashSet::new();
-    collect_reshape_transforms(connections, &mut seen_transforms, gen, output, &mut instantiated_count);
+    collect_reshape_transforms(connections, &mut seen_transforms, gen, output, &mut instantiated_count)?;
 
     if instantiated_count == 0 {
-        writeln!(output, "        pass").unwrap();
+        writeln!(output, "        pass")?;
     }
 
     Ok(())
@@ -391,11 +391,12 @@ fn collect_reshape_transforms(
     gen: &mut CodeGenerator,
     output: &mut String,
     instantiated_count: &mut usize,
-) {
+) -> std::fmt::Result {
     for conn in connections {
-        collect_reshape_transforms_from_endpoint(&conn.source, seen, gen, output, instantiated_count);
-        collect_reshape_transforms_from_endpoint(&conn.destination, seen, gen, output, instantiated_count);
+        collect_reshape_transforms_from_endpoint(&conn.source, seen, gen, output, instantiated_count)?;
+        collect_reshape_transforms_from_endpoint(&conn.destination, seen, gen, output, instantiated_count)?;
     }
+    Ok(())
 }
 
 fn collect_reshape_transforms_from_endpoint(
@@ -404,11 +405,11 @@ fn collect_reshape_transforms_from_endpoint(
     gen: &mut CodeGenerator,
     output: &mut String,
     instantiated_count: &mut usize,
-) {
+) -> std::fmt::Result {
     match endpoint {
         Endpoint::Reshape(reshape) => {
             if seen.contains(&reshape.id) {
-                return;
+                return Ok(());
             }
             if let Some(ref annotation) = reshape.annotation {
                 let strategy = match annotation {
@@ -436,7 +437,7 @@ fn collect_reshape_transforms_from_endpoint(
                         "        self.{} = {}({}{})",
                         module_name, name, args_str, kwargs_str
                     )
-                    .unwrap();
+                    ?;
                     *instantiated_count += 1;
                 }
             }
@@ -444,24 +445,25 @@ fn collect_reshape_transforms_from_endpoint(
         Endpoint::Match(match_expr) => {
             for arm in &match_expr.arms {
                 for ep in &arm.pipeline {
-                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count)?;
                 }
             }
         }
         Endpoint::If(if_expr) => {
             for branch in &if_expr.branches {
                 for ep in &branch.pipeline {
-                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count)?;
                 }
             }
             if let Some(else_branch) = &if_expr.else_branch {
                 for ep in else_branch {
-                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count);
+                    collect_reshape_transforms_from_endpoint(ep, seen, gen, output, instantiated_count)?;
                 }
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 fn extract_kwargs(args: &[Value], kwargs: &[(String, Value)]) -> (String, String) {

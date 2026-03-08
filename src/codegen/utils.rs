@@ -213,7 +213,7 @@ pub(super) fn snake_case_impl(name: &str) -> String {
             if !result.is_empty() && (!prev_upper || next_lower) {
                 result.push('_');
             }
-            result.push(c.to_lowercase().next().unwrap());
+            result.push(c.to_lowercase().next().expect("uppercase char always has lowercase"));
         } else {
             result.push(c);
         }

@@ -170,7 +170,7 @@ fn find_entry_point(program: &Program) -> Option<String> {
     roots.sort();
 
     if !roots.is_empty() {
-        return Some(roots.last().unwrap().clone());
+        return Some(roots.last().expect("checked non-empty above").clone());
     }
 
     program

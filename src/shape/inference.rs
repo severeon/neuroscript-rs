@@ -965,7 +965,7 @@ impl ShapeInferenceEngine {
                     .dims
                     .iter()
                     .position(|d| matches!(d, Dim::Variadic(_)))
-                    .unwrap(),
+                    .expect("has_variadic check guarantees variadic dim exists"),
                 concrete,
                 ctx,
             );

@@ -50,7 +50,7 @@ fn emit_bound_module_shape_comment(
     output: &mut String,
     binding_name: &str,
     indent: &str,
-) {
+) -> std::fmt::Result {
     // Look up the neuron being called via binding_to_call_name
     if let Some(call_name) = gen.binding_to_call_name.get(binding_name).cloned() {
         if let Some(neuron_def) = gen.program.neurons.get(&call_name) {
@@ -64,13 +64,13 @@ fn emit_bound_module_shape_comment(
                         output,
                         "{}# {}() output shape: {}",
                         indent, call_name, shape_comment
-                    )
-                    .unwrap();
+                    )?;
                     gen.last_emitted_shape = Some(shape_comment);
                 }
             }
         }
     }
+    Ok(())
 }
 
 /// Generate lazy instantiation guard code for a module.
@@ -86,7 +86,7 @@ fn emit_lazy_instantiation(
     args: &[Value],
     kwargs: &[Kwarg],
     indent: &str,
-) {
+) -> std::fmt::Result {
     let args_str = args
         .iter()
         .map(|v| value_to_python_with_vars(v, &gen.var_names))
@@ -113,13 +113,13 @@ fn emit_lazy_instantiation(
         }
     };
 
-    writeln!(output, "{}if {} is None:", indent, module_ref).unwrap();
+    writeln!(output, "{}if {} is None:", indent, module_ref)?;
     writeln!(
         output,
         "{}    {} = {}({}{})",
         indent, module_ref, call_name, args_str, kwargs_str
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }
 
 /// Emit a shape comment and optional assertion for a variable at a Ref destination.
@@ -130,10 +130,10 @@ fn emit_shape_comment_and_assertion(
     var_name: &str,
     node_name: &str,
     indent: &str,
-) {
+) -> std::fmt::Result {
     // Skip shape comments for unroll temp refs (they carry wrong shapes)
     if node_name.starts_with("_unroll") {
-        return;
+        return Ok(());
     }
 
     // Try to get the inferred shape for this node
@@ -144,7 +144,7 @@ fn emit_shape_comment_and_assertion(
 
             // Only emit comment if shape changed
             if gen.last_emitted_shape.as_ref() != Some(&shape_comment) {
-                writeln!(output, "{}# Expected shape: {}", indent, shape_comment).unwrap();
+                writeln!(output, "{}# Expected shape: {}", indent, shape_comment)?;
                 gen.last_emitted_shape = Some(shape_comment.clone());
             }
 
@@ -155,11 +155,12 @@ fn emit_shape_comment_and_assertion(
                         output,
                         "{}assert {}.shape == {}, f\"Shape mismatch: expected {}, got {{{}.shape}}\"",
                         indent, var_name, expected_shape, shape_comment, var_name
-                    ).unwrap();
+                    )?;
                 }
             }
         }
     }
+    Ok(())
 }
 
 /// Generate forward method body from connections
@@ -363,7 +364,7 @@ pub(super) fn generate_forward_body(
                                     "{}{} = {}.size({})",
                                     indent, safe_name, source_var, idx
                                 )
-                                .unwrap();
+                                ?;
                             }
                         }
                     }
@@ -415,7 +416,7 @@ pub(super) fn generate_forward_body(
         .cloned()
         .or(last_result)
         .unwrap_or_else(|| "x".to_string());
-    writeln!(output, "        return {}", output_var).unwrap();
+    writeln!(output, "        return {}", output_var)?;
 
     Ok(())
 }
@@ -510,13 +511,13 @@ fn process_ref(
                             "{}for _ in range({}):",
                             indent, range_expr
                         )
-                        .unwrap();
+                        ?;
                         writeln!(
                             output,
                             "{}    {} = self.__class__.{}({})",
                             indent, source_var, base_name, source_var
                         )
-                        .unwrap();
+                        ?;
                     } else {
                         // Instance: iterate over nn.ModuleList
                         writeln!(
@@ -524,13 +525,13 @@ fn process_ref(
                             "{}for {} in self.{}:",
                             indent, base_name, list_name
                         )
-                        .unwrap();
+                        ?;
                         writeln!(
                             output,
                             "{}    {} = {}({})",
                             indent, source_var, base_name, source_var
                         )
-                        .unwrap();
+                        ?;
                     }
 
                     binding_call_results
@@ -560,16 +561,16 @@ fn process_ref(
                         "{}for {} in self.{}:",
                         indent, safe_base, safe_list
                     )
-                    .unwrap();
+                    ?;
                     writeln!(
                         output,
                         "{}    {} = {}({})",
                         indent, source_var, safe_base, source_var
                     )
-                    .unwrap();
+                    ?;
 
                     // Emit shape comment once after the loop
-                    emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
+                    emit_bound_module_shape_comment(gen, output, &port_ref.node, indent)?;
 
                     // The result is the source var (mutated in-place through the loop)
                     binding_call_results
@@ -596,7 +597,7 @@ fn process_ref(
                     &lazy_args,
                     &lazy_kwargs,
                     indent,
-                );
+                )?;
             }
 
             // This is a bound module - generate a call with semantic name
@@ -605,11 +606,10 @@ fn process_ref(
                 output,
                 "{}{} = {}({})",
                 indent, result_var, module_ref, source_var
-            )
-            .unwrap();
+            )?;
 
             // Emit shape comment using the called neuron's output shape
-            emit_bound_module_shape_comment(gen, output, &port_ref.node, indent);
+            emit_bound_module_shape_comment(gen, output, &port_ref.node, indent)?;
 
             // Store the call result separately so the module reference is preserved
             // in var_names for subsequent calls (e.g., @static called N times).
@@ -625,7 +625,7 @@ fn process_ref(
 
     // Emit shape comment/assertion for intermediate nodes
     if port_ref.node != "in" && port_ref.node != "out" {
-        emit_shape_comment_and_assertion(gen, output, &source_var, &port_ref.node, indent);
+        emit_shape_comment_and_assertion(gen, output, &source_var, &port_ref.node, indent)?;
     }
 
     Ok(source_var)
@@ -657,7 +657,7 @@ fn process_tuple(
     if source_output_count == 1 && var_names.len() > 1 {
         // Implicit fork: assign source to each binding individually
         for var_name in &var_names {
-            writeln!(output, "{}{} = {}", indent, var_name, source_var).unwrap();
+            writeln!(output, "{}{} = {}", indent, var_name, source_var)?;
         }
     } else {
         // Multi-output source: standard tuple unpacking
@@ -668,7 +668,7 @@ fn process_tuple(
             var_names.join(", "),
             source_var
         )
-        .unwrap();
+        ?;
     }
     Ok(source_var) // Return tuple as result
 }
@@ -710,7 +710,7 @@ fn process_call(
             &lazy_args,
             &lazy_kwargs,
             indent,
-        );
+        )?;
 
         // Mark as primitive for imports
         if let Some(neuron) = gen.program.neurons.get(call_name.as_str()) {
@@ -727,7 +727,7 @@ fn process_call(
             "{}{} = self._{}({})",
             indent, result_var, module_name, source_var
         )
-        .unwrap();
+        ?;
     } else {
         // Normal call to pre-instantiated module
         writeln!(
@@ -735,7 +735,7 @@ fn process_call(
             "{}{} = self.{}({})",
             indent, result_var, module_name, source_var
         )
-        .unwrap();
+        ?;
     }
 
     // Emit shape comment/assertion for the call result
@@ -752,7 +752,7 @@ fn process_call(
                     "{}# {}() output shape: {}",
                     indent, name, shape_comment
                 )
-                .unwrap();
+                ?;
                 gen.last_emitted_shape = Some(shape_comment.clone());
             }
 
@@ -762,7 +762,7 @@ fn process_call(
                         output,
                         "{}assert {}.shape == {}, f\"{}() shape mismatch: expected {}, got {{{}.shape}}\"",
                         indent, result_var, expected_shape, name, shape_comment, result_var
-                    ).unwrap();
+                    )?;
                 }
             }
         }
@@ -791,7 +791,7 @@ fn process_match(
     let result_var = make_var_name(used_var_names, "match_out");
 
     // Initialize result_var to None for safety (though not strictly needed if all paths return)
-    writeln!(output, "{}{} = None", indent, result_var).unwrap();
+    writeln!(output, "{}{} = None", indent, result_var)?;
 
     let mut first = true;
     let mut prev_condition = String::new();
@@ -840,9 +840,9 @@ fn process_match(
 
         // Only output condition if it's not "else"
         if prefix == "else" {
-            writeln!(output, "{}{}:", indent, prefix).unwrap();
+            writeln!(output, "{}{}:", indent, prefix)?;
         } else {
-            writeln!(output, "{}{} {}:", indent, prefix, shape_check.condition).unwrap();
+            writeln!(output, "{}{} {}:", indent, prefix, shape_check.condition)?;
             prev_condition = shape_check.condition.clone();
         }
 
@@ -852,12 +852,12 @@ fn process_match(
 
         // Emit dimension bindings before processing pipeline
         for binding in &shape_check.bindings {
-            writeln!(output, "{}{}", arm_indent, binding).unwrap();
+            writeln!(output, "{}{}", arm_indent, binding)?;
         }
 
         // If guard uses captured dimensions, check it after binding
         let pipeline_indent = if let Some(guard_cond) = &shape_check.guard_condition {
-            writeln!(output, "{}if {}:", arm_indent, guard_cond).unwrap();
+            writeln!(output, "{}if {}:", arm_indent, guard_cond)?;
             format!("{}    ", arm_indent)
         } else {
             arm_indent.clone()
@@ -913,7 +913,7 @@ fn process_match(
             "{}{} = {}",
             pipeline_indent, result_var, current_var
         )
-        .unwrap();
+        ?;
 
         // Restore var_names to prevent match arm scope from leaking
         gen.var_names = saved_var_names;
@@ -921,13 +921,13 @@ fn process_match(
 
     // Else clause: only raise if no reachable catch-all exists
     if !has_reachable_catchall {
-        writeln!(output, "{}else:", indent).unwrap();
+        writeln!(output, "{}else:", indent)?;
         writeln!(
             output,
             "{}    raise ValueError(f'No match found for shape {{ {}.shape }}')",
             indent, source_var
         )
-        .unwrap();
+        ?;
     }
 
     Ok(result_var)
@@ -1013,7 +1013,7 @@ fn process_if(
     let result_var = make_var_name(used_var_names, "cond_out");
 
     // Initialize result variable to None
-    writeln!(output, "{}{} = None", indent, result_var).unwrap();
+    writeln!(output, "{}{} = None", indent, result_var)?;
 
     // Handle branches
     for (i, branch) in if_expr.branches.iter().enumerate() {
@@ -1021,7 +1021,7 @@ fn process_if(
         // Ensure self.param is used in conditions
         let cond_str = gen.value_to_python_dim(&branch.condition);
 
-        writeln!(output, "{}{} {}:", indent, prefix, cond_str).unwrap();
+        writeln!(output, "{}{} {}:", indent, prefix, cond_str)?;
         let branch_indent = format!("{}    ", indent);
 
         // Process pipeline
@@ -1032,13 +1032,13 @@ fn process_if(
             binding_call_results, emitted_unroll_groups,
         )?;
 
-        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var)?;
         gen.var_names = saved_var_names;
     }
 
     // Else branch
     if let Some(else_branch) = &if_expr.else_branch {
-        writeln!(output, "{}else:", indent).unwrap();
+        writeln!(output, "{}else:", indent)?;
         let branch_indent = format!("{}    ", indent);
         let saved_var_names = gen.var_names.clone();
         let current_var = process_branch_pipeline(
@@ -1046,12 +1046,12 @@ fn process_if(
             used_var_names, call_to_result, match_to_result, if_to_result,
             binding_call_results, emitted_unroll_groups,
         )?;
-        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var).unwrap();
+        writeln!(output, "{}{} = {}", branch_indent, result_var, current_var)?;
         gen.var_names = saved_var_names;
     } else {
         // Implicit else: pass-through/Identity
-        writeln!(output, "{}else:", indent).unwrap();
-        writeln!(output, "{}    {} = {}", indent, result_var, source_var).unwrap();
+        writeln!(output, "{}else:", indent)?;
+        writeln!(output, "{}    {} = {}", indent, result_var, source_var)?;
     }
 
     Ok(result_var)
@@ -1079,7 +1079,7 @@ fn process_reshape(
     for dim in &reshape.dims {
         if let ReshapeDim::Binding { name, expr } = dim {
             let expr_str = gen.value_to_python_dim(expr);
-            writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str).unwrap();
+            writeln!(output, "{}{} = {}", indent, sanitize_python_ident(name), expr_str)?;
         }
     }
 
@@ -1123,7 +1123,7 @@ fn process_reshape_bare(
         "{}{} = {}.reshape({})",
         indent, result_var, source_var, shape_args
     )
-    .unwrap();
+    ?;
     Ok(())
 }
 
@@ -1214,7 +1214,7 @@ fn process_reshape_reduce(
                     "{}{} = {}.{}(dim={})",
                     indent, result_var, source_var, method, reduce_dims[0]
                 )
-                .unwrap();
+                ?;
             } else {
                 let dims_str = reduce_dims
                     .iter()
@@ -1226,7 +1226,7 @@ fn process_reshape_reduce(
                     "{}{} = {}.{}(dim=({}))",
                     indent, result_var, source_var, method, dims_str
                 )
-                .unwrap();
+                ?;
             }
         }
         TransformStrategy::Neuron { .. } => {
@@ -1236,7 +1236,7 @@ fn process_reshape_reduce(
                 "{}{} = {}({})",
                 indent, result_var, module_name, source_var
             )
-            .unwrap();
+            ?;
         }
     }
     Ok(())
@@ -1318,7 +1318,7 @@ fn process_reshape_repeat(
                     current,
                     idx + offset // Account for previous unsqueezes shifting indices
                 )
-                .unwrap();
+                ?;
                 current = unsqueezed;
             }
 
@@ -1335,7 +1335,7 @@ fn process_reshape_repeat(
                 "{}{} = {}.expand({})",
                 indent, result_var, current, shape_args
             )
-            .unwrap();
+            ?;
         }
         TransformStrategy::Neuron { .. } => {
             let module_name = format!("self._transform_{}", reshape.id);
@@ -1344,7 +1344,7 @@ fn process_reshape_repeat(
                 "{}{} = {}({})",
                 indent, result_var, module_name, source_var
             )
-            .unwrap();
+            ?;
         }
         _ => {
             // Validator rejects unknown intrinsics, so this is unreachable
