@@ -669,6 +669,7 @@ pub(super) fn check_port_compatibility(
 }
 
 /// Extract node name from endpoint for error messages
+// TODO: refactor to use EndpointVisitor (#126) — single-level match, low priority
 pub(super) fn extract_node_name(endpoint: &Endpoint) -> String {
     match endpoint {
         Endpoint::Call { name, .. } => name.clone(),
