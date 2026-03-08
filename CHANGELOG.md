@@ -5,15 +5,25 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.1] - 2026-03-07
+
+### Added
+
+- GitHub Issues-centric sprint workflow with planner/implementer agent definitions
+- `draft-pr-guard.yml` GitHub Actions workflow to block merging draft PRs
+- `CONTRIBUTING.md` guide for external contributors
+- `LICENSE` (MIT)
+- `.github/FUNDING.yml` for sponsorship
 
 ### Changed
 
-- CONTRIBUTING.md now clarifies that CLAUDE.md doubles as AI assistant configuration alongside architecture documentation
+- README rewritten for public audience with badges, quick-start, and feature overview (#140)
+- CONTRIBUTING.md clarifies that CLAUDE.md doubles as AI assistant configuration
+- Retired `backlog-worker.md` agent in favor of `planner.md` + `implementer.md`
 
 ### Fixed
 
-- Verified Cargo.lock is in sync with Cargo.toml version (0.6.0)
+- Verified Cargo.lock is in sync with Cargo.toml version
 
 ## [0.6.0] - 2026-03-07
 
