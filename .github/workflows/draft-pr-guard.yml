@@ -11,10 +11,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Revert to draft if not human maintainer
+        # To add a maintainer: add another condition to the 'if' above
         if: github.actor != 'severeon'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          echo "Actor '${{ github.actor }}' is not authorized to convert drafts to ready."
-          echo "Reverting PR #${{ github.event.pull_request.number }} to draft."
-          gh pr ready --undo ${{ github.event.pull_request.number }} -R ${{ github.repository }}
+          echo "Actor '${GITHUB_ACTOR}' is not authorized to convert drafts to ready."
+          echo "Reverting PR #${PR_NUMBER} to draft."
+          gh pr ready --undo "${PR_NUMBER}" -R "${REPO}" \
+            || { echo "::error::Failed to revert PR to draft!"; exit 1; }
