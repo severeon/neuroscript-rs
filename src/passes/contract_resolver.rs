@@ -1035,17 +1035,11 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "ho".to_string(),
-                        call_name: "HigherOrder".to_string(),
-                        args: vec![Value::Name("ConcreteBlock".to_string())],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    context_bindings: vec![Binding::new(
+                        "ho",
+                        "HigherOrder",
+                        vec![Value::Name("ConcreteBlock".to_string())],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },
@@ -1135,17 +1129,11 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "ms".to_string(),
-                        call_name: "MultiStep".to_string(),
-                        args: vec![Value::Name("Block2D".to_string())],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    context_bindings: vec![Binding::new(
+                        "ms",
+                        "MultiStep",
+                        vec![Value::Name("Block2D".to_string())],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },
@@ -1282,17 +1270,11 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "ts".to_string(),
-                        call_name: "ThreeStep".to_string(),
-                        args: vec![Value::Name("Block3D".to_string())],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    context_bindings: vec![Binding::new(
+                        "ts",
+                        "ThreeStep",
+                        vec![Value::Name("Block3D".to_string())],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },
@@ -1398,17 +1380,11 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "w".to_string(),
-                        call_name: "Wrapper".to_string(),
-                        args: vec![Value::Name("Block2D".to_string())],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    context_bindings: vec![Binding::new(
+                        "w",
+                        "Wrapper",
+                        vec![Value::Name("Block2D".to_string())],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },
@@ -1519,20 +1495,14 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "c".to_string(),
-                        call_name: "Conditional".to_string(),
-                        args: vec![
+                    context_bindings: vec![Binding::new(
+                        "c",
+                        "Conditional",
+                        vec![
                             Value::Name("Block2D".to_string()),
                             Value::Int(1),
                         ],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },
@@ -1709,17 +1679,11 @@ mod tests {
                 inputs: vec![],
                 outputs: vec![],
                 body: NeuronBody::Graph {
-                    context_bindings: vec![Binding {
-                        name: "s".to_string(),
-                        call_name: "Stack".to_string(),
-                        args: vec![Value::Name("TransformerBlock".to_string())],
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    }],
+                    context_bindings: vec![Binding::new(
+                        "s",
+                        "Stack",
+                        vec![Value::Name("TransformerBlock".to_string())],
+                    )],
                     context_unrolls: vec![],
                     connections: vec![],
                 },

@@ -1282,17 +1282,11 @@ fn test_lazy_binding_cross_referencing_context_bindings() {
         doc: None,
         body: NeuronBody::Graph {
             context_bindings: vec![
-                Binding {
-                    name: "proj".to_string(),
-                    call_name: "Linear".to_string(),
-                    args: vec![Value::Name("dim".to_string()), Value::Name("dim".to_string())],
-                    kwargs: vec![],
-                    scope: Scope::Instance { lazy: false },
-                    frozen: false,
-                    unroll_group: None,
-
-                    span: None,
-                },
+                Binding::new(
+                    "proj",
+                    "Linear",
+                    vec![Value::Name("dim".to_string()), Value::Name("dim".to_string())],
+                ),
                 Binding {
                     name: "adapter".to_string(),
                     call_name: "Linear".to_string(),

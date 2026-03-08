@@ -53,17 +53,7 @@ fn lazy_binding_with_kwargs(
 }
 
 fn eager_binding(name: &str, call_name: &str, args: Vec<Value>) -> Binding {
-    Binding {
-        name: name.to_string(),
-        call_name: call_name.to_string(),
-        args,
-        kwargs: vec![],
-        scope: Scope::Instance { lazy: false },
-        frozen: false,
-        unroll_group: None,
-
-        span: None,
-    }
+    Binding::new(name, call_name, args)
 }
 
 fn is_mutual_recursion(e: &ValidationError) -> bool {

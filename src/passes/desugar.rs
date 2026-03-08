@@ -201,17 +201,11 @@ fn desugar_endpoint_wraps(
                         )));
                     }
 
-                    new_bindings.push(Binding {
-                        name: anon_name.clone(),
-                        call_name: crate::interfaces::SEQUENTIAL_PSEUDO_NEURON.to_string(),
-                        args: seq_args,
-                        kwargs: vec![],
-                        scope: Scope::Instance { lazy: false },
-                        frozen: false,
-                        unroll_group: None,
-
-                        span: None,
-                    });
+                    new_bindings.push(Binding::new(
+                        anon_name.clone(),
+                        crate::interfaces::SEQUENTIAL_PSEUDO_NEURON,
+                        seq_args,
+                    ));
 
                     // Rewrite the endpoint to a Call to the wrapper
                     let mut call_args = vec![Value::Name(anon_name)];
@@ -332,17 +326,11 @@ mod tests {
             max_cycle_depth: None,
             doc: None,
             body: NeuronBody::Graph {
-                context_bindings: vec![Binding {
-                    name: "attn".to_string(),
-                    call_name: "MultiHeadSelfAttention".to_string(),
-                    args: vec![Value::Name("dim".to_string()), Value::Int(8)],
-                    kwargs: vec![],
-                    scope: Scope::Instance { lazy: false },
-                    frozen: false,
-                    unroll_group: None,
-
-                    span: None,
-                }],
+                context_bindings: vec![Binding::new(
+                    "attn",
+                    "MultiHeadSelfAttention",
+                    vec![Value::Name("dim".to_string()), Value::Int(8)],
+                )],
                 context_unrolls: vec![],
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
@@ -552,17 +540,11 @@ mod tests {
             max_cycle_depth: None,
             doc: None,
             body: NeuronBody::Graph {
-                context_bindings: vec![Binding {
-                    name: "attn".to_string(),
-                    call_name: "MultiHeadSelfAttention".to_string(),
-                    args: vec![Value::Name("dim".to_string()), Value::Int(8)],
-                    kwargs: vec![],
-                    scope: Scope::Instance { lazy: false },
-                    frozen: false,
-                    unroll_group: None,
-
-                    span: None,
-                }],
+                context_bindings: vec![Binding::new(
+                    "attn",
+                    "MultiHeadSelfAttention",
+                    vec![Value::Name("dim".to_string()), Value::Int(8)],
+                )],
                 context_unrolls: vec![],
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),
@@ -638,17 +620,11 @@ mod tests {
             max_cycle_depth: None,
             doc: None,
             body: NeuronBody::Graph {
-                context_bindings: vec![Binding {
-                    name: "layer".to_string(),
-                    call_name: "Linear".to_string(),
-                    args: vec![Value::Int(10), Value::Int(10)],
-                    kwargs: vec![],
-                    scope: Scope::Instance { lazy: false },
-                    frozen: false,
-                    unroll_group: None,
-
-                    span: None,
-                }],
+                context_bindings: vec![Binding::new(
+                    "layer",
+                    "Linear",
+                    vec![Value::Int(10), Value::Int(10)],
+                )],
                 context_unrolls: vec![],
                 connections: vec![Connection {
                     source: Endpoint::Ref(PortRef::new("in")),

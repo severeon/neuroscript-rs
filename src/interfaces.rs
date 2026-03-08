@@ -471,6 +471,35 @@ pub struct Binding {
     pub span: Option<SourceSpan>,
 }
 
+impl Binding {
+    /// Create a new binding with default kwargs, scope, frozen, unroll_group, and span.
+    ///
+    /// Equivalent to:
+    /// ```ignore
+    /// Binding {
+    ///     name, call_name, args,
+    ///     kwargs: vec![], scope: Scope::Instance { lazy: false },
+    ///     frozen: false, unroll_group: None, span: None,
+    /// }
+    /// ```
+    pub fn new(
+        name: impl Into<String>,
+        call_name: impl Into<String>,
+        args: Vec<Value>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            call_name: call_name.into(),
+            args,
+            kwargs: vec![],
+            scope: Scope::Instance { lazy: false },
+            frozen: false,
+            unroll_group: None,
+            span: None,
+        }
+    }
+}
+
 /// A module-level global definition: @global name = Value
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalBinding {
