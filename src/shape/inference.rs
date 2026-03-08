@@ -1222,11 +1222,26 @@ impl ShapeInferenceEngine {
         Shape::new(new_dims)
     }
 
-    /// Check if two shapes are compatible (can be unified)
+    /// Check if two shapes are compatible (can be unified).
+    ///
+    /// The two shapes are treated as coming from independent scopes: named
+    /// dimensions and variadics in `s2` are alpha-renamed so that coincidental
+    /// name collisions (e.g., both shapes using `*shape`) don't trigger the
+    /// same-name structural equality check in `unify_shapes_with_variadic`.
     pub(crate) fn shapes_compatible(&self, s1: &Shape, s2: &Shape) -> bool {
-        // Create a temporary context for testing
+        // Alpha-rename s2's named/variadic dims to avoid false same-name constraints.
+        let s2_renamed = Shape::new(
+            s2.dims
+                .iter()
+                .map(|d| match d {
+                    Dim::Named(n) => Dim::Named(format!("__compat_{}", n)),
+                    Dim::Variadic(n) => Dim::Variadic(format!("__compat_{}", n)),
+                    other => other.clone(),
+                })
+                .collect(),
+        );
         let mut test_ctx = InferenceContext::new();
-        self.unify_shapes(s1, s2, &mut test_ctx).is_ok()
+        self.unify_shapes(s1, &s2_renamed, &mut test_ctx).is_ok()
     }
 
     fn format_endpoint(&self, ep: &Endpoint) -> String {
