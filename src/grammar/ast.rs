@@ -1615,7 +1615,61 @@ impl AstBuilder {
         debug_assert_eq!(pair.as_rule(), Rule::value);
 
         let inner = pair.into_inner().next().unwrap();
-        self.build_value_comparison(inner)
+        self.build_logical_or(inner)
+    }
+
+    /// Build a logical OR expression (lowest precedence among logical ops)
+    fn build_logical_or(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::value_logical_or);
+
+        let mut inner: Vec<_> = pair.into_inner().collect();
+
+        if inner.len() == 1 {
+            return self.build_logical_and(inner.remove(0));
+        }
+
+        // Build left-associative binary ops
+        let mut result = self.build_logical_and(inner.remove(0))?;
+
+        while inner.len() >= 2 {
+            // Skip the or_op token
+            inner.remove(0);
+            let right = self.build_logical_and(inner.remove(0))?;
+            result = Value::BinOp {
+                op: BinOp::Or,
+                left: Box::new(result),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(result)
+    }
+
+    /// Build a logical AND expression
+    fn build_logical_and(&mut self, pair: Pair<Rule>) -> Result<Value, ParseError> {
+        debug_assert_eq!(pair.as_rule(), Rule::value_logical_and);
+
+        let mut inner: Vec<_> = pair.into_inner().collect();
+
+        if inner.len() == 1 {
+            return self.build_value_comparison(inner.remove(0));
+        }
+
+        // Build left-associative binary ops
+        let mut result = self.build_value_comparison(inner.remove(0))?;
+
+        while inner.len() >= 2 {
+            // Skip the and_op token
+            inner.remove(0);
+            let right = self.build_value_comparison(inner.remove(0))?;
+            result = Value::BinOp {
+                op: BinOp::And,
+                left: Box::new(result),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(result)
     }
 
     /// Build a comparison expression

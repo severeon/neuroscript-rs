@@ -83,6 +83,8 @@ pub(super) fn binop_to_str(op: &BinOp, int_div: bool) -> &'static str {
         BinOp::Ge => ">=",
         BinOp::Eq => "==",
         BinOp::Ne => "!=",
+        BinOp::And => "and",
+        BinOp::Or => "or",
     }
 }
 

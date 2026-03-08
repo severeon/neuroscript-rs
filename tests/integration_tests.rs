@@ -217,6 +217,8 @@ fn format_binop(op: &BinOp) -> &str {
         BinOp::Ge => ">=",
         BinOp::Eq => "==",
         BinOp::Ne => "!=",
+        BinOp::And => "&&",
+        BinOp::Or => "||",
     }
 }
 

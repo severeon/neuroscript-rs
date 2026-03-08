@@ -99,6 +99,8 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+    And,
+    Or,
 }
 
 /// A tensor shape: [batch, seq, dim] or [*, 512] or []
@@ -951,6 +953,8 @@ impl std::fmt::Display for BinOp {
             BinOp::Ge => write!(f, ">="),
             BinOp::Eq => write!(f, "=="),
             BinOp::Ne => write!(f, "!="),
+            BinOp::And => write!(f, "&&"),
+            BinOp::Or => write!(f, "||"),
         }
     }
 }

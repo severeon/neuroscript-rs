@@ -49,19 +49,17 @@ neuron MultiScaleProcessor:
             [*, *, d] where d >= 512:
                 Linear(d, 768) -> GELU() -> Linear(768, 512) -> out
 
-# Example 5: Conditional residual connections
-neuron ConditionalResidual(target_dim):
+# Example 5: Conditional projection based on target
+neuron ConditionalProjection(target_dim):
     in: [*, dim]
     out: [*, target_dim]
     graph:
         in -> match: ->
-            # Dimension matches: use residual
+            # Dimension matches target: simple expansion and compression
             [*, d] where d == target_dim:
-                (main, skip)
-                main -> Linear(d, d * 4) -> GELU() -> Linear(d * 4, d) -> processed
-                (processed, skip) -> Add() -> out
+                Linear(d, d * 4) -> GELU() -> Linear(d * 4, target_dim) -> out
 
-            # Dimension mismatch: project without residual
+            # Dimension mismatch: direct projection
             [*, d]:
                 Linear(d, target_dim) -> out
 
