@@ -242,6 +242,10 @@ def sinkhorn_knopp(log_alpha: torch.Tensor, iters: int = 20) -> torch.Tensor:
         Doubly stochastic matrix [*, n, n] where rows and columns sum to 1.
     """
     # Eq. 9: M^(0) = exp(raw) — ensures all entries are positive
+    # Always compute in fp32: exp() overflows fp16 (max ~65504) and the
+    # matrices are small (n x n) so the memory cost is negligible.
+    orig_dtype = log_alpha.dtype
+    log_alpha = log_alpha.float()
     M = torch.exp(log_alpha)
 
     for _ in range(iters):
@@ -250,7 +254,7 @@ def sinkhorn_knopp(log_alpha: torch.Tensor, iters: int = 20) -> torch.Tensor:
         # Column normalization: T_c
         M = M / (M.sum(dim=-2, keepdim=True) + 1e-8)
 
-    return M
+    return M.to(orig_dtype)
 
 
 class ManifoldHyperConnect(nn.Module):
@@ -356,6 +360,9 @@ class ManifoldHyperConnect(nn.Module):
     def _compute_mappings(self, x_flat: torch.Tensor):
         """Compute H_pre, H_post, H_res from flattened input (Eq. 7-8).
 
+        All computation stays in the input dtype (fp16) for speed/memory.
+        Only Sinkhorn-Knopp internally upcasts to fp32 (tiny n×n matrices).
+
         Args:
             x_flat: [batch, seq, n*dim] flattened n-stream input
 
@@ -364,30 +371,45 @@ class ManifoldHyperConnect(nn.Module):
             H_post: [batch, seq, n] — distribution weights (non-negative)
             H_res:  [batch, seq, n, n] — doubly stochastic mixing matrix
         """
-        # Eq. 7: normalize input
-        x_norm = self.rms_norm(x_flat)
+        dtype = x_flat.dtype
+
+        # Eq. 7: normalize input (cast RMSNorm weight to match input dtype)
+        x_norm = torch.nn.functional.rms_norm(
+            x_flat, (x_flat.shape[-1],),
+            weight=self.rms_norm.weight.to(dtype),
+            eps=self.rms_norm.eps if hasattr(self.rms_norm, 'eps') else 1e-6,
+        )
 
         if self.dynamic:
             # Dynamic part: input-dependent projections
-            raw_pre = self.alpha_pre * (x_norm @ self.phi_pre.weight.T) + self.b_pre
-            raw_post = self.alpha_post * (x_norm @ self.phi_post.weight.T) + self.b_post
-            raw_res_flat = self.alpha_res * (x_norm @ self.phi_res.weight.T)
-            raw_res = raw_res_flat.view(*x_flat.shape[:-1], self.n, self.n) + self.b_res
+            # Cast small weight matrices to input dtype instead of upcasting activations
+            w_pre = self.phi_pre.weight.to(dtype)
+            w_post = self.phi_post.weight.to(dtype)
+            w_res = self.phi_res.weight.to(dtype)
+
+            raw_pre = self.alpha_pre.to(dtype) * (x_norm @ w_pre.T) + self.b_pre.to(dtype)
+            raw_post = self.alpha_post.to(dtype) * (x_norm @ w_post.T) + self.b_post.to(dtype)
+            raw_res_flat = self.alpha_res.to(dtype) * (x_norm @ w_res.T)
+            raw_res = raw_res_flat.view(*x_flat.shape[:-1], self.n, self.n) + self.b_res.to(dtype)
         else:
             # Static: just bias terms scaled by alpha
-            raw_pre = self.alpha_pre * self.phi_pre + self.b_pre
-            raw_post = self.alpha_post * self.phi_post + self.b_post
-            raw_res = self.alpha_res * self.phi_res + self.b_res
+            raw_pre = self.alpha_pre.to(dtype) * self.phi_pre.to(dtype) + self.b_pre.to(dtype)
+            raw_post = self.alpha_post.to(dtype) * self.phi_post.to(dtype) + self.b_post.to(dtype)
+            raw_res = self.alpha_res.to(dtype) * self.phi_res.to(dtype) + self.b_res.to(dtype)
 
         # Eq. 8: apply manifold constraints
         H_pre = torch.sigmoid(raw_pre)          # non-negative
         H_post = 2.0 * torch.sigmoid(raw_post)  # non-negative, scaled by 2
-        H_res = sinkhorn_knopp(raw_res, self.sinkhorn_iters)  # doubly stochastic
+        # sinkhorn_knopp internally uses fp32 for exp() stability, returns input dtype
+        H_res = sinkhorn_knopp(raw_res, self.sinkhorn_iters)
 
         return H_pre, H_post, H_res
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass with manifold-constrained hyper-connections.
+
+        All computation stays in the input's dtype (typically fp16) for speed
+        and memory efficiency. Only Sinkhorn's exp() upcasts internally.
 
         Args:
             x: [batch, seq, n, dim] — n-stream residual input
@@ -402,7 +424,7 @@ class ManifoldHyperConnect(nn.Module):
         # Flatten n streams: [batch, seq, n, dim] -> [batch, seq, n*dim]
         x_flat = x.reshape(batch, seq, n * dim)
 
-        # Compute constrained mappings
+        # Compute constrained mappings (stays in x.dtype, no upcast)
         H_pre, H_post, H_res = self._compute_mappings(x_flat)
 
         # --- H_pre: aggregate n streams into layer input ---

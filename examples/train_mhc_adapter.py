@@ -87,7 +87,7 @@ class TrainConfig:
     method: str = "mhc"  # "mhc" or "lora"
 
     # mHC-specific
-    mhc_n: int = 4              # expansion factor (paper default)
+    mhc_n: int = 2              # expansion factor (2 for large models, 4 for small)
     mhc_alpha_init: float = 0.01  # gating initialization (paper default)
     mhc_sinkhorn_iters: int = 20  # Sinkhorn iterations (paper default)
 
@@ -102,7 +102,7 @@ class TrainConfig:
     # Dataset
     dataset_name: str = "HuggingFaceTB/smoltalk"
     dataset_config: str = "all"
-    max_seq_length: int = 2048   # shorter than SmolLM2's 8192 to fit MPS memory
+    max_seq_length: int = 512    # short for MPS memory; increase for GPU
     dataset_num_proc: int = 8
 
     # Training — based on SmolLM2 SFT config + QLoRA best practices
@@ -147,15 +147,68 @@ class TrainConfig:
 # mHC Model Wrapper
 # =============================================================================
 
+class Phi3AttnSublayer(nn.Module):
+    """Thin wrapper making Phi-3 attention callable as f(hidden) -> hidden.
+
+    ManifoldHyperConnect expects sublayer(x) -> y with shape [batch, seq, dim].
+    Phi-3's self_attn needs position_embeddings (cos/sin from rotary) and a
+    causal attention mask. This wrapper handles that translation so mHC stays
+    model-agnostic.
+    """
+
+    def __init__(self, layer, rotary_emb):
+        super().__init__()
+        self.layernorm = layer.input_layernorm
+        self.self_attn = layer.self_attn
+        self.rotary_emb = rotary_emb  # shared rotary embedding from base model
+
+    def forward(self, x):
+        normed = self.layernorm(x)
+        seq_len = x.shape[1]
+
+        # Rotary position embeddings
+        pos_ids = torch.arange(seq_len, device=x.device).unsqueeze(0)
+        cos, sin = self.rotary_emb(x, pos_ids)
+
+        # Causal attention mask
+        causal_mask = torch.triu(
+            torch.full((seq_len, seq_len), float('-inf'), device=x.device, dtype=x.dtype),
+            diagonal=1,
+        ).unsqueeze(0).unsqueeze(0)  # [1, 1, seq, seq]
+
+        attn_out = self.self_attn(
+            normed, attention_mask=causal_mask, position_embeddings=(cos, sin)
+        )[0]  # first element is hidden_states, rest is attn_weights/cache
+        # NO residual here — mHC handles residual via H_res mixing
+        return attn_out
+
+
+class Phi3MLPSublayer(nn.Module):
+    """Thin wrapper making Phi-3 MLP callable as f(hidden) -> hidden."""
+
+    def __init__(self, layer):
+        super().__init__()
+        self.layernorm = layer.post_attention_layernorm
+        self.mlp = layer.mlp
+
+    def forward(self, x):
+        normed = self.layernorm(x)
+        # NO residual here — mHC handles residual via H_res mixing
+        return self.mlp(normed)
+
+
 class MHCAdaptedModel(nn.Module):
     """Wraps a frozen HuggingFace model with mHC adapters on every sublayer.
 
     Architecture:
       For each transformer layer:
-        - Wrap self_attn with ManifoldHyperConnect
-        - Wrap MLP with ManifoldHyperConnect
+        - Wrap (norm + self_attn + residual) with ManifoldHyperConnect
+        - Wrap (norm + MLP + residual) with ManifoldHyperConnect
         - Add HyperExpand before the first mHC layer
         - Add HyperCollapse after the last mHC layer
+
+    The sublayer wrappers (Phi3AttnSublayer, Phi3MLPSublayer) encapsulate
+    the model-specific calling convention so mHC stays model-agnostic.
 
     Only mHC parameters are trainable. The base model stays frozen.
     """
@@ -169,6 +222,10 @@ class MHCAdaptedModel(nn.Module):
         # Freeze all base model parameters
         for param in self.base_model.parameters():
             param.requires_grad = False
+
+        # Note: gradient checkpointing on the base model is intentionally
+        # disabled — it conflicts with our custom forward that calls sublayers
+        # directly. Memory is managed via n=2, short seq_length, and fp16.
 
         # Get model dimensions from config
         model_config = base_model.config
@@ -184,7 +241,7 @@ class MHCAdaptedModel(nn.Module):
 
             self.attn_mhc.append(
                 ManifoldHyperConnect(
-                    sublayer=layer.self_attn,
+                    sublayer=Phi3AttnSublayer(layer, base_model.model.rotary_emb),
                     n=self.n,
                     dim=self.hidden_size,
                     layer_idx=i,
@@ -194,7 +251,7 @@ class MHCAdaptedModel(nn.Module):
             )
             self.mlp_mhc.append(
                 ManifoldHyperConnect(
-                    sublayer=layer.mlp,
+                    sublayer=Phi3MLPSublayer(layer),
                     n=self.n,
                     dim=self.hidden_size,
                     layer_idx=i,
@@ -202,6 +259,8 @@ class MHCAdaptedModel(nn.Module):
                     sinkhorn_iters=config.mhc_sinkhorn_iters,
                 )
             )
+            if (i + 1) % 8 == 0 or i == self.num_layers - 1:
+                print(f"    Wrapped layer {i+1}/{self.num_layers}", flush=True)
 
         # Stream expansion/collapse
         self.expand = HyperExpand(self.n)
@@ -217,31 +276,16 @@ class MHCAdaptedModel(nn.Module):
         # Embedding
         inputs_embeds = self.base_model.model.embed_tokens(input_ids)
 
-        # Expand to n-wide stream
-        hidden = self.expand(inputs_embeds)  # [batch, seq, n, dim]
+        # Expand to n-wide stream: [batch, seq, dim] -> [batch, seq, n, dim]
+        hidden = self.expand(inputs_embeds)
 
         # Process through mHC-wrapped layers
         for i in range(self.num_layers):
-            layer = self.base_model.model.layers[i]
+            hidden = self.attn_mhc[i](hidden)  # mHC-wrapped attention
+            hidden = self.mlp_mhc[i](hidden)   # mHC-wrapped MLP
 
-            # Pre-norm + mHC-wrapped attention
-            normed = layer.input_layernorm(
-                hidden.select(-2, 0)  # collapse for norm (use primary stream)
-            )
-            # Expand normed back for mHC
-            normed_expanded = normed.unsqueeze(-2).expand_as(hidden)
-            attn_input = hidden.clone()
-            attn_input[..., 0, :] = normed  # inject normed into primary stream
-            hidden = self.attn_mhc[i](hidden)
-
-            # Post-norm + mHC-wrapped MLP
-            normed = layer.post_attention_layernorm(
-                hidden.select(-2, 0)
-            )
-            hidden = self.mlp_mhc[i](hidden)
-
-        # Collapse back to single stream
-        hidden = self.collapse(hidden)  # [batch, seq, dim]
+        # Collapse back to single stream: [batch, seq, n, dim] -> [batch, seq, dim]
+        hidden = self.collapse(hidden)
 
         # Final norm + LM head
         hidden = self.base_model.model.norm(hidden)
@@ -260,14 +304,23 @@ class MHCAdaptedModel(nn.Module):
         return {"loss": loss, "logits": logits}
 
     def trainable_params_summary(self):
-        """Report trainable vs frozen parameter counts."""
-        total = sum(p.numel() for p in self.parameters())
-        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        frozen = total - trainable
+        """Report trainable vs frozen parameter counts.
+
+        Uses base_model.num_parameters() to avoid slow iteration over 3.8B params.
+        """
+        base_total = sum(p.numel() for p in self.base_model.parameters())
+        # Only count mHC adapter params by iterating the small adapter modules
+        trainable = 0
+        for module_list in [self.attn_mhc, self.mlp_mhc]:
+            for mhc in module_list:
+                for name, p in mhc.named_parameters():
+                    if 'sublayer' not in name:  # skip frozen sublayer refs
+                        trainable += p.numel()
+        total = base_total + trainable
         return {
             "total": total,
             "trainable": trainable,
-            "frozen": frozen,
+            "frozen": base_total,
             "trainable_pct": 100 * trainable / total,
         }
 
@@ -479,9 +532,7 @@ def train(config: TrainConfig):
 
     # --- Load tokenizer ---
     print("  Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(
-        config.base_model, trust_remote_code=True
-    )
+    tokenizer = AutoTokenizer.from_pretrained(config.base_model)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -490,15 +541,23 @@ def train(config: TrainConfig):
     print(f"  Loading base model ({config.base_model})...")
     base_model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
-        torch_dtype=torch.float16 if config.fp16 else torch.float32,
-        trust_remote_code=True,
-        # Don't use device_map for MPS — load to CPU first, then move
+        dtype=torch.float16 if config.fp16 else torch.float32,
+        attn_implementation="eager",  # flash-attn not available on MPS
     )
 
     # --- Create adapted model ---
     if config.method == "mhc":
-        print(f"  Wrapping with mHC adapters (n={config.mhc_n})...")
-        model = MHCAdaptedModel(base_model, config).to(device)
+        print(f"  Moving base model to {device}...", flush=True)
+        base_model = base_model.to(device)
+        print(f"  Wrapping with mHC adapters (n={config.mhc_n})...", flush=True)
+        model = MHCAdaptedModel(base_model, config)
+        # Only move the small mHC adapter params to device (base is already there)
+        print(f"  Moving adapters to {device}...", flush=True)
+        model.expand = model.expand.to(device)
+        model.collapse = model.collapse.to(device)
+        model.attn_mhc = model.attn_mhc.to(device)
+        model.mlp_mhc = model.mlp_mhc.to(device)
+        print(f"  Counting parameters...", flush=True)
         summary = model.trainable_params_summary()
     elif config.method == "lora":
         print(f"  Wrapping with LoRA adapters (r={config.lora_r})...")
