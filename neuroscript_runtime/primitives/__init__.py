@@ -98,6 +98,8 @@ from neuroscript_runtime.primitives.connections import (
     HyperCollapse,
     HCWidth,
     HCDepth,
+    ManifoldHyperConnect,
+    sinkhorn_knopp,
 )
 
 __all__ = [
@@ -168,4 +170,6 @@ __all__ = [
     "HyperCollapse",
     "HCWidth",
     "HCDepth",
+    "ManifoldHyperConnect",
+    "sinkhorn_knopp",
 ]

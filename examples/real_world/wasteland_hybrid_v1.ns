@@ -1,0 +1,92 @@
+# Wasteland Hybrid v1 — "Mamba-Attention Hybrid with MoE"
+#
+# The most architecturally ambitious model. Based on granite4's key insight:
+# use O(n) Mamba layers for most processing, O(n^2) attention only where needed.
+#
+# granite4 uses 34 Mamba + 6 attention layers (85/15 split).
+# We test a 75/25 split (more attention) since our tasks involve both
+# structured summarization (Mamba-friendly, sequential) and code generation
+# (attention-friendly, needs long-range dependencies).
+#
+# Architecture choices:
+# - 32 layers total: 24 Mamba + 8 attention (every 4th layer)
+# - Attention layers use MoE FFN (granite4 pattern)
+# - Mamba layers use simple RMSNorm + MambaBlock (no FFN — Mamba IS the FFN)
+# - dim=1024, 16 heads, 4 KV heads on attention layers
+# - 12 experts, 3 active on MoE layers
+# - No positional encoding (granite4's NoPE — Mamba provides implicit position)
+#
+# This tests hypotheses 2+3+6 simultaneously:
+# H2: Hybrid SSM-Attention is the target architecture
+# H3: Depth over width (32 layers at dim=1024)
+# H6: MoE for capacity without compute cost
+#
+# Estimated total params: ~1.5B (active: ~500M per token)
+# Key advantage: O(n) for 75% of layers = dramatically faster on long sequences
+
+/// Mamba-only layer — O(n) processing with residual
+/// No FFN needed — Mamba's internal gated projection serves as the FFN
+neuron MambaLayer(dim, d_state, d_conv):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> (skip, main)
+        main ->
+            RMSNorm(dim)
+            MambaBlock(dim, d_state, d_conv)
+            mamba_out
+        (skip, mamba_out) -> Add() -> out
+
+
+/// Attention + MoE layer — O(n^2) but with sparse FFN
+/// Used sparingly (every 4th layer) for long-range dependencies
+neuron AttentionMoELayer(dim, num_heads, kv_heads, num_experts, active_experts, expert_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Dense attention
+        in -> (skip1, attn_path)
+        attn_path ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            attn_out
+        (skip1, attn_out) -> Add() -> mid
+
+        # Sparse MoE FFN
+        mid -> (skip2, moe_path)
+        moe_path ->
+            RMSNorm(dim)
+            MoERouter(dim, num_experts, active_experts, expert_dim)
+            moe_out
+        (skip2, moe_out) -> Add() -> out
+
+
+# NOTE: The full hybrid stack with alternating layer types would ideally use
+# a scheduling mechanism. Current neuroscript unroll creates identical layers.
+# For now, we define the two layer types and compose manually.
+# Future neuroscript feature: `unroll(layers, schedule=[...]):`
+
+/// Mamba-Attention Hybrid Stack
+/// 24 Mamba layers + 8 Attention-MoE layers = 32 total
+neuron WastelandHybridV1(vocab_size=32000, dim=1024, num_heads=16, kv_heads=4, d_state=128, d_conv=4, num_experts=12, active_experts=3, expert_dim=1024, mamba_layers=24, attn_layers=8):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        # Mamba stack (75% of layers — O(n) processing)
+        mamba_stack = unroll(mamba_layers):
+            m_block = MambaLayer(dim, d_state, d_conv)
+        # Attention-MoE stack (25% of layers — O(n^2) with sparse FFN)
+        attn_stack = unroll(attn_layers):
+            a_block = AttentionMoELayer(dim, num_heads, kv_heads, num_experts, active_experts, expert_dim)
+    graph:
+        # Embedding -> Mamba layers -> Attention layers -> Output
+        # NOTE: Ideally these would be interleaved (attn every 4th layer).
+        # Sequential stacking is a simplification — interleaving would
+        # require a new neuroscript construct.
+        in ->
+            Embedding(vocab_size, dim)
+            mamba_stack
+            attn_stack
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out

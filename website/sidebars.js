@@ -146,6 +146,15 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Connections',
+          items: [
+            'primitives/Connections/manifoldhyperconnect',
+            'primitives/Connections/hyperexpand',
+            'primitives/Connections/hypercollapse',
+          ],
+        },
+        {
+          type: 'category',
           label: 'Regularization',
           items: [
             'primitives/Regularization/dropout',
@@ -153,6 +162,17 @@ const sidebars = {
             'primitives/Regularization/droppath',
           ],
         },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Examples',
+      link: {
+        type: 'doc',
+        id: 'examples/index',
+      },
+      items: [
+        'examples/mhc-transformer',
       ],
     },
     {
