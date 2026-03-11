@@ -5,6 +5,23 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **WedLM-DS full model design** — 28-layer hybrid combining Qwen2.5-7B backbone with DeepSeek-V3 innovations (MLA, learnable residual weights, sigmoid MoE) in `examples/wedlm_ds.ns`
+- **WedLMDSBlock** composite neuron — single transformer block with MLA + learnable residuals + SwiGLU FFN (`stdlib/WedLMDSBlock.ns`)
+- **DenoisingHead** primitive — MLM-style prediction head for masked diffusion (hidden to token logits) (`stdlib/DenoisingHead.ns`)
+- **SigmoidMoERouter** primitive — DeepSeek-V3's sigmoid MoE router with auxiliary-loss-free load balancing (`stdlib/SigmoidMoERouter.ns`)
+- **MultiTokenPredictionHead** primitive — predicts N future tokens simultaneously (`stdlib/MultiTokenPredictionHead.ns`)
+- Python runtime implementations: `diffusion.py` (DenoisingHead, MultiTokenPredictionHead), `routing.py` (SigmoidMoERouter)
+- 16 new/updated integration test snapshots
+
+### Changed
+
+- Stdlib registry expanded to 72 primitives (was 69)
+- `train_mhc_adapter.py` defaults to WedLM-7B target with Qwen2 sublayer wrappers and model-family auto-detection
+
 ## [0.6.1] - 2026-03-07
 
 Sprint 3: 12 issues resolved by 9 AI agents across 3 batches. See [Agent Scoreboard](docs/AGENT-SCOREBOARD.md).
