@@ -3,8 +3,12 @@
 mHC Adapter Fine-Tuning Script — Train & Evaluate
 ===================================================
 
-Fine-tunes a frozen Phi-3-mini model with Manifold-Constrained Hyper-Connection
-adapters and compares against LoRA at the same parameter budget.
+Fine-tunes a frozen WedLM-7B (or Phi-3-mini) model with Manifold-Constrained
+Hyper-Connection adapters and compares against LoRA at the same parameter budget.
+
+WedLM-7B is a text-diffusion model built on the Qwen2.5-7B backbone. This script
+auto-detects the model family (qwen2 vs phi3) and dispatches to the correct
+sublayer wrappers.
 
 This script demonstrates mHC as a parameter-efficient fine-tuning method with
 theoretical stability guarantees from the Birkhoff polytope constraint.
@@ -83,7 +87,7 @@ class TrainConfig:
     """Training configuration — follows SmolLM2 SFT recipe with MPS adaptations."""
 
     # Model
-    base_model: str = "microsoft/Phi-3-mini-4k-instruct"
+    base_model: str = "doitmagic/wedlm-7b-base"
     method: str = "mhc"  # "mhc" or "lora"
 
     # mHC-specific
@@ -129,6 +133,7 @@ class TrainConfig:
     output_dir: str = "outputs"
     seed: int = 42
     smoke_test: bool = False             # quick test mode (100 steps)
+    max_samples: int = 0                 # 0 = use full dataset; >0 = cap training examples
 
     # Monitoring
     log_grad_norms: bool = True          # per-layer gradient norm tracking
@@ -197,6 +202,51 @@ class Phi3MLPSublayer(nn.Module):
         return self.mlp(normed)
 
 
+class Qwen2AttnSublayer(nn.Module):
+    """Thin wrapper making Qwen2 attention callable as f(hidden) -> hidden.
+
+    Qwen2's self_attn uses position_ids (int tensor) for RoPE, unlike Phi-3
+    which takes position_embeddings (cos/sin tuple). This wrapper normalizes
+    both to the same f(x) -> y interface for mHC compatibility.
+    """
+
+    def __init__(self, layer, rotary_emb):
+        super().__init__()
+        self.input_layernorm = layer.input_layernorm
+        self.self_attn = layer.self_attn
+        self.rotary_emb = rotary_emb
+
+    def forward(self, x):
+        normed = self.input_layernorm(x)
+        seq_len = x.shape[1]
+        position_ids = torch.arange(seq_len, device=x.device).unsqueeze(0)
+
+        causal_mask = torch.triu(
+            torch.full((seq_len, seq_len), float('-inf'), device=x.device, dtype=x.dtype),
+            diagonal=1,
+        ).unsqueeze(0).unsqueeze(0)
+
+        attn_out = self.self_attn(
+            normed,
+            attention_mask=causal_mask,
+            position_ids=position_ids,
+        )[0]
+        return attn_out
+
+
+class Qwen2MLPSublayer(nn.Module):
+    """Thin wrapper making Qwen2 MLP callable as f(hidden) -> hidden."""
+
+    def __init__(self, layer):
+        super().__init__()
+        self.post_attention_layernorm = layer.post_attention_layernorm
+        self.mlp = layer.mlp
+
+    def forward(self, x):
+        normed = self.post_attention_layernorm(x)
+        return self.mlp(normed)
+
+
 class MHCAdaptedModel(nn.Module):
     """Wraps a frozen HuggingFace model with mHC adapters on every sublayer.
 
@@ -236,12 +286,23 @@ class MHCAdaptedModel(nn.Module):
         self.attn_mhc = nn.ModuleList()
         self.mlp_mhc = nn.ModuleList()
 
+        # Detect model family for sublayer dispatch
+        model_type = getattr(base_model.config, "model_type", "phi3").lower()
+        is_qwen2 = "qwen2" in model_type
+
         for i in range(self.num_layers):
             layer = self.base_model.model.layers[i]
 
+            if is_qwen2:
+                attn_sublayer = Qwen2AttnSublayer(layer, base_model.model.rotary_emb)
+                mlp_sublayer = Qwen2MLPSublayer(layer)
+            else:
+                attn_sublayer = Phi3AttnSublayer(layer, base_model.model.rotary_emb)
+                mlp_sublayer = Phi3MLPSublayer(layer)
+
             self.attn_mhc.append(
                 ManifoldHyperConnect(
-                    sublayer=Phi3AttnSublayer(layer, base_model.model.rotary_emb),
+                    sublayer=attn_sublayer,
                     n=self.n,
                     dim=self.hidden_size,
                     layer_idx=i,
@@ -251,7 +312,7 @@ class MHCAdaptedModel(nn.Module):
             )
             self.mlp_mhc.append(
                 ManifoldHyperConnect(
-                    sublayer=Phi3MLPSublayer(layer),
+                    sublayer=mlp_sublayer,
                     n=self.n,
                     dim=self.hidden_size,
                     layer_idx=i,
@@ -380,6 +441,9 @@ def load_and_prepare_dataset(config: TrainConfig, tokenizer):
     if config.smoke_test:
         dataset = dataset.select(range(min(500, len(dataset))))
         print(f"  Smoke test: using {len(dataset)} samples")
+    elif config.max_samples > 0:
+        dataset = dataset.select(range(min(config.max_samples, len(dataset))))
+        print(f"  Capped at {len(dataset)} samples (--max-samples {config.max_samples})")
 
     eval_dataset = load_dataset(
         config.dataset_name,
@@ -642,6 +706,18 @@ def train(config: TrainConfig):
     output_dir = Path(config.output_dir) / config.method
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # --- TensorBoard ---
+    tb_dir = output_dir / "runs"
+    try:
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(log_dir=str(tb_dir))
+        print(f"  TensorBoard logs: {tb_dir}")
+        print(f"  Launch with:      tensorboard --logdir {tb_dir}")
+    except ImportError:
+        writer = None
+        print("  (TensorBoard not available — pip install tensorboard to enable)")
+    print()
+
     metrics = {
         "config": {
             "method": config.method,
@@ -748,11 +824,21 @@ def train(config: TrainConfig):
           f"lr={config.learning_rate:.0e}")
     print(f"  {'-'*66}")
 
+    import tqdm as tqdm_mod
+
     for epoch in range(config.num_epochs):
         epoch_loss = 0.0
         epoch_steps = 0
 
-        for batch_idx, batch in enumerate(train_loader):
+        batch_bar = tqdm_mod.tqdm(
+            train_loader,
+            desc=f"  Epoch {epoch+1}/{config.num_epochs}",
+            ncols=88,
+            unit="batch",
+            leave=True,
+        )
+
+        for batch_idx, batch in enumerate(batch_bar):
             if config.smoke_test and global_step >= 100:
                 break
 
@@ -783,6 +869,7 @@ def train(config: TrainConfig):
                 global_step += 1
                 epoch_loss += accum_loss
                 epoch_steps += 1
+                lr_now = scheduler.get_last_lr()[0]
 
                 # Track smoothed loss
                 loss_window.append(accum_loss)
@@ -794,8 +881,21 @@ def train(config: TrainConfig):
                 metrics["train_loss"].append({
                     "step": global_step,
                     "loss": accum_loss,
-                    "lr": scheduler.get_last_lr()[0],
+                    "lr": lr_now,
                 })
+
+                # --- TensorBoard: log every step ---
+                if writer is not None:
+                    writer.add_scalar("train/loss", accum_loss, global_step)
+                    writer.add_scalar("train/loss_smoothed", fitness["loss"], global_step)
+                    writer.add_scalar("train/lr", lr_now, global_step)
+
+                # --- Live tqdm bar update (every step) ---
+                batch_bar.set_postfix({
+                    "loss": f"{fitness['loss']:.3f}",
+                    "step": f"{global_step}/{total_steps}",
+                    "lr": f"{lr_now:.1e}",
+                }, refresh=False)
 
                 # --- Fitness scoreboard (compact, periodic) ---
                 if global_step % config.fitness_steps == 0:
@@ -804,6 +904,9 @@ def train(config: TrainConfig):
                         spec_norms = model.get_spectral_norms()
                         metrics["spectral_norms"].append({"step": global_step, **spec_norms})
                         fitness["spectral_ok"] = max(spec_norms.values()) <= 1.001
+                        if writer is not None:
+                            max_spec = max(spec_norms.values())
+                            writer.add_scalar("mhc/spectral_norm_max", max_spec, global_step)
 
                     # Check gradient uniformity (mHC only)
                     if config.method == "mhc" and config.log_grad_norms:
@@ -812,6 +915,8 @@ def train(config: TrainConfig):
                         all_grads = [v for v in grad_norms.values() if v > 0]
                         if all_grads:
                             fitness["grad_uniform"] = min(all_grads) / max(all_grads)
+                            if writer is not None:
+                                writer.add_scalar("mhc/grad_uniformity", fitness["grad_uniform"], global_step)
 
                     print_fitness_scoreboard(global_step)
 
@@ -833,6 +938,10 @@ def train(config: TrainConfig):
                     fitness["perplexity"] = eval_ppl
                     metrics["eval_loss"].append({"step": global_step, "loss": eval_loss})
                     metrics["eval_perplexity"].append({"step": global_step, "perplexity": eval_ppl})
+
+                    if writer is not None:
+                        writer.add_scalar("eval/loss", eval_loss, global_step)
+                        writer.add_scalar("eval/perplexity", eval_ppl, global_step)
 
                     improved = ""
                     if eval_loss < best_eval_loss:
@@ -866,6 +975,13 @@ def train(config: TrainConfig):
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2, default=str)
     print(f"  Training metrics saved to {metrics_path}")
+
+    if writer is not None:
+        writer.add_scalar("eval/final_loss", final_eval_loss, global_step)
+        writer.add_scalar("eval/final_perplexity", final_ppl, global_step)
+        writer.flush()
+        writer.close()
+        print(f"  TensorBoard logs saved to {tb_dir}")
 
     # --- Print comparison summary ---
     print()
@@ -1118,6 +1234,8 @@ def main():
                         help="Override number of epochs")
     parser.add_argument("--max-seq-length", type=int, default=None,
                         help="Override max sequence length")
+    parser.add_argument("--max-samples", type=int, default=0,
+                        help="Cap training examples (0 = full dataset, e.g. 50000)")
     parser.add_argument("--base-model", type=str, default=None,
                         help="Override base model")
     args = parser.parse_args()
@@ -1145,6 +1263,8 @@ def main():
         config.max_seq_length = args.max_seq_length
     if args.base_model:
         config.base_model = args.base_model
+    if args.max_samples:
+        config.max_samples = args.max_samples
 
     train(config)
 
