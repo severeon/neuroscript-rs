@@ -87,10 +87,8 @@ class TrainConfig:
     """Training configuration — follows SmolLM2 SFT recipe with MPS adaptations."""
 
     # Model
-    # NOTE: "doitmagic/wedlm-7b-base" is not yet publicly available on the Hub.
-    # For local testing use a public Qwen2.5-7B checkpoint instead, e.g.:
-    #   base_model = "Qwen/Qwen2.5-7B"
-    base_model: str = "doitmagic/wedlm-7b-base"
+    # WedLM-7B is not yet publicly available; Qwen2.5-7B is the public base.
+    base_model: str = "Qwen/Qwen2.5-7B"
     method: str = "mhc"  # "mhc" or "lora"
 
     # mHC-specific

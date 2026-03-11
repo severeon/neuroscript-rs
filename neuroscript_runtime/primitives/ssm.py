@@ -14,12 +14,12 @@ import torch.nn.functional as F
 
 
 class MambaBlock(nn.Module):
-    """Selective State Space Model (SSM) block.
+    """Structural stub for Mamba selective state-space block. True O(n) processing requires the mamba-ssm fused CUDA kernel.
 
-    Processes sequences in O(n) time using a recurrent SSM formulation with
-    input-dependent ("selective") state transitions, as introduced in the Mamba
-    paper.  The key innovation over prior SSMs (S4, H3) is that A, B, C, and
-    delta are all functions of the input, enabling content-based filtering.
+    Implements the recurrent SSM formulation with input-dependent ("selective")
+    state transitions, as introduced in the Mamba paper.  The key innovation
+    over prior SSMs (S4, H3) is that A, B, C, and delta are all functions of
+    the input, enabling content-based filtering.
 
     Internal structure (simplified Mamba-1):
         1. Input projection: Linear(dim, 2 * expand * dim) -> split into x, z

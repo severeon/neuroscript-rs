@@ -15,6 +15,11 @@
 /// - Input: [batch, seq, dim]
 /// - Output: [batch, seq, num_tokens, vocab_size]
 ///
+/// Note: The [batch, seq, num_tokens, vocab_size] output must be reshaped before
+/// standard cross-entropy loss. Use `.view(batch, seq * num_tokens, vocab_size)`
+/// (or `.view(batch * seq, num_tokens, vocab_size)` depending on loss formulation)
+/// before passing to `F.cross_entropy`.
+///
 /// Reference: Gloeckle et al. (2024) "Better & Faster Large Language Models
 /// via Multi-token Prediction"
 neuron MultiTokenPredictionHead(dim, vocab_size, num_tokens=4):

@@ -61,6 +61,11 @@ neuron AttentionMoELayer(dim, num_heads, kv_heads, num_experts, active_experts, 
         (skip2, moe_out) -> Add() -> out
 
 
+# PLACEHOLDER: This stacks all Mamba layers before all Attention layers.
+# True hybrid alternation (e.g. granite4 pattern) requires NeuroScript
+# scheduling constructs not yet implemented. Do not use as a reference
+# for production hybrid architectures.
+#
 # NOTE: The full hybrid stack with alternating layer types would ideally use
 # a scheduling mechanism. Current neuroscript unroll creates identical layers.
 # For now, we define the two layer types and compose manually.

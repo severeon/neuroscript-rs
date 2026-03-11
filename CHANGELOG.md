@@ -23,10 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ssm.py`: removed misleading "O(n) sequence processing" summary claim from `MambaBlock` docstring; clarified that true O(n) requires the mamba-ssm fused CUDA kernel
+- `wasteland_hybrid_v1.ns`: added prominent `PLACEHOLDER` warning that all-Mamba-then-all-Attention stacking is a simplification; true granite4-style interleaving requires scheduling constructs not yet implemented
+- `MultiTokenPredictionHead.ns`: added doc note that the `[batch, seq, num_tokens, vocab_size]` output requires `.view(batch, seq*num_tokens, vocab_size)` reshape before standard cross-entropy loss
+- `train_mhc_adapter.py`: changed `base_model` default from `doitmagic/wedlm-7b-base` (not publicly available) to `Qwen/Qwen2.5-7B`
+- `CHANGELOG.md`: clarified `sinkhorn_knopp` removal — removed from public `__all__` but still importable as an internal utility
 - `wasteland_briefing_v3_mhc.ns`: added `HyperExpand`/`HyperCollapse` to correctly expand/collapse the n-stream residual around the MHCBlock stack; replaced incorrect `layer_idx=layers` with `0` and added doc comment explaining the `unroll` index-exposure limitation
 - `train_mhc_adapter.py`: added note that `doitmagic/wedlm-7b-base` is not yet publicly available and suggests `Qwen/Qwen2.5-7B` as a public fallback for testing
 - `routing.py`: replaced O(tokens × experts) nested loops in `SigmoidMoERouter.forward` and `MoERouter.forward` with vectorized `index_add_` pattern (one pass per expert instead of one per expert per top-k slot)
-- `__init__.py`: removed `sinkhorn_knopp` utility function from `__all__` (it is not a primitive class and should not be part of the public API surface)
+- `__init__.py`: removed `sinkhorn_knopp` from public `__all__` API surface but still importable as an internal utility via `from neuroscript_runtime.primitives.connections import sinkhorn_knopp`
 - `MambaBlock.ns`: added stub note indicating that the runtime SSM implementation is a structural placeholder and production use should substitute the fused CUDA kernel from the `mamba-ssm` package
 
 ### Changed
