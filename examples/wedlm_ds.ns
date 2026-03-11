@@ -1,0 +1,39 @@
+/// WedLM-DS: WedLM-7B with DeepSeek-V3 Architectural Innovations
+///
+/// Full model design for the WedLM-DeepSeek hybrid architecture.
+/// Combines WedLM-7B (text-diffusion on Qwen2.5-7B backbone) with:
+/// - Multi-Head Latent Attention (MLA) — 93% KV cache reduction
+/// - Learnable residual weights — improved training stability
+/// - SwiGLU feed-forward networks
+///
+/// Architecture:
+///   Token IDs -> Embedding -> 28 x WedLMDSBlock -> DenoisingHead -> Token Logits
+///
+/// Hyperparameters (Qwen2.5-7B compatible):
+///   dim = 3584, num_heads = 28, layers = 28
+///   kv_lora_rank = 512, q_lora_rank = 1536, v_head_dim = 128
+///   d_ff = 18944, vocab_size = 152064
+///
+/// Training objective: Masked diffusion (MDLM-style)
+///   - Tokens randomly masked during forward pass
+///   - DenoisingHead predicts original tokens
+///   - Loss: cross-entropy on masked positions
+///
+/// Reference: WedLM-DeepSeek Hybrid Architecture design doc
+neuron WedLMDS(vocab_size=152064, dim=3584, num_heads=28, kv_lora_rank=512, q_lora_rank=1536, v_head_dim=128, d_ff=18944, layers=28):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        stack = unroll(layers):
+            block = WedLMDSBlock(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim, d_ff)
+    graph:
+        # Embed token IDs into hidden states
+        in -> Embedding(vocab_size, dim) -> embedded
+
+        # Stack of transformer blocks
+        embedded ->
+            stack
+            hidden
+
+        # Denoising prediction head
+        hidden -> DenoisingHead(dim, vocab_size) -> out
