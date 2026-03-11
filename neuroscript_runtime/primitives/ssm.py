@@ -144,6 +144,11 @@ class MambaBlock(nn.Module):
         """Naive sequential selective scan for correctness.
 
         Production implementations replace this with a parallel/fused scan.
+
+        .. warning::
+            Multi-head A is averaged to a single head here, discarding per-head
+            state dynamics. This is correct only for num_heads=1. For Mamba-2
+            multi-head usage, replace with proper per-head state tracking.
         """
         batch, seq, d_inner = u.shape
         d_state = self.d_state
@@ -152,11 +157,14 @@ class MambaBlock(nn.Module):
         h = torch.zeros(batch, d_inner, d_state, device=u.device, dtype=u.dtype)
         ys = []
 
+        # TODO: Per-head A requires reshaping state to [batch, num_heads, d_inner//num_heads, d_state]
+        # and applying each head's A independently. Averaging loses head-specific dynamics.
+        A_single = A.mean(0)  # [d_state] — correct only for num_heads=1
+
         for t in range(seq):
             # Discretize: delta_A = exp(dt[t] * A), delta_B = dt[t] * B[t]
             dt_t = dt[:, t, :].unsqueeze(-1)           # [batch, d_inner, 1]
-            A_broad = A.mean(0).unsqueeze(0)            # [1, d_state] (simplified)
-            dA = torch.exp(dt_t * A_broad.unsqueeze(0)) # [batch, d_inner, d_state]
+            dA = torch.exp(dt_t * A_single.unsqueeze(0).unsqueeze(0))  # [batch, d_inner, d_state]
 
             B_t = B[:, t, :].unsqueeze(1)              # [batch, 1, d_state]
             dB = dt_t * B_t                            # [batch, d_inner, d_state]

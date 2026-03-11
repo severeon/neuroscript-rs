@@ -16,7 +16,9 @@ class SigmoidMoERouter(nn.Module):
     1. Gate scores via sigmoid (allows multi-hot, more expressive than softmax)
     2. Top-k selection per token
     3. Load balancing via per-expert bias adjustment (noaux_tc strategy)
-       — no auxiliary loss term needed in training objective
+       — no auxiliary loss term needed in training objective.
+       Call ``update_balance_bias(topk_indices)`` after each forward pass
+       during training to enable the bias update mechanism.
 
     Args:
         dim (int): Input/output feature dimension
@@ -58,10 +60,32 @@ class SigmoidMoERouter(nn.Module):
             for _ in range(num_experts)
         ])
 
+    def update_balance_bias(self, topk_indices: torch.Tensor, momentum: float = 0.01):
+        """Update per-expert load-balancing bias using EMA over token counts.
+
+        Should be called after each forward pass during training. Increases
+        bias for underloaded experts (attracting more tokens) and decreases
+        bias for overloaded experts.
+
+        Args:
+            topk_indices: [tokens, active_experts] expert assignments from forward
+            momentum: EMA smoothing factor. Default: 0.01
+        """
+        with torch.no_grad():
+            # Count tokens assigned to each expert
+            counts = torch.zeros(self.num_experts, device=topk_indices.device)
+            for k in range(self.active_experts):
+                counts.scatter_add_(0, topk_indices[:, k],
+                                    torch.ones(topk_indices.shape[0], device=topk_indices.device))
+            # Normalize to get load fraction per expert
+            load_fraction = counts / counts.sum()
+            target = 1.0 / self.num_experts
+            # Increase bias for underloaded experts, decrease for overloaded
+            self.balance_bias += momentum * (target - load_fraction)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch, seq, dim = x.shape
         x_flat = x.view(-1, dim)  # [batch*seq, dim]
-        tokens = x_flat.shape[0]
 
         # Sigmoid gate scores with load-balancing bias
         gate_logits = self.gate(x_flat)  # [tokens, num_experts]
@@ -97,8 +121,9 @@ class MoERouter(nn.Module):
     and summed.
 
     Compared to :class:`SigmoidMoERouter` (which uses sigmoid + bias for
-    auxiliary-loss-free balancing), this router uses softmax gating and can
-    optionally add an auxiliary load-balancing loss to the training objective.
+    auxiliary-loss-free balancing), this router uses standard softmax gating.
+    Auxiliary load-balancing loss is not implemented here; add it externally
+    if needed (see Switch Transformers for the standard formulation).
 
     Args:
         dim (int): Input/output feature dimension.
@@ -138,7 +163,6 @@ class MoERouter(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch, seq, dim = x.shape
         x_flat = x.view(-1, dim)  # [batch*seq, dim]
-        tokens = x_flat.shape[0]
 
         # Softmax gate scores
         gate_logits = self.gate(x_flat)               # [tokens, num_experts]

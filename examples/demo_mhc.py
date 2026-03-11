@@ -334,8 +334,8 @@ def demo_fine_tuning_scenario(device):
     loss.backward()
 
     frozen_grads = sum(1 for p in frozen_linear.parameters() if p.grad is not None)
-    mhc_grads = sum(1 for n, p in mhc.named_parameters()
-                    if p.grad is not None and 'sublayer' not in n)
+    mhc_grads = sum(1 for param_name, p in mhc.named_parameters()
+                    if p.grad is not None and 'sublayer' not in param_name)
 
     print(f"    Frozen sublayer params with gradients: {frozen_grads} (expected: 0)")
     print(f"    mHC params with gradients:             {mhc_grads} (expected: > 0)")
