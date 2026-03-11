@@ -101,7 +101,6 @@ from neuroscript_runtime.primitives.connections import (
     HCDepth,
     ManifoldHyperConnect,
     LearnableResidual,
-    sinkhorn_knopp,
 )
 
 # Diffusion

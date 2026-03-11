@@ -95,7 +95,8 @@ class SigmoidMoERouter(nn.Module):
         # Normalize selected scores
         topk_scores = topk_scores / (topk_scores.sum(dim=-1, keepdim=True) + 1e-6)
 
-        # Route tokens to experts (vectorized: one pass per expert)
+        # Route tokens to experts (O(num_experts) loop; true vectorization
+        # requires padding or custom scatter kernels — see megablocks for that)
         output = torch.zeros_like(x_flat)
         for e in range(self.num_experts):
             # Gather all tokens assigned to expert e across top-k positions

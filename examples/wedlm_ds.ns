@@ -24,6 +24,8 @@ neuron WedLMDS(vocab_size=152064, dim=3584, num_heads=28, kv_lora_rank=512, q_lo
     in: [batch, seq]
     out: [batch, seq, vocab_size]
     context:
+        # Unroll creates `layers` (28) sequential WedLMDSBlock instances,
+        # each with independent weights, chained input-to-output.
         stack = unroll(layers):
             block = WedLMDSBlock(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim, d_ff)
     graph:

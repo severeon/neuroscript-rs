@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CHANGELOG.md`: clarified `sinkhorn_knopp` removal — removed from public `__all__` but still importable as an internal utility
 - `wasteland_briefing_v3_mhc.ns`: added `HyperExpand`/`HyperCollapse` to correctly expand/collapse the n-stream residual around the MHCBlock stack; replaced incorrect `layer_idx=layers` with `0` and added doc comment explaining the `unroll` index-exposure limitation
 - `train_mhc_adapter.py`: added note that `doitmagic/wedlm-7b-base` is not yet publicly available and suggests `Qwen/Qwen2.5-7B` as a public fallback for testing
-- `routing.py`: replaced O(tokens × experts) nested loops in `SigmoidMoERouter.forward` and `MoERouter.forward` with vectorized `index_add_` pattern (one pass per expert instead of one per expert per top-k slot)
+- `routing.py`: replaced O(tokens × experts × k) nested loops in `SigmoidMoERouter.forward` and `MoERouter.forward` with `index_add_` pattern (O(num_experts) loop; true zero-loop vectorization requires padding or custom scatter kernels)
 - `__init__.py`: removed `sinkhorn_knopp` from public `__all__` API surface but still importable as an internal utility via `from neuroscript_runtime.primitives.connections import sinkhorn_knopp`
 - `MambaBlock.ns`: added stub note indicating that the runtime SSM implementation is a structural placeholder and production use should substitute the fused CUDA kernel from the `mamba-ssm` package
 

@@ -1,8 +1,8 @@
 /// Mamba Block — Selective State Space Model
 ///
 /// Implements the Mamba selective SSM layer as used in granite4 and Mamba-2.
-/// Processes sequences in O(n) time (vs attention's O(n^2)) using a
-/// recurrent state space formulation with input-dependent selection.
+/// Processes sequences via a recurrent state space formulation with
+/// input-dependent selection (O(n) with fused kernel, O(n*d_state) as stub).
 ///
 /// The key innovation over prior SSMs (S4, H3) is that Mamba makes the
 /// state transition matrices input-dependent ("selective"), allowing the
