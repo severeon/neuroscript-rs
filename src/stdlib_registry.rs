@@ -181,7 +181,7 @@ impl StdlibRegistry {
             ("MoERouter",        "neuroscript_runtime.primitives.routing", "MoERouter",        "Softmax-gated top-k MoE router with auxiliary load-balancing loss"),
 
             // ── Selective State Space Models ─────────────────────────────
-            ("MambaBlock", "neuroscript_runtime.primitives.ssm", "MambaBlock", "Selective SSM block (Mamba / Mamba-2) — O(n) sequence processing"),
+            ("MambaBlock", "neuroscript_runtime.primitives.ssm", "MambaBlock", "Selective SSM block — structural stub (true O(n) requires mamba-ssm fused kernel)"),
         ];
 
         for &(name, module, class, desc) in PRIMITIVES {

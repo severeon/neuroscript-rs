@@ -72,11 +72,10 @@ class SigmoidMoERouter(nn.Module):
             momentum: EMA smoothing factor. Default: 0.01
         """
         with torch.no_grad():
-            # Count tokens assigned to each expert
-            counts = torch.zeros(self.num_experts, device=topk_indices.device)
-            for k in range(self.active_experts):
-                counts.scatter_add_(0, topk_indices[:, k],
-                                    torch.ones(topk_indices.shape[0], device=topk_indices.device))
+            # Count tokens assigned to each expert (vectorized)
+            counts = torch.bincount(
+                topk_indices.flatten(), minlength=self.num_experts
+            ).float()
             # Normalize to get load fraction per expert
             load_fraction = counts / counts.sum()
             target = 1.0 / self.num_experts
@@ -108,6 +107,10 @@ class SigmoidMoERouter(nn.Module):
             expert_out = self.experts[e](x_flat[expert_mask])
             output.index_add_(0, expert_mask.nonzero(as_tuple=True)[0],
                                score_e[expert_mask].unsqueeze(-1) * expert_out)
+
+        # Update load-balancing bias during training (noaux_tc strategy)
+        if self.training:
+            self.update_balance_bias(topk_indices.detach())
 
         return output.view(batch, seq, dim)
 
