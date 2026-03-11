@@ -166,6 +166,13 @@ impl StdlibRegistry {
             ("HyperCollapse", "neuroscript_runtime.primitives.connections", "HyperCollapse", "Collapse n copies via sum for hyper-connections"),
             ("HCWidth",       "neuroscript_runtime.primitives.connections", "HCWidth",       "Width connection for hyper-connections (mix hidden copies)"),
             ("HCDepth",       "neuroscript_runtime.primitives.connections", "HCDepth",       "Depth connection for hyper-connections (merge layer output)"),
+
+            // ── Diffusion ────────────────────────────────────────────────
+            ("DenoisingHead",           "neuroscript_runtime.primitives.diffusion", "DenoisingHead",           "MLM-style prediction head for masked diffusion (hidden → logits)"),
+            ("MultiTokenPredictionHead","neuroscript_runtime.primitives.diffusion", "MultiTokenPredictionHead","Predicts N future tokens simultaneously (multi-token prediction)"),
+
+            // ── Routing ──────────────────────────────────────────────────
+            ("SigmoidMoERouter",        "neuroscript_runtime.primitives.routing",   "SigmoidMoERouter",        "Sigmoid-gated MoE router with auxiliary-loss-free load balancing (DeepSeek-V3)"),
         ];
 
         for &(name, module, class, desc) in PRIMITIVES {
