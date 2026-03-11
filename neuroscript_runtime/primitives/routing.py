@@ -72,16 +72,18 @@ class SigmoidMoERouter(nn.Module):
         # Normalize selected scores
         topk_scores = topk_scores / (topk_scores.sum(dim=-1, keepdim=True) + 1e-6)
 
-        # Route tokens to experts
+        # Route tokens to experts (vectorized: one pass per expert)
         output = torch.zeros_like(x_flat)
-        for k in range(self.active_experts):
-            expert_idx = topk_indices[:, k]  # [tokens]
-            scores_k = topk_scores[:, k]     # [tokens]
-            for e in range(self.num_experts):
-                mask = (expert_idx == e)
-                if mask.any():
-                    expert_out = self.experts[e](x_flat[mask])
-                    output[mask] += scores_k[mask].unsqueeze(-1) * expert_out
+        for e in range(self.num_experts):
+            # Gather all tokens assigned to expert e across top-k positions
+            expert_mask = (topk_indices == e).any(dim=-1)  # [tokens]
+            if not expert_mask.any():
+                continue
+            # Sum scores across all k positions where this token chose expert e
+            score_e = (topk_scores * (topk_indices == e).float()).sum(dim=-1)  # [tokens]
+            expert_out = self.experts[e](x_flat[expert_mask])
+            output.index_add_(0, expert_mask.nonzero(as_tuple=True)[0],
+                               score_e[expert_mask].unsqueeze(-1) * expert_out)
 
         return output.view(batch, seq, dim)
 
@@ -147,15 +149,17 @@ class MoERouter(nn.Module):
         # Normalize selected scores so they sum to 1 per token
         topk_scores = topk_scores / (topk_scores.sum(dim=-1, keepdim=True) + 1e-6)
 
-        # Route tokens to experts and accumulate weighted outputs
+        # Route tokens to experts and accumulate weighted outputs (vectorized)
         output = torch.zeros_like(x_flat)
-        for k in range(self.active_experts):
-            expert_idx = topk_indices[:, k]   # [tokens]
-            scores_k = topk_scores[:, k]      # [tokens]
-            for e in range(self.num_experts):
-                mask = (expert_idx == e)
-                if mask.any():
-                    expert_out = self.experts[e](x_flat[mask])
-                    output[mask] += scores_k[mask].unsqueeze(-1) * expert_out
+        for e in range(self.num_experts):
+            # Gather all tokens assigned to expert e across top-k positions
+            expert_mask = (topk_indices == e).any(dim=-1)  # [tokens]
+            if not expert_mask.any():
+                continue
+            # Sum scores across all k positions where this token chose expert e
+            score_e = (topk_scores * (topk_indices == e).float()).sum(dim=-1)  # [tokens]
+            expert_out = self.experts[e](x_flat[expert_mask])
+            output.index_add_(0, expert_mask.nonzero(as_tuple=True)[0],
+                               score_e[expert_mask].unsqueeze(-1) * expert_out)
 
         return output.view(batch, seq, dim)

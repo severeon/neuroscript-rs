@@ -190,7 +190,6 @@ __all__ = [
     "HCDepth",
     "ManifoldHyperConnect",
     "LearnableResidual",
-    "sinkhorn_knopp",
     # Diffusion
     "DenoisingHead",
     "MultiTokenPredictionHead",

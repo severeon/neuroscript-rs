@@ -30,4 +30,6 @@
 neuron MambaBlock(dim, d_state=128, d_conv=4, num_heads=1):
     in: [batch, seq, dim]
     out: [batch, seq, dim]
+    # NOTE: runtime/ssm.py is a structural stub. For production, replace with
+    # the fused kernel from https://github.com/state-spaces/mamba (mamba-ssm package).
     impl: neuroscript,ssm/MambaBlock

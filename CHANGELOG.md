@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `wasteland_briefing_v3_mhc.ns`: added `HyperExpand`/`HyperCollapse` to correctly expand/collapse the n-stream residual around the MHCBlock stack; replaced incorrect `layer_idx=layers` with `0` and added doc comment explaining the `unroll` index-exposure limitation
 - `train_mhc_adapter.py`: added note that `doitmagic/wedlm-7b-base` is not yet publicly available and suggests `Qwen/Qwen2.5-7B` as a public fallback for testing
+- `routing.py`: replaced O(tokens × experts) nested loops in `SigmoidMoERouter.forward` and `MoERouter.forward` with vectorized `index_add_` pattern (one pass per expert instead of one per expert per top-k slot)
+- `__init__.py`: removed `sinkhorn_knopp` utility function from `__all__` (it is not a primitive class and should not be part of the public API surface)
+- `MambaBlock.ns`: added stub note indicating that the runtime SSM implementation is a structural placeholder and production use should substitute the fused CUDA kernel from the `mamba-ssm` package
 
 ### Changed
 
