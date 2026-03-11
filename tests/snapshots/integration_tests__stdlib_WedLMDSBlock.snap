@@ -1,0 +1,24 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron WedLMDSBlock(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim, d_ff):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (skip1, attn_path)
+    attn_path -> RMSNorm#0(dim)
+    RMSNorm#0(dim) -> MultiHeadLatentAttention#1(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim)
+    MultiHeadLatentAttention#1(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim) -> attn_out
+    (attn_out, skip1) -> LearnableResidual#2(dim)
+    LearnableResidual#2(dim) -> mid
+    mid -> (skip2, ffn_path)
+    ffn_path -> RMSNorm#3(dim)
+    RMSNorm#3(dim) -> SwiGLU#4(dim, d_ff)
+    SwiGLU#4(dim, d_ff) -> ffn_out
+    (ffn_out, skip2) -> LearnableResidual#5(dim)
+    LearnableResidual#5(dim) -> out

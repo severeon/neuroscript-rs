@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MambaBlock(dim, d_state = 128, d_conv = 4, num_heads = 1):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: neuroscript,ssm/MambaBlock
