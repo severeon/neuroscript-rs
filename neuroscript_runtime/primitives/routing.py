@@ -84,3 +84,78 @@ class SigmoidMoERouter(nn.Module):
                     output[mask] += scores_k[mask].unsqueeze(-1) * expert_out
 
         return output.view(batch, seq, dim)
+
+
+class MoERouter(nn.Module):
+    """Mixture-of-Experts router with softmax gating and auxiliary-loss balancing.
+
+    Top-k routing layer that selects a subset of expert networks per token.
+    Each token is independently routed to the top-k scoring experts using a
+    softmax gate.  Expert outputs are weighted by their normalized gate scores
+    and summed.
+
+    Compared to :class:`SigmoidMoERouter` (which uses sigmoid + bias for
+    auxiliary-loss-free balancing), this router uses softmax gating and can
+    optionally add an auxiliary load-balancing loss to the training objective.
+
+    Args:
+        dim (int): Input/output feature dimension.
+        num_experts (int): Total number of expert networks.
+        active_experts (int): Number of experts activated per token (top-k).
+        expert_dim (int): Hidden dimension within each expert FFN.
+
+    Shape:
+        - Input:  [batch, seq, dim]
+        - Output: [batch, seq, dim]
+
+    Reference:
+        Shazeer et al. (2017) "Outrageously Large Neural Networks: The
+        Sparsely-Gated Mixture-of-Experts Layer";
+        Fedus et al. (2022) "Switch Transformers"
+    """
+
+    def __init__(self, dim: int, num_experts: int, active_experts: int, expert_dim: int):
+        super().__init__()
+        self.dim = dim
+        self.num_experts = num_experts
+        self.active_experts = active_experts
+
+        # Gate network: projects token features to per-expert logits
+        self.gate = nn.Linear(dim, num_experts, bias=False)
+
+        # Expert FFNs (each a two-layer MLP)
+        self.experts = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(dim, expert_dim, bias=False),
+                nn.SiLU(),
+                nn.Linear(expert_dim, dim, bias=False),
+            )
+            for _ in range(num_experts)
+        ])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch, seq, dim = x.shape
+        x_flat = x.view(-1, dim)  # [batch*seq, dim]
+        tokens = x_flat.shape[0]
+
+        # Softmax gate scores
+        gate_logits = self.gate(x_flat)               # [tokens, num_experts]
+        gate_scores = F.softmax(gate_logits, dim=-1)
+
+        # Top-k selection
+        topk_scores, topk_indices = torch.topk(gate_scores, self.active_experts, dim=-1)
+        # Normalize selected scores so they sum to 1 per token
+        topk_scores = topk_scores / (topk_scores.sum(dim=-1, keepdim=True) + 1e-6)
+
+        # Route tokens to experts and accumulate weighted outputs
+        output = torch.zeros_like(x_flat)
+        for k in range(self.active_experts):
+            expert_idx = topk_indices[:, k]   # [tokens]
+            scores_k = topk_scores[:, k]      # [tokens]
+            for e in range(self.num_experts):
+                mask = (expert_idx == e)
+                if mask.any():
+                    expert_out = self.experts[e](x_flat[mask])
+                    output[mask] += scores_k[mask].unsqueeze(-1) * expert_out
+
+        return output.view(batch, seq, dim)

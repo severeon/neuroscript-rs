@@ -458,3 +458,44 @@ class ManifoldHyperConnect(nn.Module):
             f"sinkhorn_iters={self.sinkhorn_iters}, dynamic={self.dynamic}, "
             f"sublayer_params={sum(p.numel() for p in self.sublayer.parameters()):,}"
         )
+
+
+class LearnableResidual(nn.Module):
+    """Residual connection with learnable per-channel scaling factors.
+
+    Instead of the standard ``x + sublayer(x)``, computes::
+
+        output = alpha * skip + beta * main
+
+    where ``alpha`` and ``beta`` are learnable ``nn.Parameter`` scalars
+    initialized to 1.0, giving the model fine-grained control over each
+    sublayer's contribution to the residual stream.
+
+    Inspired by DeepSeek-V3's training-stability innovations for very deep
+    networks (40+ layers).
+
+    Args:
+        dim (int): Feature dimension. Stored for introspection; the forward
+            pass is shape-agnostic (element-wise multiply by a scalar).
+
+    Shape:
+        - Input main: [*shape, dim] — sublayer output
+        - Input skip: [*shape, dim] — residual / skip connection
+        - Output:     [*shape, dim] — weighted combination
+
+    Reference:
+        DeepSeek-V3 Technical Report (2024)
+    """
+
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+        self.alpha = nn.Parameter(torch.ones(1))   # skip weight
+        self.beta = nn.Parameter(torch.ones(1))    # main weight
+
+    def forward(self, inputs):
+        main, skip = inputs
+        return self.alpha * skip + self.beta * main
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}"

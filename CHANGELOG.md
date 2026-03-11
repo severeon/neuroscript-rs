@@ -14,13 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DenoisingHead** primitive — MLM-style prediction head for masked diffusion (hidden to token logits) (`stdlib/DenoisingHead.ns`)
 - **SigmoidMoERouter** primitive — DeepSeek-V3's sigmoid MoE router with auxiliary-loss-free load balancing (`stdlib/SigmoidMoERouter.ns`)
 - **MultiTokenPredictionHead** primitive — predicts N future tokens simultaneously (`stdlib/MultiTokenPredictionHead.ns`)
-- Python runtime implementations: `diffusion.py` (DenoisingHead, MultiTokenPredictionHead), `routing.py` (SigmoidMoERouter)
+- Python runtime implementations: `diffusion.py` (DenoisingHead, MultiTokenPredictionHead), `routing.py` (SigmoidMoERouter, MoERouter), `ssm.py` (MambaBlock)
+- **LearnableResidual** Python primitive in `connections.py` — learnable alpha/beta residual scaling
+- **MoERouter** Python primitive in `routing.py` — softmax top-k MoE router
+- **MultiHeadLatentAttention** Python primitive in `attention.py` — KV-compressed MLA (DeepSeek-V2/V3)
+- **MambaBlock** Python primitive in `ssm.py` — selective SSM stub (Mamba/Mamba-2)
 - 16 new/updated integration test snapshots
+
+### Fixed
+
+- `wasteland_briefing_v3_mhc.ns`: added `HyperExpand`/`HyperCollapse` to correctly expand/collapse the n-stream residual around the MHCBlock stack; replaced incorrect `layer_idx=layers` with `0` and added doc comment explaining the `unroll` index-exposure limitation
+- `train_mhc_adapter.py`: added note that `doitmagic/wedlm-7b-base` is not yet publicly available and suggests `Qwen/Qwen2.5-7B` as a public fallback for testing
 
 ### Changed
 
-- Stdlib registry expanded to 72 primitives (was 69)
-- `train_mhc_adapter.py` defaults to WedLM-7B target with Qwen2 sublayer wrappers and model-family auto-detection
+- Stdlib registry expanded to 77 primitives (was 72); added ManifoldHyperConnect, LearnableResidual, MultiHeadLatentAttention, MoERouter, MambaBlock
+- `__init__.py` exports updated to include DenoisingHead, MultiTokenPredictionHead, SigmoidMoERouter, MoERouter, MambaBlock, LearnableResidual, MultiHeadLatentAttention
 
 ## [0.6.1] - 2026-03-07
 

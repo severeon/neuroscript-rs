@@ -42,7 +42,9 @@ neuron WastelandBriefingV3(vocab_size = 32000, dim = 768, num_heads = 12, kv_hea
     default: [batch, seq, vocab_size]
   graph:
     in -> Embedding#6(vocab_size, dim)
-    Embedding#6(vocab_size, dim) -> stack
-    stack -> RMSNorm#7(dim)
-    RMSNorm#7(dim) -> Linear#8(dim, vocab_size)
-    Linear#8(dim, vocab_size) -> out
+    Embedding#6(vocab_size, dim) -> HyperExpand#7(n)
+    HyperExpand#7(n) -> stack
+    stack -> HyperCollapse#8()
+    HyperCollapse#8() -> RMSNorm#9(dim)
+    RMSNorm#9(dim) -> Linear#10(dim, vocab_size)
+    Linear#10(dim, vocab_size) -> out

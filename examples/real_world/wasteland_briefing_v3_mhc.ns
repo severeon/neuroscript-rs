@@ -67,15 +67,24 @@ neuron WastelandBriefingV3(vocab_size=32000, dim=768, num_heads=12, kv_heads=6, 
     in: [batch, seq]
     out: [batch, seq, vocab_size]
     context:
-        # Each layer gets mHC wrapping with layer index for per-layer params
+        # Each layer gets mHC wrapping with layer index for per-layer params.
+        # Note: NeuroScript's `unroll` block does not expose the iteration index
+        # to expressions inside the block. `layer_idx` is therefore passed as 0
+        # here as a placeholder — a future language feature or a Python-side
+        # workaround (e.g. registering each block individually) is needed for
+        # true per-layer round-robin initialization (Eq. 14 of the mHC paper).
         stack = unroll(layers):
-            block = MHCBlock(dim, num_heads, kv_heads, d_ff, n, layers)
+            block = MHCBlock(dim, num_heads, kv_heads, d_ff, n, 0)
     graph:
         in ->
             Embedding(vocab_size, dim)
-            # TODO: Expand to n-wide stream here (need HCInit primitive)
-            # For now, conceptual — the ManifoldHyperConnect handles expansion
+            # Expand the single hidden stream to n parallel streams for mHC.
+            # HyperExpand: [batch, seq, dim] -> [batch, seq, n, dim]
+            HyperExpand(n)
             stack
+            # Collapse back to a single stream before the language-model head.
+            # HyperCollapse: [batch, seq, n, dim] -> [batch, seq, dim]
+            HyperCollapse()
             RMSNorm(dim)
             Linear(dim, vocab_size)
             out
