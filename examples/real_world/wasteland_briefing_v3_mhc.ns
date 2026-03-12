@@ -1,0 +1,90 @@
+# Wasteland Briefing Model v3 — "Deep-Thin with mHC"
+#
+# Combines BriefingV2's deep-thin architecture (40 layers, dim=768)
+# with Manifold-Constrained Hyper-Connections for stable cross-layer
+# information flow.
+#
+# Rationale from mHC paper (DeepSeek, arXiv:2512.24880v2):
+# - HC expands residual stream width by factor n, enabling richer
+#   cross-layer communication without changing per-layer FLOPs
+# - Unconstrained HC causes signal explosion (3000x gain at 60 layers)
+# - mHC constrains the mixing matrix to doubly stochastic (Birkhoff polytope)
+#   via Sinkhorn-Knopp, bounding composite gain to ~1.6x
+# - At 27B scale: +2.1% BBH, +2.3% DROP over HC, 6.7% training overhead
+#
+# Why this model specifically:
+# - 40 layers is exactly where mHC shines (deep networks benefit most)
+# - n=4 expansion on dim=768 means 4*768=3072 stream width — cheap
+# - The doubly stochastic constraint guarantees stability at any depth
+# - Fine-tuning variant: freeze backbone, train only mHC params (~0.1%)
+#
+# Architecture:
+# - 40 layers, dim=768, 12 heads, 6 KV heads (GQA 2:1)
+# - SwiGLU FFN with 2x expansion
+# - RMSNorm (pre-norm)
+# - mHC wrapping both attention and FFN sublayers (n=4)
+# - Sinkhorn-Knopp with 20 iterations for H_res projection
+#
+# Estimated params: ~300M base + ~0.3M mHC params
+
+/// Attention sublayer (unwrapped — mHC wraps this)
+neuron AttentionSublayer(dim, num_heads, kv_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            out
+
+
+/// FFN sublayer (unwrapped — mHC wraps this)
+neuron FFNSublayer(dim, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            RMSNorm(dim)
+            SwiGLU(dim, d_ff)
+            out
+
+
+/// mHC-wrapped transformer block
+/// Each sublayer gets its own ManifoldHyperConnect wrapper
+/// which manages the n-wide residual stream and doubly stochastic mixing
+neuron MHCBlock(dim, num_heads, kv_heads, d_ff, n, layer_idx):
+    in: [batch, seq, n, dim]
+    out: [batch, seq, n, dim]
+    graph:
+        # mHC wraps attention: manages residual stream expansion + mixing
+        in -> ManifoldHyperConnect(AttentionSublayer(dim, num_heads, kv_heads), n, dim, layer_idx) -> mid
+        # mHC wraps FFN: same stream, continues through FFN
+        mid -> ManifoldHyperConnect(FFNSublayer(dim, d_ff), n, dim, layer_idx) -> out
+
+
+/// Deep-thin briefing model with mHC — 40 layers, dim=768, n=4
+neuron WastelandBriefingV3(vocab_size=32000, dim=768, num_heads=12, kv_heads=6, d_ff=1536, n=4, layers=40):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        # Each layer gets mHC wrapping with layer index for per-layer params.
+        # Note: NeuroScript's `unroll` block does not expose the iteration index
+        # to expressions inside the block. `layer_idx` is therefore passed as 0
+        # here as a placeholder — a future language feature or a Python-side
+        # workaround (e.g. registering each block individually) is needed for
+        # true per-layer round-robin initialization (Eq. 14 of the mHC paper).
+        stack = unroll(layers):
+            block = MHCBlock(dim, num_heads, kv_heads, d_ff, n, 0)
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            # Expand the single hidden stream to n parallel streams for mHC.
+            # HyperExpand: [batch, seq, dim] -> [batch, seq, n, dim]
+            HyperExpand(n)
+            stack
+            # Collapse back to a single stream before the language-model head.
+            # HyperCollapse: [batch, seq, n, dim] -> [batch, seq, dim]
+            HyperCollapse()
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out

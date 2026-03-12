@@ -1,0 +1,14 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron LearnableResidual(dim):
+  inputs:
+    main: [*shape, dim]
+    skip: [*shape, dim]
+  outputs:
+    default: [*shape, dim]
+  impl:
+    Source: neuroscript,connections/LearnableResidual

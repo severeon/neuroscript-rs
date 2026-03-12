@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MultiHeadLatentAttention(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  impl:
+    Source: neuroscript,attention/MultiHeadLatentAttention

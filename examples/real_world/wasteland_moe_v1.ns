@@ -1,0 +1,64 @@
+# Wasteland MoE v1 — "granite4-inspired Mixture of Experts"
+#
+# Based on granite4's winning formula: MoE lets you have a "big model in
+# a small body." granite4 has 7B total params but only ~1-2B active per token,
+# scoring 60/100 at 102 tok/s.
+#
+# This model tests hypothesis 6: task-specialized experts.
+# Instead of generic experts, we design with the intent that experts
+# will specialize during training for different code/text patterns:
+# - Some experts for structured output (bullet points, markdown)
+# - Some experts for code patterns (function signatures, control flow)
+# - Some experts for natural language reasoning
+#
+# Architecture choices:
+# - 24 layers (moderate depth)
+# - dim=1024, 16 query heads, 4 KV heads
+# - 16 experts, 4 active per token (25% activation — granite4 uses ~10%)
+# - Expert FFN dim=1024 (each expert is small, collective capacity is large)
+# - Shared FFN before MoE routing (granite4 pattern)
+# - Total params ~2B, active ~700M
+#
+# The MoE routing happens in the FFN sublayer — attention is dense (all params active).
+# This matches the empirical finding that attention benefits from full capacity
+# while FFN can be sparse without quality loss.
+#
+# Estimated total params: ~2B (active: ~700M per token)
+
+/// Dense attention + sparse MoE FFN block
+/// Attention uses all parameters; FFN routes through experts
+neuron MoEBlock(dim, num_heads, kv_heads, num_experts, active_experts, expert_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Dense attention (all params active)
+        in -> (skip1, attn_path)
+        attn_path ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            attn_out
+        (skip1, attn_out) -> Add() -> mid
+
+        # Sparse MoE FFN (only active_experts of num_experts fire per token)
+        mid -> (skip2, moe_path)
+        moe_path ->
+            RMSNorm(dim)
+            MoERouter(dim, num_experts, active_experts, expert_dim)
+            moe_out
+        (skip2, moe_out) -> Add() -> out
+
+
+/// MoE briefing/coding hybrid — 2B total, 700M active
+neuron WastelandMoEV1(vocab_size=32000, dim=1024, num_heads=16, kv_heads=4, num_experts=16, active_experts=4, expert_dim=1024, layers=24):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        stack = unroll(layers):
+            block = MoEBlock(dim, num_heads, kv_heads, num_experts, active_experts, expert_dim)
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            stack
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out

@@ -5,6 +5,40 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **WedLM-DS full model design** — 28-layer hybrid combining Qwen2.5-7B backbone with DeepSeek-V3 innovations (MLA, learnable residual weights, sigmoid MoE) in `examples/wedlm_ds.ns`
+- **WedLMDSBlock** composite neuron — single transformer block with MLA + learnable residuals + SwiGLU FFN (`stdlib/WedLMDSBlock.ns`)
+- **DenoisingHead** primitive — MLM-style prediction head for masked diffusion (hidden to token logits) (`stdlib/DenoisingHead.ns`)
+- **SigmoidMoERouter** primitive — DeepSeek-V3's sigmoid MoE router with auxiliary-loss-free load balancing (`stdlib/SigmoidMoERouter.ns`)
+- **MultiTokenPredictionHead** primitive — predicts N future tokens simultaneously (`stdlib/MultiTokenPredictionHead.ns`)
+- Python runtime implementations: `diffusion.py` (DenoisingHead, MultiTokenPredictionHead), `routing.py` (SigmoidMoERouter, MoERouter), `ssm.py` (MambaBlock)
+- **LearnableResidual** Python primitive in `connections.py` — learnable alpha/beta residual scaling
+- **MoERouter** Python primitive in `routing.py` — softmax top-k MoE router
+- **MultiHeadLatentAttention** Python primitive in `attention.py` — KV-compressed MLA (DeepSeek-V2/V3)
+- **MambaBlock** Python primitive in `ssm.py` — selective SSM stub (Mamba/Mamba-2)
+- 16 new/updated integration test snapshots
+
+### Fixed
+
+- `ssm.py`: removed misleading "O(n) sequence processing" summary claim from `MambaBlock` docstring; clarified that true O(n) requires the mamba-ssm fused CUDA kernel
+- `wasteland_hybrid_v1.ns`: added prominent `PLACEHOLDER` warning that all-Mamba-then-all-Attention stacking is a simplification; true granite4-style interleaving requires scheduling constructs not yet implemented
+- `MultiTokenPredictionHead.ns`: added doc note that the `[batch, seq, num_tokens, vocab_size]` output requires `.view(batch, seq*num_tokens, vocab_size)` reshape before standard cross-entropy loss
+- `train_mhc_adapter.py`: changed `base_model` default from `doitmagic/wedlm-7b-base` (not publicly available) to `Qwen/Qwen2.5-7B`
+- `CHANGELOG.md`: clarified `sinkhorn_knopp` removal — removed from public `__all__` but still importable as an internal utility
+- `wasteland_briefing_v3_mhc.ns`: added `HyperExpand`/`HyperCollapse` to correctly expand/collapse the n-stream residual around the MHCBlock stack; replaced incorrect `layer_idx=layers` with `0` and added doc comment explaining the `unroll` index-exposure limitation
+- `train_mhc_adapter.py`: added note that `doitmagic/wedlm-7b-base` is not yet publicly available and suggests `Qwen/Qwen2.5-7B` as a public fallback for testing
+- `routing.py`: replaced O(tokens × experts × k) nested loops in `SigmoidMoERouter.forward` and `MoERouter.forward` with `index_add_` pattern (O(num_experts) loop; true zero-loop vectorization requires padding or custom scatter kernels)
+- `__init__.py`: removed `sinkhorn_knopp` from public `__all__` API surface but still importable as an internal utility via `from neuroscript_runtime.primitives.connections import sinkhorn_knopp`
+- `MambaBlock.ns`: added stub note indicating that the runtime SSM implementation is a structural placeholder and production use should substitute the fused CUDA kernel from the `mamba-ssm` package
+
+### Changed
+
+- Stdlib registry expanded to 77 primitives (was 72); added ManifoldHyperConnect, LearnableResidual, MultiHeadLatentAttention, MoERouter, MambaBlock
+- `__init__.py` exports updated to include DenoisingHead, MultiTokenPredictionHead, SigmoidMoERouter, MoERouter, MambaBlock, LearnableResidual, MultiHeadLatentAttention
+
 ## [0.6.1] - 2026-03-07
 
 Sprint 3: 12 issues resolved by 9 AI agents across 3 batches. See [Agent Scoreboard](docs/AGENT-SCOREBOARD.md).

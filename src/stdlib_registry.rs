@@ -161,11 +161,27 @@ impl StdlibRegistry {
             // ── Debug/Logging ────────────────────────────────────────────
             ("Log", "neuroscript_runtime.primitives.logging", "Log", "Debug logging with colored output and tensor info (pass-through)"),
 
+            // ── Attention (continued) ────────────────────────────────────
+            ("MultiHeadLatentAttention", "neuroscript_runtime.primitives.attention", "MultiHeadLatentAttention", "MLA: KV-compressed attention with low-rank latent (DeepSeek-V2/V3, 93% KV cache reduction)"),
+
             // ── Connections (Hyper-Connections) ──────────────────────────
-            ("HyperExpand",   "neuroscript_runtime.primitives.connections", "HyperExpand",   "Expand single hidden to n copies for hyper-connections"),
-            ("HyperCollapse", "neuroscript_runtime.primitives.connections", "HyperCollapse", "Collapse n copies via sum for hyper-connections"),
-            ("HCWidth",       "neuroscript_runtime.primitives.connections", "HCWidth",       "Width connection for hyper-connections (mix hidden copies)"),
-            ("HCDepth",       "neuroscript_runtime.primitives.connections", "HCDepth",       "Depth connection for hyper-connections (merge layer output)"),
+            ("HyperExpand",       "neuroscript_runtime.primitives.connections", "HyperExpand",       "Expand single hidden to n copies for hyper-connections"),
+            ("HyperCollapse",     "neuroscript_runtime.primitives.connections", "HyperCollapse",     "Collapse n copies via sum for hyper-connections"),
+            ("HCWidth",           "neuroscript_runtime.primitives.connections", "HCWidth",           "Width connection for hyper-connections (mix hidden copies)"),
+            ("HCDepth",           "neuroscript_runtime.primitives.connections", "HCDepth",           "Depth connection for hyper-connections (merge layer output)"),
+            ("ManifoldHyperConnect", "neuroscript_runtime.primitives.connections", "ManifoldHyperConnect", "mHC wrapper with Sinkhorn-Knopp doubly stochastic residual mixing (Xie et al. 2026)"),
+            ("LearnableResidual", "neuroscript_runtime.primitives.connections", "LearnableResidual", "Residual connection with learnable per-layer alpha/beta scaling (DeepSeek-V3)"),
+
+            // ── Diffusion ────────────────────────────────────────────────
+            ("DenoisingHead",           "neuroscript_runtime.primitives.diffusion", "DenoisingHead",           "MLM-style prediction head for masked diffusion (hidden → logits)"),
+            ("MultiTokenPredictionHead","neuroscript_runtime.primitives.diffusion", "MultiTokenPredictionHead","Predicts N future tokens simultaneously (multi-token prediction)"),
+
+            // ── Routing ──────────────────────────────────────────────────
+            ("SigmoidMoERouter", "neuroscript_runtime.primitives.routing", "SigmoidMoERouter", "Sigmoid-gated MoE router with auxiliary-loss-free load balancing (DeepSeek-V3)"),
+            ("MoERouter",        "neuroscript_runtime.primitives.routing", "MoERouter",        "Softmax-gated top-k MoE router with auxiliary load-balancing loss"),
+
+            // ── Selective State Space Models ─────────────────────────────
+            ("MambaBlock", "neuroscript_runtime.primitives.ssm", "MambaBlock", "Selective SSM block — structural stub (true O(n) requires mamba-ssm fused kernel)"),
         ];
 
         for &(name, module, class, desc) in PRIMITIVES {

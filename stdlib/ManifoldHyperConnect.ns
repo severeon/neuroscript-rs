@@ -1,0 +1,35 @@
+/// Manifold-Constrained Hyper-Connection (mHC)
+///
+/// Extends Hyper-Connections with manifold constraints for training stability.
+/// Projects the residual mixing matrix H_res onto the Birkhoff polytope
+/// (set of doubly stochastic matrices) via Sinkhorn-Knopp normalization.
+///
+/// Key properties of the doubly stochastic constraint:
+/// 1. Norm preservation: spectral norm <= 1 (non-expansive, prevents explosion)
+/// 2. Compositional closure: product of doubly stochastic matrices is doubly stochastic
+/// 3. Signal conservation: preserves global mean across layers
+/// 4. Geometric interpretation: convex combination of permutations (Birkhoff polytope)
+///
+/// The H_pre and H_post mappings are additionally constrained to be non-negative
+/// (via sigmoid) to prevent signal cancellation.
+///
+/// Parameters:
+/// - layer: The sublayer (attention or FFN) to wrap
+/// - n: Expansion factor for residual stream width (typically 4)
+/// - dim: Model dimension
+/// - layer_idx: Layer index for per-layer parameters
+/// - alpha_init: Gating factor initialization (default: 0.01, per paper)
+/// - sinkhorn_iters: Number of Sinkhorn-Knopp iterations (default: 20)
+///
+/// Shape Contract:
+/// - Input: [*batch, n, dim] — expanded residual stream (n parallel streams)
+/// - Output: [*batch, n, dim] — updated residual stream after layer + mixing
+///
+/// For n=1, degenerates to standard residual connection (identity mapping).
+///
+/// Reference: Xie et al. (2026) "mHC: Manifold-Constrained Hyper-Connections"
+/// arXiv:2512.24880v2 (DeepSeek-AI)
+neuron ManifoldHyperConnect(layer: Neuron, n, dim, layer_idx, alpha_init=0.01, sinkhorn_iters=20):
+    in: [*batch, n, dim]
+    out: [*batch, n, dim]
+    impl: neuroscript,connections/ManifoldHyperConnect

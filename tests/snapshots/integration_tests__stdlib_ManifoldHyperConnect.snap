@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ManifoldHyperConnect(layer, n, dim, layer_idx, alpha_init = 0.01, sinkhorn_iters = 20):
+  inputs:
+    default: [*batch, n, dim]
+  outputs:
+    default: [*batch, n, dim]
+  impl:
+    Source: neuroscript,connections/ManifoldHyperConnect

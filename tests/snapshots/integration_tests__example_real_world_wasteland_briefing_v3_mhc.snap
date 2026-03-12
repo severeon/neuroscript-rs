@@ -1,0 +1,50 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AttentionSublayer(dim, num_heads, kv_heads):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> RMSNorm#0(dim)
+    RMSNorm#0(dim) -> GroupedQueryAttention#1(dim, num_heads, kv_heads)
+    GroupedQueryAttention#1(dim, num_heads, kv_heads) -> out
+
+neuron FFNSublayer(dim, d_ff):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> RMSNorm#2(dim)
+    RMSNorm#2(dim) -> SwiGLU#3(dim, d_ff)
+    SwiGLU#3(dim, d_ff) -> out
+
+neuron MHCBlock(dim, num_heads, kv_heads, d_ff, n, layer_idx):
+  inputs:
+    default: [batch, seq, n, dim]
+  outputs:
+    default: [batch, seq, n, dim]
+  graph:
+    in -> ManifoldHyperConnect#4(AttentionSublayer(dim, num_heads, kv_heads), n, dim, layer_idx)
+    ManifoldHyperConnect#4(AttentionSublayer(dim, num_heads, kv_heads), n, dim, layer_idx) -> mid
+    mid -> ManifoldHyperConnect#5(FFNSublayer(dim, d_ff), n, dim, layer_idx)
+    ManifoldHyperConnect#5(FFNSublayer(dim, d_ff), n, dim, layer_idx) -> out
+
+neuron WastelandBriefingV3(vocab_size = 32000, dim = 768, num_heads = 12, kv_heads = 6, d_ff = 1536, n = 4, layers = 40):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#6(vocab_size, dim)
+    Embedding#6(vocab_size, dim) -> HyperExpand#7(n)
+    HyperExpand#7(n) -> stack
+    stack -> HyperCollapse#8()
+    HyperCollapse#8() -> RMSNorm#9(dim)
+    RMSNorm#9(dim) -> Linear#10(dim, vocab_size)
+    Linear#10(dim, vocab_size) -> out

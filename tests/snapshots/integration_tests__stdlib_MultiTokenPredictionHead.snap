@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron MultiTokenPredictionHead(dim, vocab_size, num_tokens = 4):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, num_tokens, vocab_size]
+  impl:
+    Source: neuroscript,diffusion/MultiTokenPredictionHead

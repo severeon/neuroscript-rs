@@ -1,0 +1,28 @@
+/// Multi-Token Prediction Head
+///
+/// Predicts N future tokens simultaneously (multi-token prediction objective).
+/// Useful for both diffusion (parallel denoising) and AR models.
+///
+/// Each of the num_tokens prediction positions shares a trunk but has an
+/// independent linear projection head.
+///
+/// Parameters:
+/// - dim: Input hidden dimension
+/// - vocab_size: Vocabulary size
+/// - num_tokens: Number of future tokens to predict simultaneously (default 4)
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, num_tokens, vocab_size]
+///
+/// Note: The [batch, seq, num_tokens, vocab_size] output must be reshaped before
+/// standard cross-entropy loss. Use `.view(batch, seq * num_tokens, vocab_size)`
+/// (or `.view(batch * seq, num_tokens, vocab_size)` depending on loss formulation)
+/// before passing to `F.cross_entropy`.
+///
+/// Reference: Gloeckle et al. (2024) "Better & Faster Large Language Models
+/// via Multi-token Prediction"
+neuron MultiTokenPredictionHead(dim, vocab_size, num_tokens=4):
+    in: [batch, seq, dim]
+    out: [batch, seq, num_tokens, vocab_size]
+    impl: neuroscript,diffusion/MultiTokenPredictionHead

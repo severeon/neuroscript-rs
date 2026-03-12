@@ -1,0 +1,35 @@
+/// Mamba Block — Selective State Space Model
+///
+/// Implements the Mamba selective SSM layer as used in granite4 and Mamba-2.
+/// Processes sequences via a recurrent state space formulation with
+/// input-dependent selection (O(n) with fused kernel, O(n*d_state) as stub).
+///
+/// The key innovation over prior SSMs (S4, H3) is that Mamba makes the
+/// state transition matrices input-dependent ("selective"), allowing the
+/// model to filter information based on content rather than just position.
+///
+/// Parameters:
+/// - dim: Model dimension
+/// - d_state: SSM state dimension (typically 128)
+/// - d_conv: Local convolution width (typically 4)
+/// - num_heads: Number of parallel SSM heads (for Mamba-2 multi-head variant)
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// Internal structure:
+/// 1. Input projection: Linear(dim, 2*expand*dim) — split into x and z
+/// 2. Short convolution: Conv1d(d_conv) on x
+/// 3. SSM: x -> A,B,C,delta (input-dependent) -> selective_scan -> y
+/// 4. Gating: y * SiLU(z)
+/// 5. Output projection: Linear(expand*dim, dim)
+///
+/// Reference: Gu & Dao (2023) "Mamba: Linear-Time Sequence Modeling
+/// with Selective State Spaces"
+neuron MambaBlock(dim, d_state=128, d_conv=4, num_heads=1):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    # NOTE: runtime/ssm.py is a structural stub. For production, replace with
+    # the fused kernel from https://github.com/state-spaces/mamba (mamba-ssm package).
+    impl: neuroscript,ssm/MambaBlock
