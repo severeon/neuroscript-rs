@@ -223,6 +223,8 @@ pub(super) fn snake_case_impl(name: &str) -> String {
 }
 
 /// Generate a unique key for an endpoint (for call deduplication)
+// TODO: refactor to use EndpointVisitor (#126) — this is a single-level match,
+// not a recursive walker, so the visitor pattern is less beneficial here.
 ///
 /// Each call is uniquely identified by its id, so modules with learnable
 /// parameters get separate instances (e.g., 12 transformer layers should
@@ -275,52 +277,12 @@ pub(super) fn has_captured_dimensions_impl(value: &Value, params: &HashSet<Strin
     }
 }
 
-/// Collect all Call endpoints recursively from connections
+/// Collect all Call endpoints recursively from connections.
+///
+/// Uses `CallCollector` from `crate::visitor` to walk the endpoint tree.
 pub(super) fn collect_calls_impl(connections: &[Connection], calls: &mut Vec<Endpoint>) {
-    for conn in connections {
-        collect_calls_from_endpoint_impl(&conn.source, calls);
-        collect_calls_from_endpoint_impl(&conn.destination, calls);
-    }
-}
-
-/// Collect calls from a single endpoint
-fn collect_calls_from_endpoint_impl(endpoint: &Endpoint, calls: &mut Vec<Endpoint>) {
-    match endpoint {
-        Endpoint::Call { .. } => calls.push(endpoint.clone()),
-        Endpoint::Match(match_expr) => {
-            for arm in &match_expr.arms {
-                for ep in &arm.pipeline {
-                    collect_calls_from_endpoint_impl(ep, calls);
-                }
-            }
-        }
-        Endpoint::If(if_expr) => {
-            for branch in &if_expr.branches {
-                for ep in &branch.pipeline {
-                    collect_calls_from_endpoint_impl(ep, calls);
-                }
-            }
-            if let Some(else_branch) = &if_expr.else_branch {
-                for ep in else_branch {
-                    collect_calls_from_endpoint_impl(ep, calls);
-                }
-            }
-        }
-        Endpoint::Tuple(_refs) => {
-            // Tuple unpacking doesn't contain calls in current IR
-        }
-        Endpoint::Ref(_) => {}
-        Endpoint::Reshape(_) => {
-            // Reshape neuron annotations are instantiated separately by
-            // collect_reshape_transforms in instantiation.rs (as self._transform_{id}).
-            // Do NOT create synthetic Call endpoints here — that would cause
-            // duplicate module instantiation.
-        }
-        Endpoint::Wrap(_) => {
-            // @wrap should be desugared before codegen
-        }
-        // Endpoint::Unroll removed — expanded before codegen
-    }
+    let mut collected = crate::visitor::CallCollector::from_connections(connections);
+    calls.append(&mut collected);
 }
 
 // CodeGenerator wrapper methods

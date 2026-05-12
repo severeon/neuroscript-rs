@@ -410,62 +410,12 @@ fn collect_dependencies(
     Ok(())
 }
 
-/// Collect all neuron names called in connections
+/// Collect all neuron names called in connections.
+///
+/// Uses `NeuronNameCollector` from `crate::visitor` to walk the endpoint tree.
 fn collect_calls_from_connections(connections: &[Connection], result: &mut HashSet<String>) {
-    for conn in connections {
-        collect_calls_from_endpoint(&conn.source, result);
-        collect_calls_from_endpoint(&conn.destination, result);
-    }
-}
-
-/// Recursively collect neuron names from an endpoint
-fn collect_calls_from_endpoint(endpoint: &Endpoint, result: &mut HashSet<String>) {
-    match endpoint {
-        Endpoint::Call { name, .. } => {
-            result.insert(name.clone());
-        }
-        Endpoint::Tuple(_port_refs) => {
-            // Tuples contain PortRef, not Endpoint - they don't call neurons
-        }
-        Endpoint::Match(match_expr) => {
-            for arm in &match_expr.arms {
-                for ep in &arm.pipeline {
-                    collect_calls_from_endpoint(ep, result);
-                }
-            }
-        }
-        Endpoint::If(if_expr) => {
-            for branch in &if_expr.branches {
-                for ep in &branch.pipeline {
-                    collect_calls_from_endpoint(ep, result);
-                }
-            }
-            if let Some(else_branch) = &if_expr.else_branch {
-                for ep in else_branch {
-                    collect_calls_from_endpoint(ep, result);
-                }
-            }
-        }
-        Endpoint::Ref(_) => {
-            // Port references don't call neurons
-        }
-        Endpoint::Reshape(reshape) => {
-            // Collect neuron names from annotation strategies
-            if let Some(ref annotation) = reshape.annotation {
-                let strategy = match annotation {
-                    TransformAnnotation::Reduce { strategy, .. } => strategy,
-                    TransformAnnotation::Repeat { strategy, .. } => strategy,
-                };
-                if let TransformStrategy::Neuron { name, .. } = strategy {
-                    result.insert(name.clone());
-                }
-            }
-        }
-        Endpoint::Wrap(_) => {
-            // @wrap should be desugared before codegen
-        }
-        // Endpoint::Unroll removed — expanded before codegen
-    }
+    let names = crate::visitor::NeuronNameCollector::from_connections(connections);
+    result.extend(names);
 }
 
 /// Generate PyTorch code for a specific neuron (PUBLIC API)

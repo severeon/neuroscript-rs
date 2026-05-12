@@ -71,6 +71,8 @@ pub(super) fn detect_cycles(
 }
 
 /// Extract node names from SOURCE endpoints - these reference existing instances
+// TODO: refactor to use EndpointVisitor (#126) — requires stateful visitor with
+// call_last_instance/call_counter, so not a simple drop-in replacement.
 pub(super) fn extract_node_names_from_sources(
     endpoint: &Endpoint,
     call_last_instance: &mut HashMap<String, String>,
@@ -190,6 +192,8 @@ fn add_edges_recursive(
 }
 
 /// Extract node names from DESTINATION endpoints - these CREATE new instances
+// TODO: refactor to use EndpointVisitor (#126) — requires stateful visitor with
+// call_counter/call_last_instance, so not a simple drop-in replacement.
 pub(super) fn extract_node_names_from_destinations(
     endpoint: &Endpoint,
     call_counter: &mut HashMap<String, usize>,
@@ -230,29 +234,13 @@ pub(super) fn extract_node_names_from_destinations(
     }
 }
 
-/// Extract node names for cycle detection (legacy version for tests)
-/// Calls are identified by name + args to distinguish different instances
+/// Extract node names for cycle detection (legacy version for tests).
+///
+/// Calls are identified by name + args to distinguish different instances.
+/// Uses `SimpleNodeNameCollector` from `crate::visitor`.
 #[allow(dead_code)]
 pub(super) fn extract_simple_node_names(endpoint: &Endpoint) -> Vec<String> {
-    match endpoint {
-        Endpoint::Call { name, args, .. } => {
-            // Include args in node ID to distinguish different call instances
-            // Format: "NeuronName(arg1,arg2,...)"
-            let args_str = args
-                .iter()
-                .map(|v| format!("{:?}", v))
-                .collect::<Vec<_>>()
-                .join(",");
-            vec![format!("{}({})", name, args_str)]
-        }
-        Endpoint::Ref(port_ref) => vec![port_ref.node.clone()],
-        Endpoint::Tuple(refs) => refs.iter().map(|r| r.node.clone()).collect(),
-        Endpoint::Match(_) => vec![], // Skip Match for cycle detection
-        Endpoint::If(_) => vec![],    // Skip If for cycle detection
-        Endpoint::Reshape(_) => vec![], // Reshape is a pure data transform — no dependencies
-        Endpoint::Wrap(_) => vec![],    // @wrap is desugared before validation
-        // Endpoint::Unroll removed // Expanded before validation
-    }
+    crate::visitor::SimpleNodeNameCollector::from_endpoint(endpoint)
 }
 
 /// DFS cycle detection

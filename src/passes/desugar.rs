@@ -80,6 +80,7 @@ fn desugar_neuron_wraps(
     Ok(())
 }
 
+// TODO: refactor to use EndpointVisitor (#126) — requires mutable visitor variant
 fn desugar_endpoint_wraps(
     endpoint: &mut Endpoint,
     new_bindings: &mut Vec<Binding>,

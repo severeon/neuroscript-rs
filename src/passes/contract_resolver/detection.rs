@@ -19,6 +19,7 @@ pub(super) fn has_named_match(neuron: &NeuronDef) -> bool {
 }
 
 /// Recursively check if an endpoint contains a named match
+// TODO: refactor to use EndpointVisitor (#126)
 fn endpoint_has_named_match(endpoint: &Endpoint, depth: usize) -> bool {
     if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
         return false;
@@ -62,6 +63,7 @@ fn endpoint_has_named_match(endpoint: &Endpoint, depth: usize) -> bool {
 /// Check for remaining MatchSubject::Named patterns that were not resolved.
 /// These would cause codegen failures since NeuronContract patterns cannot be
 /// lowered to runtime shape checks.
+// TODO: refactor to use EndpointVisitor (#126)
 pub(super) fn collect_unresolved_contracts(
     endpoint: &Endpoint,
     neuron_name: &str,
@@ -123,6 +125,7 @@ pub(super) fn collect_named_match_params(neuron: &NeuronDef) -> Vec<String> {
     params
 }
 
+// TODO: refactor to use EndpointVisitor (#126)
 fn collect_named_params_from_endpoint(endpoint: &Endpoint, params: &mut Vec<String>, depth: usize) {
     if depth >= MAX_CONTRACT_RESOLUTION_DEPTH {
         return;
