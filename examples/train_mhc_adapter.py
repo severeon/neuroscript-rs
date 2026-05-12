@@ -3,12 +3,11 @@
 mHC Adapter Fine-Tuning Script — Train & Evaluate
 ===================================================
 
-Fine-tunes a frozen WedLM-7B (or Phi-3-mini) model with Manifold-Constrained
+Fine-tunes a frozen Qwen2.5-7B (or Phi-3-mini) model with Manifold-Constrained
 Hyper-Connection adapters and compares against LoRA at the same parameter budget.
 
-WedLM-7B is a text-diffusion model built on the Qwen2.5-7B backbone. This script
-auto-detects the model family (qwen2 vs phi3) and dispatches to the correct
-sublayer wrappers.
+The script auto-detects the model family (qwen2 vs phi3) and dispatches to the
+correct sublayer wrappers.
 
 This script demonstrates mHC as a parameter-efficient fine-tuning method with
 theoretical stability guarantees from the Birkhoff polytope constraint.
@@ -87,7 +86,6 @@ class TrainConfig:
     """Training configuration — follows SmolLM2 SFT recipe with MPS adaptations."""
 
     # Model
-    # WedLM-7B is not yet publicly available; Qwen2.5-7B is the public base.
     base_model: str = "Qwen/Qwen2.5-7B"
     method: str = "mhc"  # "mhc" or "lora"
 

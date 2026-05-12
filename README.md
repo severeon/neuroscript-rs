@@ -222,12 +222,6 @@ neuron Concat(axis):
 
 See [`stdlib/`](stdlib/) for full definitions.
 
-### Full Model Examples
-
-| Model | Description | File |
-|-------|-------------|------|
-| **WedLM-DS** | 28-layer hybrid: Qwen2.5-7B backbone + DeepSeek-V3 MLA, learnable residuals, sigmoid MoE | [`examples/wedlm_ds.ns`](examples/wedlm_ds.ns) |
-
 ## Testing
 
 ```bash

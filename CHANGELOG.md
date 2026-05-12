@@ -5,6 +5,88 @@ All notable changes to NeuroScript will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - Unreleased
+
+Sprint 4 internal refactors plus the Manifold-Constrained Hyper-Connection (mHC)
+primitive family and supporting runtime. Some pieces in this release line
+originated on `main` (mHC family via PR #169); the WedLM-DS model design that
+was bundled with that PR is **not** part of this release line.
+
+### Added — Manifold-Constrained Hyper-Connection (mHC)
+
+- **mHC primitive family** — `ManifoldHyperConnect` (composite), `HyperExpand`,
+  `HyperCollapse`, `LearnableResidual` with Birkhoff-polytope-constrained
+  routing for parameter-efficient fine-tuning (`stdlib/ManifoldHyperConnect.ns`,
+  `stdlib/LearnableResidual.ns`)
+- **MoE / routing primitives** — `MoERouter` (softmax top-k) and
+  `SigmoidMoERouter` (DeepSeek-V3-style sigmoid with auxiliary-loss-free load
+  balancing) (`stdlib/MoERouter.ns`, `stdlib/SigmoidMoERouter.ns`)
+- **Diffusion / multi-token primitives** — `DenoisingHead` (MLM-style head for
+  masked diffusion) and `MultiTokenPredictionHead` (predicts N future tokens)
+  (`stdlib/DenoisingHead.ns`, `stdlib/MultiTokenPredictionHead.ns`)
+- **MLA + SSM primitives** — `MultiHeadLatentAttention` (KV-compressed MLA,
+  DeepSeek-V2/V3) and `MambaBlock` (selective SSM structural placeholder)
+  (`stdlib/MultiHeadLatentAttention.ns`, `stdlib/MambaBlock.ns`)
+- **Python runtime** — `neuroscript_runtime/primitives/diffusion.py`,
+  `routing.py`, `ssm.py`; expanded `connections.py` and `attention.py` with
+  the new primitive implementations and Sinkhorn-Knopp utility
+- **mHC training/eval scripts** — `examples/train_mhc_adapter.py` (Qwen2.5-7B /
+  Phi-3-mini fine-tuning with mHC vs. LoRA at matched param budgets,
+  HuggingFaceTB/smoltalk dataset, MPS-friendly) and `examples/demo_mhc.py`
+  (parameter-comparison demo)
+- **Wasteland real-world examples** — `examples/real_world/wasteland_briefing_v1.ns`,
+  `v2.ns`, `v3_mhc.ns`, `wasteland_coder_v1.ns`, `wasteland_hybrid_v1.ns`,
+  `wasteland_moe_v1.ns`
+- **Website docs** — `website/docs/examples/mhc-transformer.mdx`,
+  Connections primitive docs for `ManifoldHyperConnect`, `HyperExpand`,
+  `HyperCollapse`
+- Stdlib registry expanded from 72 to 77 primitives
+
+### Added — Sprint 4 Language & Tooling
+
+- **Diagnostic codes for `ValidationError`** with structured miette
+  diagnostics; wildcard-constraint documentation (#75, #165 — Hal, PR #168)
+- **`Binding::new()` factory + endpoint walker rename** — `Binding` literals
+  use a factory constructor; `call_to_result` renamed to `endpoint_to_result`
+  for accuracy (#162, #163 — Sonny, PR #167)
+- **`EndpointVisitor` trait** unifying endpoint walkers across codegen,
+  validator, and passes (#126 — Chappie, merged into _dev locally)
+- **`contract_resolver.rs` decomposed** from a single 1,740-line file into a
+  submodule directory: `call_sites.rs`, `detection.rs`, `matching.rs`,
+  `resolution.rs`, `mod.rs`, plus a dedicated `tests.rs` (#127 — Bishop,
+  merged into _dev locally)
+- **Dimension-solving deduplicated** — validator now delegates shape
+  compatibility to `ShapeInferenceEngine` rather than re-implementing the
+  algebra (#130 — Roy, merged into _dev locally)
+- **CI: self-hosted runner workflow** for targeting `aibox`
+
+### Added — Orchestration / Agent System
+
+- Persona memory files: `CLAUDE.ava.md`, `CLAUDE.roy.md`, `CLAUDE.vision.md`
+- `9bd4be1` onboarded neuroscript-rs to the cross-project orchestration system
+
+### Changed
+
+- Stdlib registry exports updated to include `DenoisingHead`,
+  `MultiTokenPredictionHead`, `SigmoidMoERouter`, `MoERouter`, `MambaBlock`,
+  `LearnableResidual`, `MultiHeadLatentAttention`
+- `train_mhc_adapter.py` default base model is `Qwen/Qwen2.5-7B`
+- Removed unused `_gen` param in codegen, addressed an unreachable check, and
+  added a `SYNC` marker comment on the `ValidationError` variant-count
+  constant (#155, #159, #160 — Samantha, PR #166)
+
+### Fixed
+
+- `routing.py`: `SigmoidMoERouter.forward` and `MoERouter.forward` replaced
+  O(tokens × experts × k) nested loops with `index_add_` pattern (still an
+  O(num_experts) Python loop; true zero-loop vectorization requires padding
+  or scatter kernels)
+- `__init__.py`: removed `sinkhorn_knopp` from public `__all__` (still
+  importable as an internal utility)
+- `MambaBlock.ns`: doc comment clarifies the runtime is a structural
+  placeholder; production use should substitute the `mamba-ssm` fused kernel
+- mHC training on MPS: dtype, API, and double-residual fixes
+
 ## [0.6.1] - 2026-03-07
 
 Sprint 3: 12 issues resolved by 9 AI agents across 3 batches. See [Agent Scoreboard](docs/AGENT-SCOREBOARD.md).
