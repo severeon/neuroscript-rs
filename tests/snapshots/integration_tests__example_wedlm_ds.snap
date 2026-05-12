@@ -1,0 +1,18 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron WedLMDS(vocab_size = 152064, dim = 3584, num_heads = 28, kv_lora_rank = 512, q_lora_rank = 1536, v_head_dim = 128, d_ff = 18944, layers = 28):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#0(vocab_size, dim)
+    Embedding#0(vocab_size, dim) -> embedded
+    embedded -> stack
+    stack -> hidden
+    hidden -> DenoisingHead#1(dim, vocab_size)
+    DenoisingHead#1(dim, vocab_size) -> out

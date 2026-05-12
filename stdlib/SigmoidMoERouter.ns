@@ -1,0 +1,26 @@
+/// Sigmoid MoE Router (DeepSeek-V3 style)
+///
+/// MoE routing with sigmoid scoring + auxiliary-loss-free token-choice
+/// (noaux_tc) load balancing — DeepSeek-V3's approach.
+///
+/// Instead of softmax + auxiliary loss, uses:
+/// 1. Sigmoid scores for expert gating (allows multi-hot selection)
+/// 2. Token-choice load balancing via bias adjustment (no aux loss needed)
+/// 3. Top-k selection per token based on sigmoid scores
+///
+/// Parameters:
+/// - dim: Input/output feature dimension
+/// - num_experts: Total number of expert networks
+/// - active_experts: Number of experts activated per token (top-k)
+/// - expert_dim: Hidden dimension within each expert FFN
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// Reference: DeepSeek-V3 Technical Report (2024)
+/// "Auxiliary-Loss-Free Load Balancing Strategy for Mixture-of-Experts"
+neuron SigmoidMoERouter(dim, num_experts, active_experts, expert_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: neuroscript,routing/SigmoidMoERouter

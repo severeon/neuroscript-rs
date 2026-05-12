@@ -1,0 +1,30 @@
+/// Learnable Residual Connection
+///
+/// A residual connection with learnable scaling factors (alpha, beta).
+/// Instead of the standard `x + sublayer(x)`, computes:
+///   output = alpha * skip + beta * main
+/// where alpha and beta are learnable scalar parameters per-layer.
+///
+/// This gives the model fine-grained control over how much each
+/// sublayer contributes to the residual stream. Inspired by
+/// DeepSeek-V3's training stability innovations.
+///
+/// Parameters:
+/// - dim: Feature dimension (for initialization, not used in forward)
+///
+/// Shape Contract:
+/// - Input main: [*shape, dim] — sublayer output
+/// - Input skip: [*shape, dim] — residual/skip connection
+/// - Output: [*shape, dim] — weighted combination
+///
+/// Notes:
+/// - alpha initialized to 1.0, beta initialized to 1.0 (starts as standard residual)
+/// - During training, the model learns to adjust these per-layer
+/// - Helps with gradient flow in very deep networks (40+ layers)
+///
+/// Reference: DeepSeek-V3 Technical Report (2024)
+neuron LearnableResidual(dim):
+    in main: [*shape, dim]
+    in skip: [*shape, dim]
+    out: [*shape, dim]
+    impl: neuroscript,connections/LearnableResidual

@@ -61,6 +61,7 @@ from neuroscript_runtime.primitives.structural import (
 from neuroscript_runtime.primitives.attention import (
     ScaledDotProductAttention,
     MultiHeadSelfAttention,
+    MultiHeadLatentAttention,
 )
 
 from neuroscript_runtime.primitives.operations import (
@@ -98,7 +99,24 @@ from neuroscript_runtime.primitives.connections import (
     HyperCollapse,
     HCWidth,
     HCDepth,
+    ManifoldHyperConnect,
+    LearnableResidual,
 )
+
+# Diffusion
+from neuroscript_runtime.primitives.diffusion import (
+    DenoisingHead,
+    MultiTokenPredictionHead,
+)
+
+# Routing
+from neuroscript_runtime.primitives.routing import (
+    SigmoidMoERouter,
+    MoERouter,
+)
+
+# Selective State Space Models
+from neuroscript_runtime.primitives.ssm import MambaBlock
 
 __all__ = [
     "Linear",
@@ -143,6 +161,7 @@ __all__ = [
     "Clone",
     "ScaledDotProductAttention",
     "MultiHeadSelfAttention",
+    "MultiHeadLatentAttention",
     "Bias",
     "Scale",
     "MatMul",
@@ -168,4 +187,14 @@ __all__ = [
     "HyperCollapse",
     "HCWidth",
     "HCDepth",
+    "ManifoldHyperConnect",
+    "LearnableResidual",
+    # Diffusion
+    "DenoisingHead",
+    "MultiTokenPredictionHead",
+    # Routing
+    "SigmoidMoERouter",
+    "MoERouter",
+    # Selective State Space Models
+    "MambaBlock",
 ]

@@ -1,0 +1,30 @@
+/// Mixture of Experts Router
+///
+/// Top-k routing layer that selects a subset of expert networks per token.
+/// Each token is independently routed to the top-k scoring experts.
+/// Expert outputs are weighted by their gate scores and summed.
+///
+/// This is the core routing primitive for Mixture-of-Experts architectures
+/// like granite4 (62 experts, top-6), Mixtral (8 experts, top-2), etc.
+///
+/// Parameters:
+/// - dim: Input/output dimension
+/// - num_experts: Total number of expert networks
+/// - active_experts: Number of experts activated per token (top-k)
+/// - expert_dim: Hidden dimension within each expert FFN
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// Implementation:
+/// 1. Gate network: Linear(dim, num_experts) -> Softmax -> TopK
+/// 2. Route each token to its top-k experts
+/// 3. Weighted sum of expert outputs
+///
+/// Reference: Shazeer et al. (2017) "Outrageously Large Neural Networks"
+/// Also: Fedus et al. (2022) "Switch Transformers"
+neuron MoERouter(dim, num_experts, active_experts, expert_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: neuroscript,routing/MoERouter

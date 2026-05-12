@@ -1,0 +1,50 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron AttentionMoELayer(dim, num_heads, kv_heads, num_experts, active_experts, expert_dim):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (skip1, attn_path)
+    attn_path -> RMSNorm#3(dim)
+    RMSNorm#3(dim) -> GroupedQueryAttention#4(dim, num_heads, kv_heads)
+    GroupedQueryAttention#4(dim, num_heads, kv_heads) -> attn_out
+    (skip1, attn_out) -> Add#5()
+    Add#5() -> mid
+    mid -> (skip2, moe_path)
+    moe_path -> RMSNorm#6(dim)
+    RMSNorm#6(dim) -> MoERouter#7(dim, num_experts, active_experts, expert_dim)
+    MoERouter#7(dim, num_experts, active_experts, expert_dim) -> moe_out
+    (skip2, moe_out) -> Add#8()
+    Add#8() -> out
+
+neuron MambaLayer(dim, d_state, d_conv):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (skip, main)
+    main -> RMSNorm#0(dim)
+    RMSNorm#0(dim) -> MambaBlock#1(dim, d_state, d_conv)
+    MambaBlock#1(dim, d_state, d_conv) -> mamba_out
+    (skip, mamba_out) -> Add#2()
+    Add#2() -> out
+
+neuron WastelandHybridV1(vocab_size = 32000, dim = 1024, num_heads = 16, kv_heads = 4, d_state = 128, d_conv = 4, num_experts = 12, active_experts = 3, expert_dim = 1024, mamba_layers = 24, attn_layers = 8):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#9(vocab_size, dim)
+    Embedding#9(vocab_size, dim) -> mamba_stack
+    mamba_stack -> attn_stack
+    attn_stack -> RMSNorm#10(dim)
+    RMSNorm#10(dim) -> Linear#11(dim, vocab_size)
+    Linear#11(dim, vocab_size) -> out

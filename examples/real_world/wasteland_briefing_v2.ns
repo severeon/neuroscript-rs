@@ -1,0 +1,55 @@
+# Wasteland Briefing Model v2 — "Deep & Thin"
+#
+# Based on hypothesis 3: depth over width at small scale.
+# qwen3.5:0.8b uses 28 layers at 0.8B. granite4 uses 40 layers.
+# Both punch above their weight by going deep with narrow hidden dims.
+#
+# This model tests: what if we stack 40 thin transformer layers
+# with a very small hidden dim (768), targeting ~300M params?
+#
+# Architecture choices:
+# - 40 layers (granite4-depth, unusually deep for this param count)
+# - dim=768 (narrow — typical 300M models use 12-16 layers with dim=1024+)
+# - GQA 2:1 (qwen3.5 ratio — less aggressive than phi4-mini's 3:1)
+# - SwiGLU FFN with 2x expansion (smaller than typical 2.67x)
+# - RMSNorm, no biases
+#
+# Hypothesis: Deep-thin should capture more abstract patterns from
+# structured dev session data than shallow-wide at same param budget.
+#
+# Estimated params: ~300M
+
+/// Thin transformer block — narrow but many layers
+neuron ThinBlock(dim, num_heads, kv_heads, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in -> (skip1, attn_path)
+        attn_path ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            attn_out
+        (skip1, attn_out) -> Add() -> mid
+
+        mid -> (skip2, ffn_path)
+        ffn_path ->
+            RMSNorm(dim)
+            SwiGLU(dim, d_ff)
+            ffn_out
+        (skip2, ffn_out) -> Add() -> out
+
+
+/// Deep-thin briefing model — 40 layers, dim=768
+neuron WastelandBriefingV2(vocab_size=32000, dim=768, num_heads=12, kv_heads=6, d_ff=1536, layers=40):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        stack = unroll(layers):
+            block = ThinBlock(dim, num_heads, kv_heads, d_ff)
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            stack
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out

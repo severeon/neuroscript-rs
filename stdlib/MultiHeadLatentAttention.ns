@@ -1,0 +1,29 @@
+/// Multi-Head Latent Attention (MLA)
+///
+/// DeepSeek-V2/V3's key attention innovation. Compresses key-value pairs
+/// into a low-rank latent representation, dramatically reducing KV cache
+/// memory (93% reduction reported in DeepSeek-V2).
+///
+/// Instead of caching full K,V per layer, MLA:
+/// 1. Projects input to a low-rank latent: c_kv = W_dkv(x) — shape [batch, seq, kv_lora_rank]
+/// 2. Decompresses per-head for attention: K = W_uk(c_kv), V = W_uv(c_kv)
+/// 3. Query also optionally compressed: c_q = W_dq(x) — shape [batch, seq, q_lora_rank]
+/// 4. Performs standard scaled dot-product attention with RoPE on a subset of dims
+///
+/// Parameters:
+/// - dim: Model hidden dimension
+/// - num_heads: Number of attention heads
+/// - kv_lora_rank: Latent dimension for KV compression
+/// - q_lora_rank: Latent dimension for query compression (0 = no compression)
+/// - v_head_dim: Value head dimension
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// Reference: DeepSeek-V2 (2024) "DeepSeek-V2: A Strong, Economical, and
+/// Efficient Mixture-of-Experts Language Model"
+neuron MultiHeadLatentAttention(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    impl: neuroscript,attention/MultiHeadLatentAttention

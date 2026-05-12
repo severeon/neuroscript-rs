@@ -1,0 +1,153 @@
+---
+sidebar_position: 1
+title: "Manifold-Constrained Hyper-Connections"
+description: "Deep model stability via doubly stochastic residual mixing"
+---
+
+import InteractiveExample from '@site/src/components/InteractiveExample';
+
+# Manifold-Constrained Hyper-Connections (mHC)
+
+This example demonstrates **Manifold-Constrained Hyper-Connections** (mHC), a technique from DeepSeek-AI ([arXiv:2512.24880v2](https://arxiv.org/abs/2512.24880)) that stabilizes deep networks by constraining residual mixing matrices to the **Birkhoff polytope** (the set of doubly stochastic matrices).
+
+## The Problem: Signal Explosion in Deep Networks
+
+Standard residual connections (`x + f(x)`) work well for moderate depths, but Hyper-Connections (HC) — which expand the residual stream to `n` parallel channels with learnable mixing — suffer from **signal explosion** in deep networks. At 40+ layers, unconstrained HC can amplify signals by 90x or more.
+
+## The Solution: Doubly Stochastic Mixing
+
+mHC projects the mixing matrix `H_res` onto the Birkhoff polytope via Sinkhorn-Knopp normalization. This guarantees:
+
+1. **Spectral norm <= 1** (non-expansive, prevents explosion)
+2. **Compositional closure** (product of doubly stochastic matrices is doubly stochastic)
+3. **Signal conservation** (preserves global mean across layers)
+
+## The Architecture in NeuroScript
+
+The key insight is that mHC wraps *any* sublayer — attention, FFN, anything. In NeuroScript, `ManifoldHyperConnect` is a higher-order primitive that takes a sublayer as a parameter:
+
+<InteractiveExample
+  title="mHC-Wrapped Transformer Block"
+  description="Each sublayer gets its own mHC wrapper managing the n-wide residual stream"
+  initialCode={`# Attention sublayer (unwrapped)
+neuron AttentionSublayer(dim, num_heads, kv_heads):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            out
+
+# FFN sublayer (unwrapped)
+neuron FFNSublayer(dim, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        in ->
+            RMSNorm(dim)
+            SwiGLU(dim, d_ff)
+            out
+
+# mHC-wrapped transformer block
+neuron MHCBlock(dim, num_heads, kv_heads, d_ff, n, layer_idx):
+    in: [batch, seq, n, dim]
+    out: [batch, seq, n, dim]
+    graph:
+        in -> ManifoldHyperConnect(AttentionSublayer(dim, num_heads, kv_heads), n, dim, layer_idx) -> mid
+        mid -> ManifoldHyperConnect(FFNSublayer(dim, d_ff), n, dim, layer_idx) -> out`}
+/>
+
+## Full Model: Deep-Thin with mHC
+
+Our "Wasteland Briefing v3" model uses 40 layers at dim=768 with n=4 expansion — exactly the regime where mHC shines:
+
+```neuroscript
+neuron WastelandBriefingV3(vocab_size=32000, dim=768, num_heads=12, kv_heads=6, d_ff=1536, n=4, layers=40):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        stack = unroll(layers):
+            block = MHCBlock(dim, num_heads, kv_heads, d_ff, n, layers)
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            stack
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out
+```
+
+Key design choices:
+- **40 layers, dim=768**: Deep-thin architecture where mHC provides the most benefit
+- **n=4 expansion**: 4 parallel residual streams (4 * 768 = 3072 stream width) — cheap but effective
+- **GQA 2:1**: Grouped Query Attention with 12 query heads and 6 KV heads
+- **SwiGLU FFN**: Gated linear unit with 2x expansion (1536 intermediate)
+
+## How ManifoldHyperConnect Works
+
+The primitive manages three projection matrices per sublayer:
+
+| Matrix | Purpose | Constraint |
+|--------|---------|------------|
+| `H_pre` | Project from n-wide stream to sublayer input | Non-negative (sigmoid) |
+| `H_post` | Project from sublayer output back to n-wide stream | Non-negative (sigmoid) |
+| `H_res` | Mix residual streams across channels | **Doubly stochastic** (Sinkhorn-Knopp) |
+
+The forward pass:
+1. **Collapse**: `H_pre @ x` maps n-wide stream to single-channel sublayer input
+2. **Process**: Run the sublayer (attention or FFN)
+3. **Expand**: `H_post @ output` maps sublayer output back to n channels
+4. **Mix**: `H_res @ x + expanded` mixes the residual with the new information
+
+The Sinkhorn-Knopp step on `H_res` ensures the mixing never amplifies the signal:
+
+```python
+def sinkhorn_knopp(log_alpha, iters=20):
+    M = torch.exp(log_alpha)
+    for _ in range(iters):
+        M = M / M.sum(dim=-1, keepdim=True)  # normalize rows
+        M = M / M.sum(dim=-2, keepdim=True)  # normalize columns
+    return M  # doubly stochastic: all rows and columns sum to 1
+```
+
+## Running the Demo
+
+The full interactive demo runs on CPU, MPS (Apple Silicon), or CUDA:
+
+```bash
+# Install runtime
+pip install -e .
+
+# Run demo
+python3 examples/demo_mhc.py --device mps   # Apple Silicon
+python3 examples/demo_mhc.py --device cuda  # NVIDIA GPU
+python3 examples/demo_mhc.py                # CPU fallback
+```
+
+The demo verifies four properties:
+
+| Demo | What It Shows |
+|------|---------------|
+| **Sinkhorn Convergence** | Raw matrix -> perfect doubly stochastic in 20 iterations |
+| **Signal Stability** | HC explodes ~89x over 40 layers, mHC stays at ~0.83x |
+| **Forward Pass** | 8-layer mHC transformer on MPS at ~20ms, 9.4% param overhead |
+| **Fine-Tuning** | Only 0.16% parameter overhead on a 3.8B model, gradients verified |
+
+## mHC as a Fine-Tuning Adapter
+
+One of the most compelling uses: wrap a frozen pre-trained model with mHC adapters. Only the mHC parameters (~0.1-0.2% of base model) are trainable:
+
+| Base Model | Base Params | mHC Params | Overhead |
+|------------|-------------|------------|----------|
+| phi3:3.8b  | 3.8B | 6.1M | 0.162% |
+| qwen2.5-coder:3b | 3.0B | 6.1M | 0.205% |
+| WedLM-7B | 7.0B | 6.1M | 0.088% |
+
+This is comparable to LoRA but with **theoretical stability guarantees** from the Birkhoff polytope constraint. The doubly stochastic property ensures the adapted model can't diverge during fine-tuning.
+
+## References
+
+- Xie et al. (2026) "mHC: Manifold-Constrained Hyper-Connections" [arXiv:2512.24880v2](https://arxiv.org/abs/2512.24880) (DeepSeek-AI)
+- Birkhoff-von Neumann theorem: every doubly stochastic matrix is a convex combination of permutation matrices
+- NeuroScript stdlib: [`ManifoldHyperConnect.ns`](https://github.com/tquick/neuroscript-rs/blob/main/stdlib/ManifoldHyperConnect.ns)

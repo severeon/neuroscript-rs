@@ -1,0 +1,47 @@
+/// WedLM-DS Transformer Block
+///
+/// One transformer block from the WedLM-DeepSeek hybrid architecture:
+/// - Multi-Head Latent Attention (MLA) for 93% KV cache reduction
+/// - Learnable residual connections (alpha/beta scaling) for training stability
+/// - SwiGLU feed-forward network
+///
+/// Parameters:
+/// - dim: Hidden dimension (3584 for Qwen2.5-7B backbone)
+/// - num_heads: Number of attention heads
+/// - kv_lora_rank: KV latent dimension (512 for WedLM-DS)
+/// - q_lora_rank: Query latent dimension (1536 for WedLM-DS)
+/// - v_head_dim: Value head dimension (128 for WedLM-DS)
+/// - d_ff: FFN hidden dimension (typically 4 * dim)
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, dim]
+///
+/// Reference: WedLM-DS hybrid (WedLM-7B + DeepSeek-V3 architectural innovations)
+neuron WedLMDSBlock(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Fork input: one path to attention sublayer, one as skip connection
+        in -> (skip1, attn_path)
+
+        # Attention sublayer: pre-norm + MLA
+        attn_path ->
+            RMSNorm(dim)
+            MultiHeadLatentAttention(dim, num_heads, kv_lora_rank, q_lora_rank, v_head_dim)
+            attn_out
+
+        # Learnable residual 1: (main=attn_out, skip=skip1)
+        (attn_out, skip1) -> LearnableResidual(dim) -> mid
+
+        # Fork mid: one path to FFN sublayer, one as skip connection
+        mid -> (skip2, ffn_path)
+
+        # FFN sublayer: pre-norm + SwiGLU
+        ffn_path ->
+            RMSNorm(dim)
+            SwiGLU(dim, d_ff)
+            ffn_out
+
+        # Learnable residual 2: (main=ffn_out, skip=skip2)
+        (ffn_out, skip2) -> LearnableResidual(dim) -> out

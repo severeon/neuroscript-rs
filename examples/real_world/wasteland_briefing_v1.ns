@@ -1,0 +1,52 @@
+# Wasteland Briefing Model v1 — "phi4-mini clone"
+#
+# Best-guess model for dev session summarization, based on phi4-mini architecture.
+# Findings: phi4-mini scored 65/100 briefing quality at 99 tok/s.
+#
+# Architecture choices from benchmark analysis:
+# - GQA with 3:1 ratio (24 query heads, 8 KV heads) — phi4-mini's sweet spot
+# - SwiGLU FFN — universal across all top performers
+# - RMSNorm — faster than LayerNorm, same quality
+# - No biases — modern standard
+# - 32 layers with dim=1024 (scaled down from phi4-mini's 3072 for ~500M params)
+# - Targeting: summarization of dev sessions (short context, structured output)
+#
+# Estimated params: ~500M (phi4-mini-nano)
+
+/// Modern Transformer Block with GQA + SwiGLU + RMSNorm
+/// Replicates the phi4-mini layer pattern at smaller scale
+neuron ModernBlock(dim, num_heads, kv_heads, d_ff):
+    in: [batch, seq, dim]
+    out: [batch, seq, dim]
+    graph:
+        # Pre-norm attention with residual
+        in -> (skip1, attn_path)
+        attn_path ->
+            RMSNorm(dim)
+            GroupedQueryAttention(dim, num_heads, kv_heads)
+            attn_out
+        (skip1, attn_out) -> Add() -> mid
+
+        # Pre-norm SwiGLU FFN with residual
+        mid -> (skip2, ffn_path)
+        ffn_path ->
+            RMSNorm(dim)
+            SwiGLU(dim, d_ff)
+            ffn_out
+        (skip2, ffn_out) -> Add() -> out
+
+
+/// Briefing summarizer — phi4-mini-nano architecture
+neuron WastelandBriefingV1(vocab_size=32000, dim=1024, num_heads=16, kv_heads=4, d_ff=2816, layers=32):
+    in: [batch, seq]
+    out: [batch, seq, vocab_size]
+    context:
+        stack = unroll(layers):
+            block = ModernBlock(dim, num_heads, kv_heads, d_ff)
+    graph:
+        in ->
+            Embedding(vocab_size, dim)
+            stack
+            RMSNorm(dim)
+            Linear(dim, vocab_size)
+            out

@@ -1,0 +1,18 @@
+/// Denoising Head for Masked Diffusion
+///
+/// MLM-style prediction head for masked diffusion output. Maps hidden states
+/// to token logits, used to unmask tokens during diffusion sampling.
+///
+/// Parameters:
+/// - dim: Model hidden dimension
+/// - vocab_size: Vocabulary size
+///
+/// Shape Contract:
+/// - Input: [batch, seq, dim]
+/// - Output: [batch, seq, vocab_size]
+///
+/// Reference: MDLM / WedLM masked diffusion language models
+neuron DenoisingHead(dim, vocab_size):
+    in: [batch, seq, dim]
+    out: [batch, seq, vocab_size]
+    impl: neuroscript,diffusion/DenoisingHead

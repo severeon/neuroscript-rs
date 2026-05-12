@@ -1,0 +1,36 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron ModernBlock(dim, num_heads, kv_heads, d_ff):
+  inputs:
+    default: [batch, seq, dim]
+  outputs:
+    default: [batch, seq, dim]
+  graph:
+    in -> (skip1, attn_path)
+    attn_path -> RMSNorm#0(dim)
+    RMSNorm#0(dim) -> GroupedQueryAttention#1(dim, num_heads, kv_heads)
+    GroupedQueryAttention#1(dim, num_heads, kv_heads) -> attn_out
+    (skip1, attn_out) -> Add#2()
+    Add#2() -> mid
+    mid -> (skip2, ffn_path)
+    ffn_path -> RMSNorm#3(dim)
+    RMSNorm#3(dim) -> SwiGLU#4(dim, d_ff)
+    SwiGLU#4(dim, d_ff) -> ffn_out
+    (skip2, ffn_out) -> Add#5()
+    Add#5() -> out
+
+neuron WastelandBriefingV1(vocab_size = 32000, dim = 1024, num_heads = 16, kv_heads = 4, d_ff = 2816, layers = 32):
+  inputs:
+    default: [batch, seq]
+  outputs:
+    default: [batch, seq, vocab_size]
+  graph:
+    in -> Embedding#6(vocab_size, dim)
+    Embedding#6(vocab_size, dim) -> stack
+    stack -> RMSNorm#7(dim)
+    RMSNorm#7(dim) -> Linear#8(dim, vocab_size)
+    Linear#8(dim, vocab_size) -> out
