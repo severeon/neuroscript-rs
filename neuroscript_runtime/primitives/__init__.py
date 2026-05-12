@@ -118,6 +118,9 @@ from neuroscript_runtime.primitives.routing import (
 # Selective State Space Models
 from neuroscript_runtime.primitives.ssm import MambaBlock
 
+# Experimental: banded recursive blocks
+from neuroscript_runtime.primitives.neural_block import NeuralBlock
+
 __all__ = [
     "Linear",
     "GELU",
@@ -197,4 +200,6 @@ __all__ = [
     "MoERouter",
     # Selective State Space Models
     "MambaBlock",
+    # Experimental: banded recursive blocks
+    "NeuralBlock",
 ]

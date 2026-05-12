@@ -182,6 +182,12 @@ impl StdlibRegistry {
 
             // ── Selective State Space Models ─────────────────────────────
             ("MambaBlock", "neuroscript_runtime.primitives.ssm", "MambaBlock", "Selective SSM block — structural stub (true O(n) requires mamba-ssm fused kernel)"),
+
+            // ── Experimental: Banded Recursive Blocks ────────────────────
+            ("NeuralBlock", "neuroscript_runtime.primitives.neural_block", "NeuralBlock", "Banded circular block with recursive embedding (params: n, dim, d, r)"),
+
+            // ── Causal Attention ─────────────────────────────────────────
+            ("CausalSelfAttention", "neuroscript_runtime.primitives.attention", "CausalSelfAttention", "Multi-head self-attention with a lower-triangular (causal) mask"),
         ];
 
         for &(name, module, class, desc) in PRIMITIVES {

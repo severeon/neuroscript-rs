@@ -1,0 +1,56 @@
+# Neural-block layer experiments.
+#
+# Demonstrates NeuralBlock(n, dim, d, r) — a banded circular block with
+# recursive embedding — composed with traditional layers (LayerNorm, GELU,
+# Linear) so it can serve as a drop-in layer in larger models.
+#
+# Constraint: dim must equal n ** (r + 1).
+#
+# Three configurations shown:
+#   * NeuralBlockLayer4D1R0   — n=4, d=1, r=0  (dim=4,   17 params per block)
+#   * NeuralBlockLayer4D1R1   — n=4, d=1, r=1  (dim=16,  257 params per block)
+#   * NeuralBlockHead         — projects 32-dim features through a stack of
+#                               banded blocks down to 16 logits, suitable as
+#                               a small classification head.
+
+/// Single neural-block layer at n=4, d=1, r=0 (dim=4, 17 params).
+/// Pattern: norm -> NeuralBlock -> activation.
+neuron NeuralBlockLayer4D1R0:
+    in: [*batch, 4]
+    out: [*batch, 4]
+    graph:
+        in ->
+            LayerNorm(4)
+            NeuralBlock(4, 4, 1, 0)
+            GELU()
+            out
+
+
+/// Single neural-block layer at n=4, d=1, r=1 (dim=16, 257 params).
+/// Each cell is itself a NeuralBlock(4, 4, 1, 0).
+neuron NeuralBlockLayer4D1R1:
+    in: [*batch, 16]
+    out: [*batch, 16]
+    graph:
+        in ->
+            LayerNorm(16)
+            NeuralBlock(4, 16, 1, 1)
+            GELU()
+            out
+
+
+/// A small head that uses NeuralBlock as a feature mixer.
+/// Projects 32-dim features down to 16 (= 4**2) so a recursive block fits,
+/// then runs a banded R=1 block, then projects to num_classes logits.
+neuron NeuralBlockHead(num_classes):
+    in: [*batch, 32]
+    out: [*batch, num_classes]
+    graph:
+        in ->
+            LayerNorm(32)
+            Linear(32, 16)
+            NeuralBlock(4, 16, 1, 1)
+            GELU()
+            NeuralBlock(4, 16, 1, 1)
+            Linear(16, num_classes)
+            out

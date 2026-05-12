@@ -196,6 +196,7 @@ class MultiHeadSelfAttention(nn.Module):
         num_heads: int,
         dropout_p: float = 0.0,
         bias: bool = True,
+        causal: bool = False,
     ):
         super().__init__()
 
@@ -208,6 +209,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_model // num_heads
         self.dropout_p = dropout_p
+        self.causal = bool(causal)
 
         # Linear projections for Q, K, V (combined for efficiency)
         self.qkv_proj = nn.Linear(d_model, 3 * d_model, bias=bias)
@@ -268,6 +270,14 @@ class MultiHeadSelfAttention(nn.Module):
 
         # Scale by 1/sqrt(d_k)
         scores = scores / math.sqrt(self.d_k)
+
+        # Causal mask: prevent attending to future positions.
+        if self.causal:
+            mask = torch.triu(
+                torch.ones(seq_len, seq_len, device=scores.device, dtype=torch.bool),
+                diagonal=1,
+            )
+            scores = scores.masked_fill(mask, float("-inf"))
 
         # Apply softmax
         attn_weights = F.softmax(scores, dim=-1)
@@ -413,4 +423,28 @@ class MultiHeadLatentAttention(nn.Module):
         )
 
 
-__all__ = ["ScaledDotProductAttention", "MultiHeadSelfAttention", "MultiHeadLatentAttention"]
+class CausalSelfAttention(MultiHeadSelfAttention):
+    """Multi-head self-attention with a causal (lower-triangular) mask.
+
+    Decision-Transformer-shaped models attend over a temporal window of
+    past tokens but must not attend to the future. This is just
+    MultiHeadSelfAttention with ``causal=True`` hardwired so the .ns
+    declaration stays clean (no positional dropout/bias args required).
+
+    NeuroScript signature:
+        neuron CausalSelfAttention(d_model, num_heads):
+            in: [*batch, seq, d_model]
+            out: [*batch, seq, d_model]
+            impl: core,attention/CausalSelfAttention
+    """
+
+    def __init__(self, d_model: int, num_heads: int, dropout_p: float = 0.0, bias: bool = True):
+        super().__init__(d_model=d_model, num_heads=num_heads, dropout_p=dropout_p, bias=bias, causal=True)
+
+
+__all__ = [
+    "ScaledDotProductAttention",
+    "MultiHeadSelfAttention",
+    "CausalSelfAttention",
+    "MultiHeadLatentAttention",
+]

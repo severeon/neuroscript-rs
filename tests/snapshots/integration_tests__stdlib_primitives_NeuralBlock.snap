@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron NeuralBlock(n, dim, d, r):
+  inputs:
+    default: [*batch, dim]
+  outputs:
+    default: [*batch, dim]
+  impl:
+    Source: core,nn/NeuralBlock

@@ -1,0 +1,13 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron CausalSelfAttention(dim, num_heads):
+  inputs:
+    default: [*batch, seq_len, dim]
+  outputs:
+    default: [*batch, seq_len, dim]
+  impl:
+    Source: core,attention/CausalSelfAttention

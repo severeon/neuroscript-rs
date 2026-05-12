@@ -1,0 +1,41 @@
+---
+source: tests/integration_tests.rs
+expression: formatted
+---
+=== Neurons ===
+
+neuron NeuralBlockHead(num_classes):
+  inputs:
+    default: [*batch, 32]
+  outputs:
+    default: [*batch, num_classes]
+  graph:
+    in -> LayerNorm#6(32)
+    LayerNorm#6(32) -> Linear#7(32, 16)
+    Linear#7(32, 16) -> NeuralBlock#8(4, 16, 1, 1)
+    NeuralBlock#8(4, 16, 1, 1) -> GELU#9()
+    GELU#9() -> NeuralBlock#10(4, 16, 1, 1)
+    NeuralBlock#10(4, 16, 1, 1) -> Linear#11(16, num_classes)
+    Linear#11(16, num_classes) -> out
+
+neuron NeuralBlockLayer4D1R0:
+  inputs:
+    default: [*batch, 4]
+  outputs:
+    default: [*batch, 4]
+  graph:
+    in -> LayerNorm#0(4)
+    LayerNorm#0(4) -> NeuralBlock#1(4, 4, 1, 0)
+    NeuralBlock#1(4, 4, 1, 0) -> GELU#2()
+    GELU#2() -> out
+
+neuron NeuralBlockLayer4D1R1:
+  inputs:
+    default: [*batch, 16]
+  outputs:
+    default: [*batch, 16]
+  graph:
+    in -> LayerNorm#3(16)
+    LayerNorm#3(16) -> NeuralBlock#4(4, 16, 1, 1)
+    NeuralBlock#4(4, 16, 1, 1) -> GELU#5()
+    GELU#5() -> out

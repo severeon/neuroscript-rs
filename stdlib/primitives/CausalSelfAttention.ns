@@ -1,0 +1,23 @@
+/// Causal Multi-Head Self-Attention
+///
+/// Multi-head self-attention with a lower-triangular (causal) mask, so each
+/// position attends only to past positions and itself. Used in
+/// Decision-Transformer-shaped models, autoregressive language models, and
+/// any setting where the attention window is over a temporal sequence and
+/// future tokens must be hidden.
+///
+/// Parameters:
+/// - dim: Model dimension (d_model)
+/// - num_heads: Number of attention heads (dim must be divisible by num_heads)
+///
+/// Shape Contract:
+/// - Input: [*batch, seq_len, dim] sequence of embeddings
+/// - Output: [*batch, seq_len, dim] attended sequence
+///
+/// Notes:
+/// - Equivalent to MultiHeadSelfAttention with causal=True hardwired so the
+///   .ns declaration stays clean and positional-arg-friendly.
+neuron CausalSelfAttention(dim, num_heads):
+    in: [*batch, seq_len, dim]
+    out: [*batch, seq_len, dim]
+    impl: core,attention/CausalSelfAttention

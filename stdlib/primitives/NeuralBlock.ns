@@ -1,0 +1,32 @@
+/// NeuralBlock — banded circular block with recursive embedding.
+///
+/// An experimental architectural primitive that organizes its parameters as
+/// an N×N grid of "cells" arranged in N columns (depth) by N rows (width),
+/// plus one scalar bias at the outermost level.
+///
+/// Parameters:
+/// - n   : node width (rows and columns of the cell grid)
+/// - dim : total I/O dimension; MUST equal n ** (r + 1)
+/// - d   : deviation half-width; kernel width = 2*d + 1, with circular
+///         wraparound between rows. Constraint: 0 <= d <= (n // 2) - 1
+/// - r   : recursive embedding depth (>= 0). At r=0, each cell holds a
+///         scalar weight; at r>=1, each cell is itself a NeuralBlock.
+///
+/// Forward semantics (let M = n**r be the per-row value size):
+///   1. Reshape input [*, dim] to [*, n, M]
+///   2. Column 0 (elementwise per row): v_i = cell[0, i](x_i)
+///   3. Columns c = 1..n-1:
+///        s_i = sum_{k=-d..d} v_{(i+k) mod n}
+///        v_i = cell[c, i](s_i)
+///   4. Reshape v back to [*, dim] and add scalar bias
+///
+/// Parameter count: P(n, d, 0) = n*n + 1
+///                  P(n, d, r) = (n*n) * P(n, d, r-1) + 1   (root level)
+///
+/// Shape Contract:
+/// - Input  : [*batch, dim]
+/// - Output : [*batch, dim]
+neuron NeuralBlock(n, dim, d, r):
+    in: [*batch, dim]
+    out: [*batch, dim]
+    impl: core,nn/NeuralBlock

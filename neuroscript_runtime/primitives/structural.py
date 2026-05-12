@@ -795,6 +795,28 @@ class Clone(nn.Module):
         return f"detach={self.should_detach}"
 
 
+class Flatten(nn.Module):
+    """Flattens a contiguous range of dims into one.
+
+    NeuroScript signature:
+        neuron Flatten(start_dim=1, end_dim=-1):
+            in: [*shape_in]
+            out: [*shape_out]
+            impl: core,structural/Flatten
+    """
+
+    def __init__(self, start_dim: int = 1, end_dim: int = -1) -> None:
+        super().__init__()
+        self.start_dim = int(start_dim)
+        self.end_dim = int(end_dim)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return torch.flatten(input, start_dim=self.start_dim, end_dim=self.end_dim)
+
+    def extra_repr(self) -> str:
+        return f"start_dim={self.start_dim}, end_dim={self.end_dim}"
+
+
 __all__ = [
     "Fork",
     "Fork3",
@@ -810,4 +832,5 @@ __all__ = [
     "Crop",
     "Cast",
     "Clone",
+    "Flatten",
 ]
